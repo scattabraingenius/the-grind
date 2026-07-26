@@ -3,20 +3,22 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Home — Family Day Planner</title>
+<title>The Grind</title>
 <style>
   /* ============================================================
-     HOME — family day planner   (v1.6-beta)
-     One shared day list (multi-person tags), Places to Go + Shopping list.
+     THE GRIND — personal command center   (v0.1-beta)
+     Forked from Family Planner but fully data-isolated: its own Firebase
+     path (planners/the-grind-scattabrain-2026) and its own grind.* localStorage keys.
+     One day list (multi-profile tags), Places to Go + Shopping + Bills.
      Optional live cloud sync across devices (Firebase — see config block).
      Self-contained, offline, saves to localStorage.
      Edit SEED_PEOPLE / palette to taste.
      ============================================================ */
   :root {
     color-scheme: dark;
-    --paper:#0B0F17; --card:#151C27; --surface-2:#1E2733; --input-bg:#0F1622; --done-bg:#0E141D; --track:#26313F;
-    --ink:#E6EDF3; --muted:#93A1B0; --muted-2:#66788B; --line:#26313F;
-    --signal:#16BBD4; --signal-dim:#52D2E2;
+    --paper:#0C0812; --card:#17111F; --surface-2:#221934; --input-bg:#120B1A; --done-bg:#120D18; --track:#372950;
+    --ink:#EDE7F6; --muted:#A599BF; --muted-2:#786A93; --line:#372950;
+    --signal:#A855F7; --signal-dim:#C9A6FF;
     --star:#F2C14E; --alarm:#F0575C;
     --radius:12px;
     --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
@@ -25,15 +27,15 @@
   }
   @media print {
     :root { color-scheme:light; --paper:#fff; --card:#fff; --surface-2:#fff; --input-bg:#fff; --done-bg:#fff; --track:#e2e2e2;
-      --ink:#111; --muted:#444; --muted-2:#777; --line:#c4c4c4; --signal:#0E90A4; --shadow:none; }
+      --ink:#111; --muted:#444; --muted-2:#777; --line:#c4c4c4; --signal:#8A2BE2; --shadow:none; }
     * { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     body { background:#fff; }
     .wrap { padding:0; max-width:none; }
     .toolbar, .rowactions, .clock, .nextup, .util, .peoplebar .pb-edit, .row.parked, .add-inline, .shop-clear, .people-editor { display:none !important; }
     .panels { grid-template-columns:1fr 1fr; gap:16px; }
-    .row, .shop-row, .place-row, .date-card { break-inside:avoid; box-shadow:none !important; }
+    .row, .shop-row, .place-row, .bill-row, .date-card { break-inside:avoid; box-shadow:none !important; }
     header.top { margin-bottom:8px; }
-    .dates-head-actions, .dc-actions, .dates-more, .dates-empty .btn, .date-editor, .place-edit, .place-del, .shop-del, .inline-input, .inline-textarea, .popover, .dates-past-toggle { display:none !important; }
+    .dates-head-actions, .dc-actions, .dates-more, .dates-empty .btn, .date-editor, .place-edit, .place-del, .bill-edit, .bill-del, .shop-del, .inline-input, .inline-textarea, .popover, .dates-past-toggle { display:none !important; }
     .dates-past-list:not(.expanded) { display:none !important; }
     .editable { padding:0; margin:0; }
     .editable:hover, .editable:focus-visible { background:none; outline:none; }
@@ -62,19 +64,19 @@
 
   .btn { font-family:var(--sans); font-size:13px; font-weight:600; border:1px solid var(--line); background:var(--card); color:var(--ink); padding:8px 12px; border-radius:10px; cursor:pointer; box-shadow:var(--shadow); white-space:nowrap; }
   .btn:hover { border-color:var(--muted-2); }
-  .btn.add { background:var(--signal); border-color:var(--signal); color:#04333B; }
+  .btn.add { background:var(--signal); border-color:var(--signal); color:#1A0930; }
   .btn.sm { padding:5px 9px; font-size:12px; }
 
   /* next up */
-  .nextup { background:radial-gradient(120% 140% at 0% 0%, #163039 0%, #0D1621 60%); border:1px solid #1E4653; box-shadow:0 0 0 1px rgba(22,187,212,.14), 0 12px 34px rgba(0,0,0,.45); border-radius:16px; padding:16px 18px; display:flex; align-items:center; gap:16px; margin-bottom:16px; color:#EAF1F7; }
+  .nextup { background:radial-gradient(120% 140% at 0% 0%, #2E1E45 0%, #140B20 60%); border:1px solid #3D2A5C; box-shadow:0 0 0 1px rgba(168,85,247,.14), 0 12px 34px rgba(0,0,0,.45); border-radius:16px; padding:16px 18px; display:flex; align-items:center; gap:16px; margin-bottom:16px; color:#F1E9FB; }
   .nextup .lead { flex:1; min-width:0; }
-  .nextup .eyebrow { color:#5F7488; }
+  .nextup .eyebrow { color:#8A76A8; }
   .nextup .title { font-size:19px; font-weight:700; margin:3px 0; }
-  .nextup .meta { font-family:var(--mono); font-size:12.5px; color:#9FB2C4; display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+  .nextup .meta { font-family:var(--mono); font-size:12.5px; color:#C3B3DE; display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
   .nextup .readout { text-align:right; font-family:var(--mono); flex:none; }
   .nextup .readout .count { font-size:24px; font-weight:700; color:var(--signal-dim); }
-  .nextup .readout .subl { font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:#5F7488; }
-  .nextup.empty { color:#8AA0B4; justify-content:flex-start; }
+  .nextup .readout .subl { font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:#8A76A8; }
+  .nextup.empty { color:#9C8CB8; justify-content:flex-start; }
 
   /* people bar */
   .peoplebar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
@@ -97,11 +99,11 @@
   .editable:hover { background:rgba(255,255,255,.06); }
   .editable:focus-visible { outline:2px solid var(--signal); outline-offset:1px; background:rgba(255,255,255,.06); }
   @media (hover:none) { .editable:hover { background:none; } }
-  .inline-input, .inline-textarea { font-family:inherit; font-size:inherit; font-weight:inherit; color:var(--ink); background:var(--input-bg); border:1px solid var(--signal); border-radius:6px; padding:2px 6px; outline:none; width:100%; box-shadow:0 0 0 3px rgba(18,176,201,.14); }
+  .inline-input, .inline-textarea { font-family:inherit; font-size:inherit; font-weight:inherit; color:var(--ink); background:var(--input-bg); border:1px solid var(--signal); border-radius:6px; padding:2px 6px; outline:none; width:100%; box-shadow:0 0 0 3px rgba(168,85,247,.14); }
   .inline-textarea { resize:vertical; min-height:44px; font-size:13px; }
 
   /* shared popover (people / category / date-time / priority) */
-  .popover { position:fixed; z-index:1000; min-width:200px; max-width:min(300px,92vw); max-height:80vh; overflow-y:auto; background:var(--card); border:1px solid var(--signal); border-radius:10px; padding:10px; box-shadow:0 0 0 3px rgba(18,176,201,.12), var(--shadow); }
+  .popover { position:fixed; z-index:1000; min-width:200px; max-width:min(300px,92vw); max-height:80vh; overflow-y:auto; background:var(--card); border:1px solid var(--signal); border-radius:10px; padding:10px; box-shadow:0 0 0 3px rgba(168,85,247,.12), var(--shadow); }
   .popover .pop-title { font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
   .popover .pop-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
   .popover .pop-row:last-child { margin-bottom:0; }
@@ -145,7 +147,7 @@
   /* .date-editor is placed both inside .dates-quick's card grid and inside .dates-all-list's flex
      column — grid-column:1/-1 spans every track when it's a grid item; width:100% + min-width:0 make
      it fill (and never overflow) either container, instead of being squeezed into one card column. */
-  .date-editor { grid-column:1/-1; width:100%; min-width:0; box-sizing:border-box; border:1px solid var(--signal); border-radius:var(--radius); padding:14px; background:var(--input-bg); box-shadow:0 0 0 3px rgba(18,176,201,.12), var(--shadow); }
+  .date-editor { grid-column:1/-1; width:100%; min-width:0; box-sizing:border-box; border:1px solid var(--signal); border-radius:var(--radius); padding:14px; background:var(--input-bg); box-shadow:0 0 0 3px rgba(168,85,247,.12), var(--shadow); }
   .date-editor .grid { display:grid; grid-template-columns:repeat(2,1fr); gap:10px 14px; min-width:0; }
   .date-editor .field { min-width:0; }
   .date-editor .field.full { grid-column:1/-1; }
@@ -192,7 +194,7 @@
   .prival { font-family:var(--mono); font-weight:700; font-size:18px; color:#fff; width:42px; height:42px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex:none; }
   .nextup .gauge { width:52px; height:52px; border-radius:12px; flex:none; display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-weight:700; font-size:22px; color:#fff; }
 
-  .pchip { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; padding:4px 10px 4px 4px; border-radius:99px; white-space:nowrap; color:#0B0F17; }
+  .pchip { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; padding:4px 10px 4px 4px; border-radius:99px; white-space:nowrap; color:var(--paper); }
   .pchip .dot { width:16px; height:16px; border-radius:50%; background:rgba(0,0,0,.18); flex:none; }
   .pchip.none { background:var(--surface-2); color:var(--muted-2); border:1px dashed var(--line); }
 
@@ -214,13 +216,13 @@
   .later-head { font-family:var(--mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:#9B87F5; margin:6px 2px 2px; }
 
   /* editor */
-  .editor { background:var(--card); border:1px solid var(--signal); border-radius:var(--radius); padding:16px; box-shadow:0 0 0 3px rgba(18,176,201,.12), var(--shadow); }
+  .editor { background:var(--card); border:1px solid var(--signal); border-radius:var(--radius); padding:16px; box-shadow:0 0 0 3px rgba(168,85,247,.12), var(--shadow); }
   .editor .grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px 16px; }
   .field { display:flex; flex-direction:column; gap:4px; } .field.full { grid-column:1/-1; }
   .field label { font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
   .field input[type=text], .field input[type=time], .field input[type=date], .field input[type=datetime-local], .field textarea, .field select { font-family:var(--sans); font-size:14px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--input-bg); color:var(--ink); outline:none; width:100%; }
   .field textarea { resize:vertical; min-height:44px; }
-  .field input:focus, .field textarea:focus, .field select:focus { border-color:var(--signal); box-shadow:0 0 0 3px rgba(18,176,201,.14); }
+  .field input:focus, .field textarea:focus, .field select:focus { border-color:var(--signal); box-shadow:0 0 0 3px rgba(168,85,247,.14); }
   .starbox { display:inline-flex; align-items:center; gap:8px; font-size:14px; cursor:pointer; user-select:none; padding:8px 0; }
   .reappear-inline { display:flex; gap:8px; align-items:center; } .reappear-inline input { flex:1; }
   .editor .actions { display:flex; gap:8px; margin-top:14px; justify-content:flex-end; }
@@ -256,13 +258,35 @@
   .mapbtn:hover { border-color:var(--signal); }
   .place-del, .place-edit { color:var(--muted-2); background:none; border:none; cursor:pointer; font-size:13px; padding:2px 3px; flex:none; }
   .place-del:hover { color:var(--alarm); } .place-edit:hover { color:var(--ink); }
-  .place-editor { border:1px solid var(--signal); border-radius:9px; padding:10px; background:var(--input-bg); box-shadow:0 0 0 2px rgba(18,176,201,.1); }
+  .place-editor { border:1px solid var(--signal); border-radius:9px; padding:10px; background:var(--input-bg); box-shadow:0 0 0 2px rgba(168,85,247,.1); }
   .place-editor .pe-field { display:flex; flex-direction:column; gap:3px; margin-bottom:8px; }
   .place-editor label { font-family:var(--mono); font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
   .place-editor input[type=text], .place-editor input[type=date] { font-size:13px; padding:7px 9px; border:1px solid var(--line); border-radius:7px; background:var(--card); color:var(--ink); outline:none; width:100%; }
   .place-editor input:focus { border-color:var(--signal); }
   .place-editor .who-opt { font-size:11px; padding:4px 8px 4px 6px; }
   .place-editor .pe-actions { display:flex; gap:6px; justify-content:flex-end; margin-top:4px; }
+
+  /* bills (mirrors places to go) */
+  .bills { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:14px; box-shadow:var(--shadow); }
+  .bill-list { display:flex; flex-direction:column; gap:6px; }
+  .bill-row { display:flex; align-items:center; gap:9px; padding:8px 10px; border:1px solid var(--line); border-radius:9px; background:var(--surface-2); }
+  .bill-row.got { opacity:.5; } .bill-row.got .bill-name { text-decoration:line-through; color:var(--muted); }
+  .bill-body { flex:1; min-width:0; }
+  .bill-name { font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .bill-meta { font-size:11.5px; color:var(--muted); display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:1px; }
+  .bill-meta .ptxt { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:150px; }
+  .bill-meta .bill-amt { font-family:var(--mono); font-weight:700; color:var(--signal-dim); }
+  .bill-meta .due-over { color:var(--alarm); font-weight:700; }
+  .bill-meta .pdot { width:10px; height:10px; border-radius:50%; display:inline-block; flex:none; }
+  .bill-edit, .bill-del { color:var(--muted-2); background:none; border:none; cursor:pointer; font-size:13px; padding:2px 3px; flex:none; }
+  .bill-del:hover { color:var(--alarm); } .bill-edit:hover { color:var(--ink); }
+  .bill-editor { border:1px solid var(--signal); border-radius:9px; padding:10px; background:var(--input-bg); box-shadow:0 0 0 2px rgba(168,85,247,.1); }
+  .bill-editor .pe-field { display:flex; flex-direction:column; gap:3px; margin-bottom:8px; }
+  .bill-editor label { font-family:var(--mono); font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+  .bill-editor input[type=text], .bill-editor input[type=date], .bill-editor input[type=number] { font-size:13px; padding:7px 9px; border:1px solid var(--line); border-radius:7px; background:var(--card); color:var(--ink); outline:none; width:100%; }
+  .bill-editor input:focus { border-color:var(--signal); }
+  .bill-editor .who-opt { font-size:11px; padding:4px 8px 4px 6px; }
+  .bill-editor .pe-actions { display:flex; gap:6px; justify-content:flex-end; margin-top:4px; }
 
   /* shopping */
   .shop { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:14px; box-shadow:var(--shadow); }
@@ -297,8 +321,8 @@
 
   <header class="top">
     <div class="brand">
-      <h1>Home</h1>
-      <div><div class="eyebrow">Family day planner</div><div class="datestr" id="datestr"></div></div>
+      <h1>The Grind</h1>
+      <div><div class="eyebrow">Personal command center</div><div class="datestr" id="datestr"></div></div>
     </div>
     <div class="head-right">
       <div class="clock" id="clock">--:--<span class="sec">:--</span></div>
@@ -350,7 +374,7 @@
         <select class="ctrl" id="sortBy" aria-label="Sort">
           <option value="time">Sort: Time</option>
           <option value="priority">Sort: Priority</option>
-          <option value="person">Sort: Person</option>
+          <option value="person">Sort: Profile</option>
           <option value="added">Sort: Added</option>
         </select>
         <label class="toggle"><input type="checkbox" id="hideDone"> Hide done</label>
@@ -365,6 +389,13 @@
         <div class="add-inline"><span class="plus">+</span><input id="placeInput" type="text" placeholder="Add a place, then Enter…" aria-label="Add place"></div>
         <div class="place-list" id="placeList"></div>
         <div class="shop-foot"><span class="shop-count" id="placeStatus"></span><button class="shop-clear" id="placeClear">Clear visited</button></div>
+      </div>
+
+      <div class="bills">
+        <div class="panel-title">Bills <span class="shop-count" id="billCount"></span></div>
+        <div class="add-inline"><span class="plus">+</span><input id="billInput" type="text" placeholder="Add a bill, then Enter…" aria-label="Add bill"></div>
+        <div class="bill-list" id="billList"></div>
+        <div class="shop-foot"><span class="shop-count" id="billStatus"></span><button class="shop-clear" id="billClear">Clear paid</button></div>
       </div>
 
       <div class="shop">
@@ -383,22 +414,30 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
 "use strict";
-const VERSION = "1.6-beta";
+const VERSION = "0.1-beta";
 
 /* ---------------- storage ---------------- */
-const K_TASKS="home.plan.v1", K_SHOP="home.shopping.v1", K_PEOPLE="home.people.v1", K_PLACES="home.places.v1", K_DATES="home.dates.v1";
+/* Grind-namespaced keys — deliberately isolated from the old Family Planner fork's `home.*`
+   keys, which live at the same browser origin (GitHub Pages paths don't isolate localStorage).
+   Never read from or write to `home.*` here — that data belongs to the other app. */
+const K_TASKS="grind.plan.v1", K_SHOP="grind.shopping.v1", K_PEOPLE="grind.profiles.v1", K_PLACES="grind.places.v1", K_DATES="grind.dates.v1", K_BILLS="grind.bills.v1";
 function loadJSON(k){ try{ const r=localStorage.getItem(k); if(r) return JSON.parse(r); }catch(e){} return null; }
 function saveTasks(){ try{ localStorage.setItem(K_TASKS, JSON.stringify(tasks)); }catch(e){} pushCloud(); return true; }
 function saveShop(){ try{ localStorage.setItem(K_SHOP, JSON.stringify(shop)); }catch(e){} pushCloud(); }
 function savePeople(){ try{ localStorage.setItem(K_PEOPLE, JSON.stringify(people)); }catch(e){} pushCloud(); }
 function savePlaces(){ try{ localStorage.setItem(K_PLACES, JSON.stringify(places)); }catch(e){} pushCloud(); }
 function saveDates(){ try{ localStorage.setItem(K_DATES, JSON.stringify(importantDates)); }catch(e){} pushCloud(); }
+function saveBills(){ try{ localStorage.setItem(K_BILLS, JSON.stringify(bills)); }catch(e){} pushCloud(); }
 
 /* =====================================================================
-   CLOUD SYNC (optional) — share one LIVE planner across all devices.
-   1. Create a free Firebase project + Realtime Database (see notes).
-   2. Paste the config object below and pick a FAMILY_ID.
-   3. Use the SAME file/config on every phone & computer.
+   CLOUD SYNC (optional) — share one LIVE Grind across all your devices.
+   Reuses the same Firebase project as the old Family Planner fork, but writes
+   to its own top-level path (planners/the-grind-scattabrain-2026) — the two
+   apps never share a database node, so Grind can never read, overwrite, or
+   merge Family Planner data (and vice versa). Do not reuse "the-grind" as the
+   APP_ID — that path was already seeded with Family Planner data while this
+   app was still reading the shared home.* localStorage keys, before it had
+   its own Firebase node.
    Leave apiKey blank to run local-only on this device (still works).
    ===================================================================== */
 const FIREBASE_CONFIG = {
@@ -407,7 +446,7 @@ const FIREBASE_CONFIG = {
   databaseURL: "https://family-planner-ccafc-default-rtdb.firebaseio.com",
   projectId: "family-planner-ccafc"
 };
-const FAMILY_ID = "ccafc-home";   // any unique word — must match on every device
+const APP_ID = "the-grind-scattabrain-2026";   // Grind's own Firebase node — must match on every device, never "ccafc-home"
 
 let db=null, syncing=false, remoteApplying=false, pushTimer=null;
 function syncConfigured(){ return typeof firebase!=="undefined" && !!FIREBASE_CONFIG.apiKey && !!FIREBASE_CONFIG.databaseURL; }
@@ -415,7 +454,7 @@ function initSync(){
   if(!syncConfigured()){ updateSyncBadge(false); return; }
   try{
     firebase.initializeApp(FIREBASE_CONFIG);
-    db=firebase.database().ref("planners/"+FAMILY_ID);
+    db=firebase.database().ref("planners/"+APP_ID);
     syncing=true; updateSyncBadge(true);
     db.on("value", snap=>{
       const v=snap.val();
@@ -426,7 +465,8 @@ function initSync(){
       if(Array.isArray(v.shop))   shop=v.shop.map(s=>Object.assign(blankShop(),s));
       if(Array.isArray(v.places)) places=v.places.map(migratePlace);   // only overwrite if present → never erased by an old client
       if(Array.isArray(v.importantDates)) importantDates=v.importantDates.map(migrateImportantDate); // same rule → older clients never erase this
-      try{ localStorage.setItem(K_PEOPLE,JSON.stringify(people)); localStorage.setItem(K_TASKS,JSON.stringify(tasks)); localStorage.setItem(K_SHOP,JSON.stringify(shop)); localStorage.setItem(K_PLACES,JSON.stringify(places)); localStorage.setItem(K_DATES,JSON.stringify(importantDates)); }catch(e){}
+      if(Array.isArray(v.bills)) bills=v.bills.map(migrateBill);       // same rule → older clients never erase this
+      try{ localStorage.setItem(K_PEOPLE,JSON.stringify(people)); localStorage.setItem(K_TASKS,JSON.stringify(tasks)); localStorage.setItem(K_SHOP,JSON.stringify(shop)); localStorage.setItem(K_PLACES,JSON.stringify(places)); localStorage.setItem(K_DATES,JSON.stringify(importantDates)); localStorage.setItem(K_BILLS,JSON.stringify(bills)); }catch(e){}
       remoteApplying=false;
       // Data is always safe to merge in (every commit path re-fetches its entity by id), but a full render()
       // would blow away a focused inline editor's DOM — so defer the redraw until editing ends.
@@ -442,7 +482,7 @@ function pushCloud(force){
      Since a stale v1.4 tab's set() has no importantDates key, its set() would still erase importantDates
      (update() only protects against writers that also use update() with a partial payload); this change
      protects future fields added the same way, but v1.4 tabs must still be closed/refreshed — see report. */
-  pushTimer=setTimeout(()=>{ try{ db.update({people,tasks,shop,places,importantDates,updated:Date.now()}); }catch(e){} }, 250);
+  pushTimer=setTimeout(()=>{ try{ db.update({people,tasks,shop,places,importantDates,bills,updated:Date.now()}); }catch(e){} }, 250);
 }
 function updateSyncBadge(on){
   const el=document.getElementById("syncBadge"); if(!el) return;
@@ -451,18 +491,15 @@ function updateSyncBadge(on){
   el.title = on ? "Live sync on" : "Reconnecting…";
 }
 
-/* ---------------- family + palette ---------------- */
+/* ---------------- profiles + palette ---------------- */
 const PALETTE=["#16BBD4","#F06595","#9B87F5","#F2A81D","#23B877","#F0575C","#3B97E6","#E8A0C0"];
 const SEED_PEOPLE=[
-  {id:"p1",name:"Dad",  color:"#16BBD4"},
-  {id:"p2",name:"Bella",color:"#F06595"},
-  {id:"p3",name:"Abby", color:"#9B87F5"},
-  {id:"p4",name:"Ariel",color:"#F2A81D"},
+  {id:"p1",name:"Scatta",color:"#A855F7"},
 ];
 let people = loadJSON(K_PEOPLE) || SEED_PEOPLE.slice();
 function uid(p){ return (p||"t")+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 function getPerson(id){
-  if(id==="family") return {id:"family",name:"Family",color:"#8595A8"};
+  if(id==="family") return {id:"family",name:"All",color:"#8595A8"};
   const p=people.find(x=>x.id===id); return p || {id:"",name:"Unassigned",color:"#3A4757",none:true};
 }
 
@@ -472,6 +509,7 @@ function getPerson(id){
 function blankTask(name){ return { id:uid("t"), people:[], task:name||"", time:"", due:"", dueTime:"", priority:5, status:"todo", showOn:"", notes:"", created:Date.now() }; }
 function blankShop(name){ return { id:uid("s"), item:name||"", got:false }; }
 function blankPlace(name){ return { id:uid("pl"), name:name||"", address:"", note:"", date:"", people:[], visited:false, created:Date.now() }; }
+function blankBill(name){ return { id:uid("b"), name:name||"", amount:"", due:"", note:"", people:[], paid:false, created:Date.now() }; }
 
 function normPeople(arr){ if(!Array.isArray(arr)) return []; if(arr.includes("family")) return ["family"]; return arr.filter(x=>x); }
 function migrateTask(raw){
@@ -485,6 +523,7 @@ function migrateTask(raw){
   return t;
 }
 function migratePlace(raw){ const p=Object.assign(blankPlace(), raw||{}); p.people=normPeople(p.people); if(typeof p.created!=="number") p.created=Date.now(); return p; }
+function migrateBill(raw){ const b=Object.assign(blankBill(), raw||{}); b.people=normPeople(b.people); if(typeof b.created!=="number") b.created=Date.now(); return b; }
 
 /* ---------------- important dates ---------------- */
 /* Stored separately from tasks — never appear in the task list, never affect progress/overdue/Up Next.
@@ -519,15 +558,16 @@ tasks = tasks.map(migrateTask);
 let shop = (loadJSON(K_SHOP) || []).map(s=>Object.assign(blankShop(),s));
 let places = (loadJSON(K_PLACES) || []).map(migratePlace);
 let importantDates = (loadJSON(K_DATES) || []).map(migrateImportantDate);
+let bills = (loadJSON(K_BILLS) || []).map(migrateBill);
 
 /* ---------------- state ---------------- */
-let editingId=null, placeEditingId=null, dateEditingId=null, activePerson="all", overdueSet=new Set();
+let editingId=null, placeEditingId=null, dateEditingId=null, billEditingId=null, activePerson="all", overdueSet=new Set();
 let datesAllOpen=false, pastDatesOpen=false;
 let pendingRemoteRender=false;
 /* Shared inline-edit / popover tracker (text fields + people/category/date-time/priority popovers).
    Only one of these may be open at a time; opening a new one commits/closes whatever is open. */
 let activeEdit=null; // { type, id, field, close(cancel) }
-function editingActive(){ return editingId!=null || placeEditingId!=null || dateEditingId!=null || !!activeEdit; }
+function editingActive(){ return editingId!=null || placeEditingId!=null || dateEditingId!=null || billEditingId!=null || !!activeEdit; }
 
 /* =====================================================================
    SHARED INLINE-EDIT / POPOVER SYSTEM
@@ -711,7 +751,7 @@ function computeNextUp(){
 function peopleChipsHtml(ids){
   ids = normPeople(ids);
   if(!ids.length) return `<span class="pchip none"><span class="dot"></span>—</span>`;
-  if(ids.includes("family")){ const f=getPerson("family"); return `<span class="pchip" style="background:${f.color}"><span class="dot"></span>Family</span>`; }
+  if(ids.includes("family")){ const f=getPerson("family"); return `<span class="pchip" style="background:${f.color}"><span class="dot"></span>All</span>`; }
   return ids.map(id=>{ const p=getPerson(id); return `<span class="pchip" style="background:${p.color}"><span class="dot"></span>${esc(p.name)}</span>`; }).join("");
 }
 /* incomplete active tasks assigned to this person (family tasks count for everyone) */
@@ -723,7 +763,7 @@ function makeWhoPicker(container, initial, onChange){
   let sel = normPeople(initial);
   function paint(){
     const opt=(id,name,color,on)=>`<button type="button" class="who-opt ${on?'on':''}" data-id="${id}"><span class="dot" style="background:${color}"></span>${esc(name)}</button>`;
-    container.innerHTML = opt("family","Family",getPerson("family").color,sel.includes("family")) +
+    container.innerHTML = opt("family","All profiles",getPerson("family").color,sel.includes("family")) +
       people.map(p=>opt(p.id,p.name,p.color,sel.includes(p.id))).join("");
     container.querySelectorAll(".who-opt").forEach(b=>b.addEventListener("click",()=>{
       const before=normPeople(sel);
@@ -773,6 +813,7 @@ function render(){
   renderPeopleBar();
   renderShop();
   renderPlaces();
+  renderBills();
   renderDatesSection();
   const view=currentView();
   const next=computeNextUp();
@@ -791,7 +832,7 @@ function render(){
   });
 
   const done=tasks.filter(isDone).length; const over=tasks.filter(isOverdue).length;
-  document.getElementById("hint").textContent=`${tasks.length} items • ${done} done • ${over} overdue • ${laterCount} later • ${places.filter(p=>!p.visited).length} places • ${shop.filter(s=>!s.got).length} to buy • Home v${VERSION}`;
+  document.getElementById("hint").textContent=`${tasks.length} items • ${done} done • ${over} overdue • ${laterCount} later • ${places.filter(p=>!p.visited).length} places • ${shop.filter(s=>!s.got).length} to buy • ${bills.filter(b=>!b.paid).length} bills due • The Grind v${VERSION}`;
 }
 
 function renderProgress(){
@@ -805,9 +846,9 @@ function renderProgress(){
 function renderPeopleBar(){
   const bar=document.getElementById("peoplebar");
   const chip=(id,name,color,all,count)=>`<button class="pfilter ${all?'all':''} ${activePerson===id?'active':''}" data-p="${id}">${all?'':`<span class="dot" style="background:${color}"></span>`}${esc(name)}${(!all&&count)?` (${count})`:''}</button>`;
-  let html=chip("all","Everyone","",true,0);
+  let html=chip("all","All","",true,0);
   people.forEach(p=>html+=chip(p.id,p.name,p.color,false,personCount(p.id)));
-  html+=`<button class="btn sm pb-edit" id="pbEdit">Edit family</button>`;
+  html+=`<button class="btn sm pb-edit" id="pbEdit">Edit profiles</button>`;
   bar.innerHTML=html;
   bar.querySelectorAll(".pfilter").forEach(b=>b.addEventListener("click",()=>{ activePerson=b.dataset.p; render(); }));
   document.getElementById("pbEdit").addEventListener("click",togglePeopleEditor);
@@ -816,9 +857,9 @@ function renderPeopleBar(){
 function togglePeopleEditor(){ closeActiveEdit(true); const pe=document.getElementById("peopleEditor"); pe.classList.toggle("hidden"); if(!pe.classList.contains("hidden")) renderPeopleEditor(); }
 function renderPeopleEditor(){
   const pe=document.getElementById("peopleEditor");
-  pe.innerHTML=`<div class="panel-title">Family members</div>`+
+  pe.innerHTML=`<div class="panel-title">Profiles</div>`+
     people.map(p=>`<div class="pe-row" data-id="${p.id}"><button class="swatch" style="background:${p.color}" title="Change color"></button><input type="text" value="${esc(p.name)}" placeholder="Name"><button class="rm" title="Remove">✕</button></div>`).join("")+
-    `<button class="btn sm" id="peAdd">+ Add person</button>`;
+    `<button class="btn sm" id="peAdd">+ Add profile</button>`;
   pe.querySelectorAll(".pe-row").forEach(row=>{
     const id=row.dataset.id;
     const nameInput=row.querySelector("input");
@@ -835,9 +876,9 @@ function renderPeopleEditor(){
       else if(e.key==="Escape"){ e.preventDefault(); const person=people.find(x=>x.id===id); nameInput.value=person?person.name:""; nameInput.blur(); }
     });
     row.querySelector(".swatch").addEventListener("click",()=>{ const person=people.find(x=>x.id===id); if(!person) return; const i=PALETTE.indexOf(person.color); person.color=PALETTE[(i+1)%PALETTE.length]; savePeople(); renderPeopleEditor(); renderPeopleBar(); render(); });
-    row.querySelector(".rm").addEventListener("click",()=>{ const person=people.find(x=>x.id===id); if(!person) return; if(confirm(`Remove ${person.name}? They'll be removed from any assigned items.`)){ people=people.filter(x=>x.id!==id); tasks.forEach(t=>{ t.people=taskPeopleIds(t).filter(x=>x!==id); }); places.forEach(pl=>{ pl.people=normPeople(pl.people).filter(x=>x!==id); }); importantDates.forEach(dt=>{ dt.people=normPeople(dt.people).filter(x=>x!==id); }); if(activePerson===id) activePerson="all"; savePeople(); saveTasks(); savePlaces(); saveDates(); renderPeopleEditor(); render(); } });
+    row.querySelector(".rm").addEventListener("click",()=>{ const person=people.find(x=>x.id===id); if(!person) return; if(confirm(`Remove ${person.name}? They'll be removed from any assigned items.`)){ people=people.filter(x=>x.id!==id); tasks.forEach(t=>{ t.people=taskPeopleIds(t).filter(x=>x!==id); }); places.forEach(pl=>{ pl.people=normPeople(pl.people).filter(x=>x!==id); }); importantDates.forEach(dt=>{ dt.people=normPeople(dt.people).filter(x=>x!==id); }); bills.forEach(bill=>{ bill.people=normPeople(bill.people).filter(x=>x!==id); }); if(activePerson===id) activePerson="all"; savePeople(); saveTasks(); savePlaces(); saveDates(); saveBills(); renderPeopleEditor(); render(); } });
   });
-  pe.querySelector("#peAdd").addEventListener("click",()=>{ const color=PALETTE[people.length%PALETTE.length]; people.push({id:uid("p"),name:"New person",color}); savePeople(); renderPeopleEditor(); renderPeopleBar(); });
+  pe.querySelector("#peAdd").addEventListener("click",()=>{ const color=PALETTE[people.length%PALETTE.length]; people.push({id:uid("p"),name:"New profile",color}); savePeople(); renderPeopleEditor(); renderPeopleBar(); });
 }
 
 /* ---------------- task inline editing (shared by row + Up Next) ---------------- */
@@ -1102,7 +1143,7 @@ document.getElementById("shopClear").addEventListener("click",()=>{ if(!shop.som
 
 /* ---------------- places to go ---------------- */
 function mapUrl(addr){ return "https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(addr); }
-function placePeopleDots(ids){ ids=normPeople(ids); if(!ids.length) return ""; if(ids.includes("family")) return `<span class="pdot" style="background:${getPerson("family").color}" title="Family"></span>`; return ids.map(id=>{const p=getPerson(id);return `<span class="pdot" style="background:${p.color}" title="${esc(p.name)}"></span>`;}).join(""); }
+function placePeopleDots(ids){ ids=normPeople(ids); if(!ids.length) return ""; if(ids.includes("family")) return `<span class="pdot" style="background:${getPerson("family").color}" title="All"></span>`; return ids.map(id=>{const p=getPerson(id);return `<span class="pdot" style="background:${p.color}" title="${esc(p.name)}"></span>`;}).join(""); }
 /* Quick-glance order: unvisited+dated (soonest first), then unvisited+undated, then visited (newest first). */
 function sortedPlaces(){
   return [...places].sort((a,b)=>{
@@ -1215,6 +1256,114 @@ function renderPlaceEditor(pl){
 }
 document.getElementById("placeInput").addEventListener("keydown",e=>{ if(e.key!=="Enter") return; const v=e.target.value.trim(); if(!v) return; places.unshift(blankPlace(v)); e.target.value=""; savePlaces(); renderPlaces(); });
 document.getElementById("placeClear").addEventListener("click",()=>{ if(!places.some(p=>p.visited)) return; places=places.filter(p=>!p.visited); savePlaces(); renderPlaces(); });
+
+/* ---------------- bills ---------------- */
+function fmtMoney(n){ const v=parseFloat(n); if(isNaN(v)) return ""; return "$"+v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+/* Quick-glance order: unpaid+due (soonest first), then unpaid+no due date, then paid (newest first). */
+function sortedBills(){
+  return [...bills].sort((a,b)=>{
+    const ka=a.paid?2:(a.due?0:1), kb=b.paid?2:(b.due?0:1);
+    if(ka!==kb) return ka-kb;
+    if(ka===0) return (a.due||"").localeCompare(b.due||"") || (b.created||0)-(a.created||0);
+    return (b.created||0)-(a.created||0);
+  });
+}
+function renderBills(){
+  const el=document.getElementById("billList");
+  el.innerHTML = bills.length ? "" : `<div class="empty-state" style="padding:24px 12px"><div class="big">No bills yet.</div>Add one to track above.</div>`;
+  sortedBills().forEach(b=>{ el.appendChild(billEditingId===b.id ? renderBillEditor(b) : renderBillRow(b)); });
+  const active=bills.filter(b=>!b.paid).length, paid=bills.filter(b=>b.paid).length;
+  document.getElementById("billCount").textContent=bills.length?`${active}`:"";
+  document.getElementById("billStatus").textContent=`${active} due · ${paid} paid`;
+}
+function wireInlineBillText(node, billId, field, ariaLabel, required){
+  node.classList.add("editable"); node.tabIndex=0; node.setAttribute("role","button"); node.setAttribute("aria-label",ariaLabel);
+  function open(){
+    if(isEditingField("bill",billId,field)) return;
+    const b=bills.find(x=>x.id===billId); if(!b) return;
+    startInlineText({ type:"bill", id:billId, field, container:node, value:b[field], required:!!required, ariaLabel,
+      getEntity:()=>bills.find(x=>x.id===billId), onCommit:(entity,v)=>{ entity[field]=v; saveBills(); }, onDone:renderBills });
+  }
+  node.addEventListener("click",open);
+  node.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
+}
+function openBillDuePopover(anchor, billId){
+  const b0=bills.find(x=>x.id===billId); if(!b0) return;
+  openPopover({ type:"bill", id:billId, field:"due", anchor,
+    build(pop,close){
+      pop.innerHTML=`<div class="pop-title">Due date</div><input type="date" id="pop-date" value="${b0.due||""}" aria-label="Bill due date"><div class="pop-actions"><button class="pop-clear" id="pop-clear">Clear</button><button class="btn sm" id="pop-done">Done</button></div>`;
+      function commit(){ const b=bills.find(x=>x.id===billId); if(!b) return; const v=pop.querySelector("#pop-date").value; if(v!==b.due){ b.due=v; saveBills(); renderBills(); } }
+      pop.querySelector("#pop-date").addEventListener("change",commit);
+      pop.querySelector("#pop-clear").addEventListener("click",()=>{ const b=bills.find(x=>x.id===billId); if(!b) return; b.due=""; saveBills(); renderBills(); close(true); });
+      pop.querySelector("#pop-done").addEventListener("click",()=>{ commit(); close(true); });
+    },
+    onClose(){ renderBills(); }
+  });
+}
+function renderBillRow(b){
+  const row=document.createElement("div"); row.className="bill-row"+(b.paid?" got":""); row.dataset.id=b.id;
+  const overdue = !b.paid && b.due && b.due<todayStr();
+  const bits=[];
+  if(b.due) bits.push(`<span class="ptxt${overdue?" due-over":""}" id="br-due">${esc(fmtDate(b.due))}</span>`);
+  if(b.amount!==""&&b.amount!=null) bits.push(`<span class="ptxt bill-amt" id="br-amt">${esc(fmtMoney(b.amount)||b.amount)}</span>`);
+  if(b.note) bits.push(`<span class="ptxt" id="br-note">${esc(b.note)}</span>`);
+  const dots=placePeopleDots(b.people); if(dots) bits.push(`<span id="br-people">${dots}</span>`);
+  const metaHtml = bits.length?`<div class="bill-meta">${bits.join('<span style="opacity:.4">·</span>')}</div>`:"";
+  row.innerHTML=`
+    <input type="checkbox" class="cbx" ${b.paid?"checked":""} aria-label="Paid">
+    <div class="bill-body"><div class="bill-name" id="br-name">${esc(b.name)||"(unnamed)"}</div>${metaHtml}</div>
+    <button class="bill-edit" title="Edit">✎</button>
+    <button class="bill-del" title="Remove">✕</button>`;
+  row.querySelector(".cbx").addEventListener("change",e=>{ const cur=bills.find(x=>x.id===b.id); if(!cur) return; cur.paid=e.target.checked; saveBills(); renderBills(); });
+  wireInlineBillText(row.querySelector("#br-name"), b.id, "name", "Bill name", true);
+  const amtEl=row.querySelector("#br-amt"); if(amtEl) wireInlineBillText(amtEl, b.id, "amount", "Amount", false);
+  const noteEl=row.querySelector("#br-note"); if(noteEl) wireInlineBillText(noteEl, b.id, "note", "Note", false);
+  const dueEl=row.querySelector("#br-due");
+  if(dueEl){ dueEl.classList.add("editable"); dueEl.tabIndex=0; dueEl.setAttribute("role","button"); dueEl.setAttribute("aria-label","Edit due date");
+    const open=()=>openBillDuePopover(dueEl,b.id);
+    dueEl.addEventListener("click",open); dueEl.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } }); }
+  const peopleEl=row.querySelector("#br-people");
+  if(peopleEl){ peopleEl.classList.add("editable"); peopleEl.tabIndex=0; peopleEl.setAttribute("role","button"); peopleEl.setAttribute("aria-label","Edit who's responsible");
+    const open=()=>openPopover({ type:"bill", id:b.id, field:"people", anchor:peopleEl,
+      build(pop,close){
+        pop.innerHTML=`<div class="pop-title">Who's responsible</div><div class="who-picker" id="pop-who"></div><div class="pop-actions"><button class="btn sm" id="pop-done">Done</button></div>`;
+        makeWhoPicker(pop.querySelector("#pop-who"), b.people, ids=>{ const cur=bills.find(x=>x.id===b.id); if(!cur) return; cur.people=ids; saveBills(); renderBills(); });
+        pop.querySelector("#pop-done").addEventListener("click",()=>close(true));
+      },
+      onClose(){ renderBills(); }
+    });
+    peopleEl.addEventListener("click",open); peopleEl.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } }); }
+  row.querySelector(".bill-edit").addEventListener("click",()=>{ closeActiveEdit(true); billEditingId=b.id; renderBills(); });
+  row.querySelector(".bill-del").addEventListener("click",()=>{ if(confirm(`Remove "${b.name||"this bill"}"?`)){ bills=bills.filter(x=>x.id!==b.id); saveBills(); renderBills(); } });
+  return row;
+}
+function renderBillEditor(b){
+  const billId=b.id;
+  const box=document.createElement("div"); box.className="bill-editor"; box.dataset.id=b.id;
+  box.innerHTML=`
+    <div class="pe-field"><label>Bill</label><input type="text" id="be-name" value="${esc(b.name)}" placeholder="e.g. Electric"></div>
+    <div class="pe-field"><label>Amount (optional)</label><input type="number" step="0.01" id="be-amt" value="${esc(b.amount)}" placeholder="0.00"></div>
+    <div class="pe-field"><label>Due date (optional)</label><input type="date" id="be-due" value="${b.due||""}"></div>
+    <div class="pe-field"><label>Note (optional)</label><input type="text" id="be-note" value="${esc(b.note)}" placeholder="account #, autopay, etc."></div>
+    <div class="pe-field"><label>Who's responsible (optional)</label><div class="who-picker" id="be-who"></div></div>
+    <div class="pe-actions"><button class="btn sm del-pe">Delete</button><button class="btn sm cancel-pe">Cancel</button><button class="btn sm add save-pe">Save</button></div>`;
+  const who=makeWhoPicker(box.querySelector("#be-who"), b.people);
+  box.querySelector(".save-pe").addEventListener("click",()=>{
+    const cur=bills.find(x=>x.id===billId); if(!cur){ billEditingId=null; renderBills(); return; }
+    cur.name=box.querySelector("#be-name").value.trim();
+    cur.amount=box.querySelector("#be-amt").value.trim();
+    cur.due=box.querySelector("#be-due").value;
+    cur.note=box.querySelector("#be-note").value.trim();
+    cur.people=who.get();
+    billEditingId=null; saveBills(); renderBills();
+  });
+  box.querySelector(".cancel-pe").addEventListener("click",()=>{ const cur=bills.find(x=>x.id===billId); if(cur && !cur.name&&!cur.amount&&!cur.due&&!cur.note&&!cur.people.length) bills=bills.filter(x=>x.id!==billId); billEditingId=null; renderBills(); });
+  box.querySelector(".del-pe").addEventListener("click",()=>{ bills=bills.filter(x=>x.id!==billId); billEditingId=null; saveBills(); renderBills(); });
+  setTimeout(()=>box.querySelector("#be-name").focus(),0);
+  return box;
+}
+document.getElementById("billInput").addEventListener("keydown",e=>{ if(e.key!=="Enter") return; const v=e.target.value.trim(); if(!v) return; bills.unshift(blankBill(v)); e.target.value=""; saveBills(); renderBills(); });
+document.getElementById("billClear").addEventListener("click",()=>{ if(!bills.some(b=>b.paid)) return; bills=bills.filter(b=>!b.paid); saveBills(); renderBills(); });
 
 /* ---------------- important dates: rendering ---------------- */
 function renderDatesSection(){
@@ -1413,7 +1562,7 @@ function renderDateEditorCard(d){
   const id=d.id;
   box.innerHTML=`
     <div class="grid">
-      <div class="field full"><label>Title</label><input type="text" id="de-title" value="${esc(d.title)}" placeholder="e.g. Kids fly with Nana"></div>
+      <div class="field full"><label>Title</label><input type="text" id="de-title" value="${esc(d.title)}" placeholder="e.g. Flight to Chicago"></div>
       <div class="field"><label>Category</label><select id="de-cat">${Object.entries(DATE_CATEGORIES).map(([k,c])=>`<option value="${k}" ${k===d.category?"selected":""}>${esc(c.label)}</option>`).join("")}</select></div>
       <div class="field"><label>Location (optional)</label><input type="text" id="de-loc" value="${esc(d.location)}" placeholder="where"></div>
       <div class="field"><label>Start date</label><input type="date" id="de-start" value="${d.startDate||""}"></div>
@@ -1474,16 +1623,16 @@ document.getElementById("addBtn").addEventListener("click",()=>{
 ["searchInput","sortBy","hideDone","showLater"].forEach(id=>document.getElementById(id).addEventListener("input",render));
 document.getElementById("printBtn").addEventListener("click",()=>window.print());
 document.getElementById("exportBtn").addEventListener("click",()=>{
-  const bundle={version:VERSION,people,tasks,shop,places,importantDates};
+  const bundle={version:VERSION,people,tasks,shop,places,importantDates,bills};
   const blob=new Blob([JSON.stringify(bundle,null,2)],{type:"application/json"});
   const url=URL.createObjectURL(blob); const a=document.createElement("a");
-  a.href=url; a.download=`home-planner-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(url);
+  a.href=url; a.download=`the-grind-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(url);
 });
 document.getElementById("importBtn").addEventListener("click",()=>document.getElementById("importFile").click());
 document.getElementById("importFile").addEventListener("change",e=>{
   const f=e.target.files[0]; if(!f) return; const r=new FileReader();
   r.onload=()=>{ try{ const d=JSON.parse(r.result);
-    if(!confirm("Import this file? It replaces your current planner.")) return;
+    if(!confirm("Import this file? It replaces or updates your current Grind data.")) return;
     closeActiveEdit(false);
     /* Every collection is imported independently and only overwritten when present, so backups
        from any prior version — old single-person tasks, no Places, no Important Dates — load fine;
@@ -1495,9 +1644,10 @@ document.getElementById("importFile").addEventListener("change",e=>{
       if(Array.isArray(d.shop)) shop=d.shop.map(s=>Object.assign(blankShop(),s));
       if(Array.isArray(d.places)) places=d.places.map(migratePlace);
       if(Array.isArray(d.importantDates)) importantDates=d.importantDates.map(migrateImportantDate);
+      if(Array.isArray(d.bills)) bills=d.bills.map(migrateBill);
     }
-    editingId=null; placeEditingId=null; dateEditingId=null; savePeople(); saveTasks(); saveShop(); savePlaces(); saveDates(); render();
-  }catch(err){ alert("Couldn't read that file — expected a Home planner export (.json)."); } };
+    editingId=null; placeEditingId=null; dateEditingId=null; billEditingId=null; savePeople(); saveTasks(); saveShop(); savePlaces(); saveDates(); saveBills(); render();
+  }catch(err){ alert("Couldn't read that file — expected a The Grind export (.json)."); } };
   r.readAsText(f); e.target.value="";
 });
 
