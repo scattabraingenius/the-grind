@@ -6,10 +6,12 @@
 <title>The Grind</title>
 <style>
   /* ============================================================
-     THE GRIND — personal command center   (v0.1-beta)
+     THE GRIND — personal command center   (v0.2-beta)
      Forked from Family Planner but fully data-isolated: its own Firebase
      path (planners/the-grind-scattabrain-2026) and its own grind.* localStorage keys.
-     One day list (multi-profile tags), Places to Go + Shopping + Bills.
+     One day list (multi-profile tags), Places to Go + Shopping + Bills + Quick Notes.
+     A soft completion chime (Web Audio, no external file) plays when an item
+     is checked off; toggle it off via Sound: On/Off (device-local setting).
      Optional live cloud sync across devices (Firebase — see config block).
      Self-contained, offline, saves to localStorage.
      Edit SEED_PEOPLE / palette to taste.
@@ -33,9 +35,9 @@
     .wrap { padding:0; max-width:none; }
     .toolbar, .rowactions, .clock, .nextup, .util, .peoplebar .pb-edit, .row.parked, .add-inline, .shop-clear, .people-editor { display:none !important; }
     .panels { grid-template-columns:1fr 1fr; gap:16px; }
-    .row, .shop-row, .place-row, .bill-row, .date-card { break-inside:avoid; box-shadow:none !important; }
+    .row, .shop-row, .place-row, .bill-row, .note-row, .date-card { break-inside:avoid; box-shadow:none !important; }
     header.top { margin-bottom:8px; }
-    .dates-head-actions, .dc-actions, .dates-more, .dates-empty .btn, .date-editor, .place-edit, .place-del, .bill-edit, .bill-del, .shop-del, .inline-input, .inline-textarea, .popover, .dates-past-toggle { display:none !important; }
+    .dates-head-actions, .dc-actions, .dates-more, .dates-empty .btn, .date-editor, .place-edit, .place-del, .bill-edit, .bill-del, .shop-del, .note-pin, .note-del, .inline-input, .inline-textarea, .popover, .dates-past-toggle { display:none !important; }
     .dates-past-list:not(.expanded) { display:none !important; }
     .editable { padding:0; margin:0; }
     .editable:hover, .editable:focus-visible { background:none; outline:none; }
@@ -243,8 +245,19 @@
   .cell-time .cd.late { color:var(--alarm); font-weight:600; }
   .overdue-chip { font-family:var(--mono); font-size:11px; font-weight:600; color:var(--alarm); margin-left:8px; white-space:nowrap; }
 
-  /* right sidebar: Places to Go (above Shopping) */
+  /* right sidebar: Quick notes (top), then Places to Go, Bills, Shopping */
   .side { display:flex; flex-direction:column; gap:18px; }
+  .notes { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:14px; box-shadow:var(--shadow); }
+  .note-list { display:flex; flex-direction:column; gap:6px; }
+  .note-row { display:flex; align-items:flex-start; gap:8px; padding:8px 10px; border:1px solid var(--line); border-left:3px solid transparent; border-radius:9px; background:var(--surface-2); }
+  .note-row.pinned { border-left-color:var(--signal); }
+  .note-body { flex:1; min-width:0; }
+  .note-text { font-size:13.5px; line-height:1.45; white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere; }
+  .note-actions { display:flex; flex-direction:column; gap:4px; flex:none; }
+  .note-pin, .note-del { color:var(--muted-2); background:none; border:none; cursor:pointer; font-size:13px; padding:2px 3px; line-height:1; }
+  .note-pin.on { color:var(--signal); }
+  .note-pin:hover { color:var(--ink); } .note-del:hover { color:var(--alarm); }
+
   .places { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:14px; box-shadow:var(--shadow); }
   .place-list { display:flex; flex-direction:column; gap:6px; }
   .place-row { display:flex; align-items:center; gap:9px; padding:8px 10px; border:1px solid var(--line); border-radius:9px; background:var(--surface-2); }
@@ -332,6 +345,7 @@
       </div>
       <div class="util">
         <span class="sync-badge" id="syncBadge"></span>
+        <button class="btn sm" id="soundToggle">Sound: On</button>
         <button class="btn sm" id="printBtn">🖨 Print</button>
         <button class="btn sm" id="exportBtn">Export</button>
         <button class="btn sm" id="importBtn">Import</button>
@@ -384,6 +398,12 @@
     </div>
 
     <div class="side">
+      <div class="notes">
+        <div class="panel-title">Quick notes <span class="shop-count" id="noteCount"></span></div>
+        <div class="add-inline"><span class="plus">+</span><input id="noteInput" type="text" placeholder="Jot something down, then Enter…" aria-label="Add note"></div>
+        <div class="note-list" id="noteList"></div>
+      </div>
+
       <div class="places">
         <div class="panel-title">Places to go <span class="shop-count" id="placeCount"></span></div>
         <div class="add-inline"><span class="plus">+</span><input id="placeInput" type="text" placeholder="Add a place, then Enter…" aria-label="Add place"></div>
@@ -414,20 +434,27 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
 "use strict";
-const VERSION = "0.1-beta";
+const VERSION = "0.2-beta";
 
 /* ---------------- storage ---------------- */
 /* Grind-namespaced keys — deliberately isolated from the old Family Planner fork's `home.*`
    keys, which live at the same browser origin (GitHub Pages paths don't isolate localStorage).
    Never read from or write to `home.*` here — that data belongs to the other app. */
-const K_TASKS="grind.plan.v1", K_SHOP="grind.shopping.v1", K_PEOPLE="grind.profiles.v1", K_PLACES="grind.places.v1", K_DATES="grind.dates.v1", K_BILLS="grind.bills.v1";
+const K_TASKS="grind.plan.v1", K_SHOP="grind.shopping.v1", K_PEOPLE="grind.profiles.v1", K_PLACES="grind.places.v1", K_DATES="grind.dates.v1", K_BILLS="grind.bills.v1", K_PREFS="grind.viewprefs.v1", K_NOTES="grind.notes.v1", K_SETTINGS="grind.settings.v1";
 function loadJSON(k){ try{ const r=localStorage.getItem(k); if(r) return JSON.parse(r); }catch(e){} return null; }
 function saveTasks(){ try{ localStorage.setItem(K_TASKS, JSON.stringify(tasks)); }catch(e){} pushCloud(); return true; }
 function saveShop(){ try{ localStorage.setItem(K_SHOP, JSON.stringify(shop)); }catch(e){} pushCloud(); }
+/* View-only filters (Hide done / Later) — deliberately local-only, never pushed to Firebase,
+   since they're per-device display preferences, not shared planner data. */
+function saveViewPrefs(){ try{ localStorage.setItem(K_PREFS, JSON.stringify({ hideDone:document.getElementById("hideDone").checked, showLater:document.getElementById("showLater").checked })); }catch(e){} }
 function savePeople(){ try{ localStorage.setItem(K_PEOPLE, JSON.stringify(people)); }catch(e){} pushCloud(); }
 function savePlaces(){ try{ localStorage.setItem(K_PLACES, JSON.stringify(places)); }catch(e){} pushCloud(); }
 function saveDates(){ try{ localStorage.setItem(K_DATES, JSON.stringify(importantDates)); }catch(e){} pushCloud(); }
 function saveBills(){ try{ localStorage.setItem(K_BILLS, JSON.stringify(bills)); }catch(e){} pushCloud(); }
+function saveNotes(){ try{ localStorage.setItem(K_NOTES, JSON.stringify(notes)); }catch(e){} pushCloud(); }
+/* Device-local app settings (currently just sound) — deliberately never synced through Firebase,
+   never included in the cloud payload, and never touched by import, so each device keeps its own. */
+function saveSettings(){ try{ localStorage.setItem(K_SETTINGS, JSON.stringify(settings)); }catch(e){} }
 
 /* =====================================================================
    CLOUD SYNC (optional) — share one LIVE Grind across all your devices.
@@ -466,7 +493,8 @@ function initSync(){
       if(Array.isArray(v.places)) places=v.places.map(migratePlace);   // only overwrite if present → never erased by an old client
       if(Array.isArray(v.importantDates)) importantDates=v.importantDates.map(migrateImportantDate); // same rule → older clients never erase this
       if(Array.isArray(v.bills)) bills=v.bills.map(migrateBill);       // same rule → older clients never erase this
-      try{ localStorage.setItem(K_PEOPLE,JSON.stringify(people)); localStorage.setItem(K_TASKS,JSON.stringify(tasks)); localStorage.setItem(K_SHOP,JSON.stringify(shop)); localStorage.setItem(K_PLACES,JSON.stringify(places)); localStorage.setItem(K_DATES,JSON.stringify(importantDates)); localStorage.setItem(K_BILLS,JSON.stringify(bills)); }catch(e){}
+      if(Array.isArray(v.notes)) notes=v.notes.map(migrateNote).filter(n=>n.text!=="");       // same rule → older clients never erase this
+      try{ localStorage.setItem(K_PEOPLE,JSON.stringify(people)); localStorage.setItem(K_TASKS,JSON.stringify(tasks)); localStorage.setItem(K_SHOP,JSON.stringify(shop)); localStorage.setItem(K_PLACES,JSON.stringify(places)); localStorage.setItem(K_DATES,JSON.stringify(importantDates)); localStorage.setItem(K_BILLS,JSON.stringify(bills)); localStorage.setItem(K_NOTES,JSON.stringify(notes)); }catch(e){}
       remoteApplying=false;
       // Data is always safe to merge in (every commit path re-fetches its entity by id), but a full render()
       // would blow away a focused inline editor's DOM — so defer the redraw until editing ends.
@@ -482,7 +510,7 @@ function pushCloud(force){
      Since a stale v1.4 tab's set() has no importantDates key, its set() would still erase importantDates
      (update() only protects against writers that also use update() with a partial payload); this change
      protects future fields added the same way, but v1.4 tabs must still be closed/refreshed — see report. */
-  pushTimer=setTimeout(()=>{ try{ db.update({people,tasks,shop,places,importantDates,bills,updated:Date.now()}); }catch(e){} }, 250);
+  pushTimer=setTimeout(()=>{ try{ db.update({people,tasks,shop,places,importantDates,bills,notes,updated:Date.now()}); }catch(e){} }, 250);
 }
 function updateSyncBadge(on){
   const el=document.getElementById("syncBadge"); if(!el) return;
@@ -510,6 +538,7 @@ function blankTask(name){ return { id:uid("t"), people:[], task:name||"", time:"
 function blankShop(name){ return { id:uid("s"), item:name||"", got:false }; }
 function blankPlace(name){ return { id:uid("pl"), name:name||"", address:"", note:"", date:"", people:[], visited:false, created:Date.now() }; }
 function blankBill(name){ return { id:uid("b"), name:name||"", amount:"", due:"", note:"", people:[], paid:false, created:Date.now() }; }
+function blankNote(text){ return { id:uid("n"), text:text||"", pinned:false, created:Date.now(), updated:Date.now() }; }
 
 function normPeople(arr){ if(!Array.isArray(arr)) return []; if(arr.includes("family")) return ["family"]; return arr.filter(x=>x); }
 function migrateTask(raw){
@@ -524,6 +553,19 @@ function migrateTask(raw){
 }
 function migratePlace(raw){ const p=Object.assign(blankPlace(), raw||{}); p.people=normPeople(p.people); if(typeof p.created!=="number") p.created=Date.now(); return p; }
 function migrateBill(raw){ const b=Object.assign(blankBill(), raw||{}); b.people=normPeople(b.people); if(typeof b.created!=="number") b.created=Date.now(); return b; }
+/* Defensive against malformed/older-format notes on import: coerces text/pinned to the right
+   type and backfills id/timestamps so a bad entry never crashes the app — it just becomes a
+   normal (possibly blank, later filtered) note. */
+function migrateNote(raw){
+  const src=(raw && typeof raw==="object" && !Array.isArray(raw)) ? raw : {};
+  const n=Object.assign(blankNote(), src);
+  n.text=(n.text==null?"":n.text).toString().trim();
+  n.pinned=!!n.pinned;
+  if(typeof n.id!=="string" || n.id.trim()==="") n.id=uid("n");
+  if(!Number.isFinite(n.created)) n.created=Date.now();
+  if(!Number.isFinite(n.updated)) n.updated=n.created;
+  return n;
+}
 
 /* ---------------- important dates ---------------- */
 /* Stored separately from tasks — never appear in the task list, never affect progress/overdue/Up Next.
@@ -559,6 +601,9 @@ let shop = (loadJSON(K_SHOP) || []).map(s=>Object.assign(blankShop(),s));
 let places = (loadJSON(K_PLACES) || []).map(migratePlace);
 let importantDates = (loadJSON(K_DATES) || []).map(migrateImportantDate);
 let bills = (loadJSON(K_BILLS) || []).map(migrateBill);
+const notesRaw = loadJSON(K_NOTES);
+let notes = (Array.isArray(notesRaw) ? notesRaw : []).map(migrateNote).filter(n=>n.text!=="");
+let settings = Object.assign({ soundEnabled:true }, loadJSON(K_SETTINGS)||{});
 
 /* ---------------- state ---------------- */
 let editingId=null, placeEditingId=null, dateEditingId=null, billEditingId=null, activePerson="all", overdueSet=new Set();
@@ -676,6 +721,35 @@ function isLater(t){ return t.status==="later"; }
 function isActive(t){ return t.status==="todo"||t.status==="doing"; }
 function esc(s){ return (s??"").toString().replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function todayStr(){ const d=new Date(); return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; }
+
+/* ---------------- completion sound ---------------- */
+/* One shared chime for every "incomplete → complete" checkbox across the app (tasks, bills,
+   shopping, places) — deliberately not duplicated per-handler. Built with Web Audio (no external
+   file); the AudioContext is created lazily on first use, since creating one before any user
+   gesture triggers browser autoplay warnings and some browsers start it "suspended" until a
+   gesture unlocks it. Every failure path (blocked/unavailable audio, suspended context that
+   won't resume, etc.) is swallowed so a sound problem can never break the actual checkbox action. */
+let audioCtx=null;
+function playCompletionSound(){
+  if(!settings.soundEnabled) return;
+  try{
+    if(!audioCtx){ const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return; audioCtx=new AC(); }
+    if(audioCtx.state==="suspended") audioCtx.resume().catch(()=>{});
+    const now=audioCtx.currentTime;
+    const gain=audioCtx.createGain();
+    gain.connect(audioCtx.destination);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.2, now+0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now+0.5);
+    [659.25, 987.77].forEach((freq,i)=>{   // soft two-tone rise (E5 → B5), ~500ms total
+      const osc=audioCtx.createOscillator();
+      osc.type="sine"; osc.frequency.value=freq;
+      osc.connect(gain);
+      const start=now+i*0.12;
+      osc.start(start); osc.stop(start+0.32);
+    });
+  }catch(e){ /* audio unavailable or blocked — fail silently, never breaks the checkbox action */ }
+}
 function taskPeopleIds(t){ return Array.isArray(t.people)?t.people:[]; }
 function isFamilyTask(t){ return taskPeopleIds(t).includes("family"); }
 /* a task "counts toward today" if it's undated (a floating today task) or due today; not later */
@@ -811,6 +885,7 @@ function currentView(){
 function render(){
   normalizeLater();
   renderPeopleBar();
+  renderNotes();
   renderShop();
   renderPlaces();
   renderBills();
@@ -1046,7 +1121,7 @@ function renderRow(t,isNext){
   const rDue=el.querySelector("#r-due"); if(rDue) wireTaskDue(rDue, t.id);
   const rNotes=el.querySelector("#r-notes"); if(rNotes) wireTaskNotes(rNotes, t.id);
 
-  el.querySelector(".cbx").addEventListener("change",e=>{ const cur=tasks.find(x=>x.id===t.id); if(!cur) return; cur.status=e.target.checked?"done":"todo"; cur.showOn=""; saveTasks(); render(); });
+  el.querySelector(".cbx").addEventListener("change",e=>{ const cur=tasks.find(x=>x.id===t.id); if(!cur) return; const wasDone=isDone(cur); cur.status=e.target.checked?"done":"todo"; cur.showOn=""; saveTasks(); if(e.target.checked&&!wasDone) playCompletionSound(); render(); });
   el.querySelector(".status-sel").addEventListener("change",e=>{ const v=e.target.value; const cur=tasks.find(x=>x.id===t.id); if(!cur) return;
     if(v==="tomorrow"){ cur.status="later"; cur.showOn=tomorrowLocal(cur.time||"08:00"); saveTasks(); render(); }
     else if(v==="pickday"){ cur.status="later"; if(!cur.showOn) cur.showOn=tomorrowLocal(cur.time||"08:00"); closeActiveEdit(true); editingId=cur.id; render(); }
@@ -1126,7 +1201,7 @@ function renderShop(){
   sorted.forEach(s=>{
     const row=document.createElement("div"); row.className="shop-row"+(s.got?" got":""); row.dataset.id=s.id;
     row.innerHTML=`<input type="checkbox" class="cbx" ${s.got?"checked":""} aria-label="Got it"><span class="shop-text" id="sr-text">${esc(s.item)}</span><button class="shop-del" title="Remove">✕</button>`;
-    row.querySelector(".cbx").addEventListener("change",e=>{ const cur=shop.find(x=>x.id===s.id); if(!cur) return; cur.got=e.target.checked; saveShop(); renderShop(); });
+    row.querySelector(".cbx").addEventListener("change",e=>{ const cur=shop.find(x=>x.id===s.id); if(!cur) return; const wasGot=cur.got; cur.got=e.target.checked; saveShop(); if(e.target.checked&&!wasGot) playCompletionSound(); renderShop(); });
     wireShopText(row.querySelector("#sr-text"), s.id);
     row.querySelector(".shop-del").addEventListener("click",()=>{ shop=shop.filter(x=>x.id!==s.id); saveShop(); renderShop(); });
     el.appendChild(row);
@@ -1213,7 +1288,7 @@ function renderPlaceRow(pl){
     ${pl.address?`<a class="mapbtn" href="${mapUrl(pl.address)}" target="_blank" rel="noopener">Map</a>`:""}
     <button class="place-edit" title="Edit">✎</button>
     <button class="place-del" title="Remove">✕</button>`;
-  row.querySelector(".cbx").addEventListener("change",e=>{ const cur=places.find(x=>x.id===pl.id); if(!cur) return; cur.visited=e.target.checked; savePlaces(); renderPlaces(); });
+  row.querySelector(".cbx").addEventListener("change",e=>{ const cur=places.find(x=>x.id===pl.id); if(!cur) return; const wasVisited=cur.visited; cur.visited=e.target.checked; savePlaces(); if(e.target.checked&&!wasVisited) playCompletionSound(); renderPlaces(); });
   wireInlinePlaceText(row.querySelector("#pr-name"), pl.id, "name", "Place name", true);
   const addrEl=row.querySelector("#pr-addr"); if(addrEl) wireInlinePlaceText(addrEl, pl.id, "address", "Address", false);
   const noteEl=row.querySelector("#pr-note"); if(noteEl) wireInlinePlaceText(noteEl, pl.id, "note", "Note", false);
@@ -1314,7 +1389,7 @@ function renderBillRow(b){
     <div class="bill-body"><div class="bill-name" id="br-name">${esc(b.name)||"(unnamed)"}</div>${metaHtml}</div>
     <button class="bill-edit" title="Edit">✎</button>
     <button class="bill-del" title="Remove">✕</button>`;
-  row.querySelector(".cbx").addEventListener("change",e=>{ const cur=bills.find(x=>x.id===b.id); if(!cur) return; cur.paid=e.target.checked; saveBills(); renderBills(); });
+  row.querySelector(".cbx").addEventListener("change",e=>{ const cur=bills.find(x=>x.id===b.id); if(!cur) return; const wasPaid=cur.paid; cur.paid=e.target.checked; saveBills(); if(e.target.checked&&!wasPaid) playCompletionSound(); renderBills(); });
   wireInlineBillText(row.querySelector("#br-name"), b.id, "name", "Bill name", true);
   const amtEl=row.querySelector("#br-amt"); if(amtEl) wireInlineBillText(amtEl, b.id, "amount", "Amount", false);
   const noteEl=row.querySelector("#br-note"); if(noteEl) wireInlineBillText(noteEl, b.id, "note", "Note", false);
@@ -1364,6 +1439,43 @@ function renderBillEditor(b){
 }
 document.getElementById("billInput").addEventListener("keydown",e=>{ if(e.key!=="Enter") return; const v=e.target.value.trim(); if(!v) return; bills.unshift(blankBill(v)); e.target.value=""; saveBills(); renderBills(); });
 document.getElementById("billClear").addEventListener("click",()=>{ if(!bills.some(b=>b.paid)) return; bills=bills.filter(b=>!b.paid); saveBills(); renderBills(); });
+
+/* ---------------- quick notes ---------------- */
+/* Pinned first; within each group, most-recently-updated first. */
+function sortedNotes(){
+  return [...notes].sort((a,b)=> ((b.pinned?1:0)-(a.pinned?1:0)) || ((b.updated||0)-(a.updated||0)));
+}
+function renderNotes(){
+  const el=document.getElementById("noteList");
+  el.innerHTML = notes.length ? "" : `<div class="empty-state" style="padding:24px 12px"><div class="big">No notes yet.</div>Jot something down above.</div>`;
+  sortedNotes().forEach(n=>{ el.appendChild(renderNoteRow(n)); });
+  document.getElementById("noteCount").textContent = notes.length ? String(notes.length) : "";
+}
+function wireInlineNoteText(node, noteId){
+  node.classList.add("editable"); node.tabIndex=0; node.setAttribute("role","button"); node.setAttribute("aria-label","Edit note");
+  function open(){
+    if(isEditingField("note",noteId,"text")) return;
+    const n=notes.find(x=>x.id===noteId); if(!n) return;
+    startInlineText({ type:"note", id:noteId, field:"text", container:node, value:n.text, required:true, multiline:true, ariaLabel:"Note text",
+      getEntity:()=>notes.find(x=>x.id===noteId), onCommit:(entity,v)=>{ entity.text=v; entity.updated=Date.now(); saveNotes(); }, onDone:renderNotes });
+  }
+  node.addEventListener("click",open);
+  node.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
+}
+function renderNoteRow(n){
+  const row=document.createElement("div"); row.className="note-row"+(n.pinned?" pinned":""); row.dataset.id=n.id;
+  row.innerHTML=`
+    <div class="note-body"><div class="note-text" id="nr-text">${esc(n.text)}</div></div>
+    <div class="note-actions">
+      <button class="note-pin${n.pinned?" on":""}" title="${n.pinned?"Unpin":"Pin"}">📌</button>
+      <button class="note-del" title="Delete">✕</button>
+    </div>`;
+  wireInlineNoteText(row.querySelector("#nr-text"), n.id);
+  row.querySelector(".note-pin").addEventListener("click",()=>{ const cur=notes.find(x=>x.id===n.id); if(!cur) return; cur.pinned=!cur.pinned; cur.updated=Date.now(); saveNotes(); renderNotes(); });
+  row.querySelector(".note-del").addEventListener("click",()=>{ if(confirm("Delete this note?")){ notes=notes.filter(x=>x.id!==n.id); saveNotes(); renderNotes(); } });
+  return row;
+}
+document.getElementById("noteInput").addEventListener("keydown",e=>{ if(e.key!=="Enter") return; const v=e.target.value.trim(); if(!v) return; notes.unshift(blankNote(v)); e.target.value=""; saveNotes(); renderNotes(); });
 
 /* ---------------- important dates: rendering ---------------- */
 function renderDatesSection(){
@@ -1621,9 +1733,12 @@ document.getElementById("addBtn").addEventListener("click",()=>{
 
 /* ---------------- toolbar ---------------- */
 ["searchInput","sortBy","hideDone","showLater"].forEach(id=>document.getElementById(id).addEventListener("input",render));
+["hideDone","showLater"].forEach(id=>document.getElementById(id).addEventListener("input",saveViewPrefs));
+function updateSoundToggleLabel(){ const btn=document.getElementById("soundToggle"); if(btn) btn.textContent = settings.soundEnabled ? "Sound: On" : "Sound: Off"; }
+document.getElementById("soundToggle").addEventListener("click",()=>{ settings.soundEnabled=!settings.soundEnabled; saveSettings(); updateSoundToggleLabel(); });
 document.getElementById("printBtn").addEventListener("click",()=>window.print());
 document.getElementById("exportBtn").addEventListener("click",()=>{
-  const bundle={version:VERSION,people,tasks,shop,places,importantDates,bills};
+  const bundle={version:VERSION,people,tasks,shop,places,importantDates,bills,notes};
   const blob=new Blob([JSON.stringify(bundle,null,2)],{type:"application/json"});
   const url=URL.createObjectURL(blob); const a=document.createElement("a");
   a.href=url; a.download=`the-grind-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(url);
@@ -1645,8 +1760,12 @@ document.getElementById("importFile").addEventListener("change",e=>{
       if(Array.isArray(d.places)) places=d.places.map(migratePlace);
       if(Array.isArray(d.importantDates)) importantDates=d.importantDates.map(migrateImportantDate);
       if(Array.isArray(d.bills)) bills=d.bills.map(migrateBill);
+      /* notes: migrate (backfills ids/timestamps, coerces text/pinned) then drop anything that's
+         still blank after coercion — a malformed entry never crashes the app, it's just discarded.
+         Settings are deliberately never touched here — sound stays this device's own preference. */
+      if(Array.isArray(d.notes)) notes=d.notes.map(migrateNote).filter(n=>n.text!=="");
     }
-    editingId=null; placeEditingId=null; dateEditingId=null; billEditingId=null; savePeople(); saveTasks(); saveShop(); savePlaces(); saveDates(); saveBills(); render();
+    editingId=null; placeEditingId=null; dateEditingId=null; billEditingId=null; savePeople(); saveTasks(); saveShop(); savePlaces(); saveDates(); saveBills(); saveNotes(); render();
   }catch(err){ alert("Couldn't read that file — expected a The Grind export (.json)."); } };
   r.readAsText(f); e.target.value="";
 });
@@ -1667,6 +1786,8 @@ function tick(){ const d=new Date(); document.getElementById("clock").innerHTML=
 
 /* ---------------- init ---------------- */
 document.getElementById("datestr").textContent=new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
+{ const vp=loadJSON(K_PREFS); if(vp){ document.getElementById("hideDone").checked=!!vp.hideDone; document.getElementById("showLater").checked=!!vp.showLater; } }
+updateSoundToggleLabel();
 render(); initSync(); tick(); setInterval(tick,1000);
 </script>
 </body>
