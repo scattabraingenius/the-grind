@@ -6,12 +6,13 @@
 <title>The Grind</title>
 <style>
   /* ============================================================
-     THE GRIND — personal command center   (v0.2-beta)
+     THE GRIND — personal command center   (v0.2.1-beta)
      Forked from Family Planner but fully data-isolated: its own Firebase
      path (planners/the-grind-scattabrain-2026) and its own grind.* localStorage keys.
      One day list (multi-profile tags), Places to Go + Shopping + Bills + Quick Notes.
      A soft completion chime (Web Audio, no external file) plays when an item
      is checked off; toggle it off via Sound: On/Off (device-local setting).
+     "Delete completed (N)" clears all done tasks across every profile in one shot.
      Optional live cloud sync across devices (Firebase — see config block).
      Self-contained, offline, saves to localStorage.
      Edit SEED_PEOPLE / palette to taste.
@@ -393,6 +394,7 @@
         </select>
         <label class="toggle"><input type="checkbox" id="hideDone"> Hide done</label>
         <label class="toggle"><input type="checkbox" id="showLater"> <span id="laterLbl">Later</span></label>
+        <button class="shop-clear hidden" id="deleteCompletedBtn">Delete completed (0)</button>
       </div>
       <div class="list" id="list"></div>
     </div>
@@ -434,7 +436,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
 "use strict";
-const VERSION = "0.2-beta";
+const VERSION = "0.2.1-beta";
 
 /* ---------------- storage ---------------- */
 /* Grind-namespaced keys — deliberately isolated from the old Family Planner fork's `home.*`
@@ -907,6 +909,10 @@ function render(){
   });
 
   const done=tasks.filter(isDone).length; const over=tasks.filter(isOverdue).length;
+  const delCompletedBtn=document.getElementById("deleteCompletedBtn");
+  delCompletedBtn.textContent=`Delete completed (${done})`;
+  delCompletedBtn.disabled=done===0;
+  delCompletedBtn.classList.toggle("hidden", done===0);
   document.getElementById("hint").textContent=`${tasks.length} items • ${done} done • ${over} overdue • ${laterCount} later • ${places.filter(p=>!p.visited).length} places • ${shop.filter(s=>!s.got).length} to buy • ${bills.filter(b=>!b.paid).length} bills due • The Grind v${VERSION}`;
 }
 
@@ -1734,6 +1740,14 @@ document.getElementById("addBtn").addEventListener("click",()=>{
 /* ---------------- toolbar ---------------- */
 ["searchInput","sortBy","hideDone","showLater"].forEach(id=>document.getElementById(id).addEventListener("input",render));
 ["hideDone","showLater"].forEach(id=>document.getElementById(id).addEventListener("input",saveViewPrefs));
+document.getElementById("deleteCompletedBtn").addEventListener("click",()=>{
+  const n=tasks.filter(isDone).length;
+  if(!n) return;
+  if(!confirm(`Permanently delete all ${n} completed tasks across all profiles?`)) return;
+  tasks=tasks.filter(t=>!isDone(t));
+  saveTasks();
+  render();
+});
 function updateSoundToggleLabel(){ const btn=document.getElementById("soundToggle"); if(btn) btn.textContent = settings.soundEnabled ? "Sound: On" : "Sound: Off"; }
 document.getElementById("soundToggle").addEventListener("click",()=>{ settings.soundEnabled=!settings.soundEnabled; saveSettings(); updateSoundToggleLabel(); });
 document.getElementById("printBtn").addEventListener("click",()=>window.print());
