@@ -6,13 +6,16 @@
 <title>The Grind</title>
 <style>
   /* ============================================================
-     THE GRIND — personal command center   (v0.2.1-beta)
+     THE GRIND — personal command center   (v0.3-beta)
      Forked from Family Planner but fully data-isolated: its own Firebase
      path (planners/the-grind-scattabrain-2026) and its own grind.* localStorage keys.
      One day list (multi-profile tags), Places to Go + Shopping + Bills + Quick Notes.
      A soft completion chime (Web Audio, no external file) plays when an item
      is checked off; toggle it off via Sound: On/Off (device-local setting).
      "Delete completed (N)" clears all done tasks across every profile in one shot.
+     Print button opens a Print Center: builds a separate, printer- and fridge-friendly
+     sheet (Fridge Sheet / Full Planner) from current data — the on-screen dashboard
+     itself is never printed and is never touched while building it.
      Optional live cloud sync across devices (Firebase — see config block).
      Self-contained, offline, saves to localStorage.
      Edit SEED_PEOPLE / palette to taste.
@@ -28,20 +31,74 @@
     --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Consolas, monospace;
     --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   }
+  /* Print Center generates a completely separate print-only document (see .print-sheet below)
+     instead of squeezing the dark dashboard onto paper. This rule keeps that document invisible
+     on screen; @media print below hides everything else and shows only the print sheet. */
+  .print-sheet { display:none; }
   @media print {
-    :root { color-scheme:light; --paper:#fff; --card:#fff; --surface-2:#fff; --input-bg:#fff; --done-bg:#fff; --track:#e2e2e2;
-      --ink:#111; --muted:#444; --muted-2:#777; --line:#c4c4c4; --signal:#8A2BE2; --shadow:none; }
-    * { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-    body { background:#fff; }
-    .wrap { padding:0; max-width:none; }
-    .toolbar, .rowactions, .clock, .nextup, .util, .peoplebar .pb-edit, .row.parked, .add-inline, .shop-clear, .people-editor { display:none !important; }
-    .panels { grid-template-columns:1fr 1fr; gap:16px; }
-    .row, .shop-row, .place-row, .bill-row, .note-row, .date-card { break-inside:avoid; box-shadow:none !important; }
-    header.top { margin-bottom:8px; }
-    .dates-head-actions, .dc-actions, .dates-more, .dates-empty .btn, .date-editor, .place-edit, .place-del, .bill-edit, .bill-del, .shop-del, .note-pin, .note-del, .inline-input, .inline-textarea, .popover, .dates-past-toggle { display:none !important; }
-    .dates-past-list:not(.expanded) { display:none !important; }
-    .editable { padding:0; margin:0; }
-    .editable:hover, .editable:focus-visible { background:none; outline:none; }
+    html, body { background:#fff !important; }
+    /* Hide every normal on-screen element (dashboard, Print Center modal, popovers — anything
+       appended to <body>) and show only the generated print-only document. */
+    body > *:not(.print-sheet) { display:none !important; }
+    .print-modal-backdrop { display:none !important; }
+    @page { size:letter portrait; margin:0.45in; }
+    .print-sheet {
+      display:block !important; position:static; width:auto; max-width:none; margin:0; padding:0;
+      background:#fff; color:#1A1A1A; font-family:var(--sans);
+      -webkit-print-color-adjust:exact; print-color-adjust:exact;
+    }
+    .print-sheet, .print-sheet * { box-shadow:none !important; text-shadow:none !important; background-image:none !important; }
+    .print-sheet-header { border-bottom:2px solid #7C3AED; padding-bottom:10px; margin-bottom:14px; }
+    .print-sheet-header .ps-brand { font-size:22px; font-weight:800; letter-spacing:.02em; color:#111; }
+    .print-sheet-header .ps-meta { font-size:12px; color:#444; margin-top:2px; }
+    .print-sheet-header .ps-printed { color:#666; }
+    .print-summary { font-size:13px; font-weight:600; color:#333; margin-bottom:12px; }
+    /* Sections themselves may break across pages when long (avoid-page here would force a whole
+       section onto one page, fighting natural pagination) — only the heading is kept with its
+       first line via break-after, so a title never ends up orphaned at the bottom of a page. */
+    .print-section { margin-bottom:16px; }
+    .print-section-head { display:flex; justify-content:space-between; align-items:baseline; border-bottom:1px solid #ccc; padding-bottom:4px; margin-bottom:8px; break-after:avoid; break-inside:avoid; }
+    .print-section-head .ps-title { font-weight:700; color:#111; text-transform:uppercase; letter-spacing:.03em; }
+    .print-section-head .ps-count { font-size:12px; color:#666; }
+    .print-grid { display:grid; grid-template-columns:1fr 1fr; gap:0 20px; }
+    /* A drawn border (foreground stroke) plus a text glyph for the check mark — deliberately no
+       background-color fill, since "print background graphics" being off in the browser's print
+       dialog would make a background-only checked mark vanish. Borders and text content aren't
+       background graphics, so both survive with that setting off. */
+    .print-check { display:inline-block; position:relative; width:13px; height:13px; border:1.4px solid #333; border-radius:3px; margin-right:8px; vertical-align:-2px; flex:none; }
+    .print-check.checked::after { content:"✓"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:11px; line-height:1; font-weight:700; color:#111; }
+    .print-task, .print-item { display:flex; align-items:flex-start; gap:2px; padding:6px 0; border-bottom:1px solid #e5e5e5; break-inside:avoid; }
+    .print-task.done .pt-title, .print-item.done .pi-title { text-decoration:line-through; color:#777; }
+    .pt-body, .pi-body { flex:1; min-width:0; }
+    .pt-title, .pi-title { font-weight:600; color:#111; }
+    .pt-meta, .pi-meta { color:#555; margin-top:1px; }
+    .pt-note, .pi-note { color:#555; font-style:italic; margin-top:2px; }
+    .print-date { padding:6px 0; border-bottom:1px solid #e5e5e5; break-inside:avoid; }
+    .pd-title { font-weight:600; color:#111; }
+    .pd-when { color:#333; }
+    .pd-meta { color:#555; }
+    .pd-note { color:#555; font-style:italic; margin-top:2px; }
+    .print-note { padding:6px 0; border-bottom:1px solid #e5e5e5; break-inside:avoid; }
+    .print-note .pn-pin { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#7C3AED; display:block; margin-bottom:2px; }
+    .print-note .pn-text { color:#222; white-space:pre-wrap; word-break:break-word; }
+    .print-empty { font-size:15px; color:#555; padding:40px 0; text-align:center; }
+    @media (max-width:6.5in){ .print-grid { grid-template-columns:1fr; } }
+
+    /* Fridge sheet: large, roomy, easy to read from a distance */
+    .print-sheet.format-fridge .print-section-head .ps-title { font-size:19px; }
+    .print-sheet.format-fridge .pt-title, .print-sheet.format-fridge .pi-title, .print-sheet.format-fridge .pd-title { font-size:15.5px; }
+    .print-sheet.format-fridge .pt-meta, .print-sheet.format-fridge .pi-meta, .print-sheet.format-fridge .pd-meta, .print-sheet.format-fridge .pd-when { font-size:12.5px; }
+    .print-sheet.format-fridge .pn-text { font-size:13.5px; }
+    .print-sheet.format-fridge .print-task, .print-sheet.format-fridge .print-item, .print-sheet.format-fridge .print-date, .print-sheet.format-fridge .print-note { padding:8px 0; }
+    .print-sheet.format-fridge .print-check { width:15px; height:15px; }
+
+    /* Full planner: compact but still clearly printable */
+    .print-sheet.format-full .print-section-head .ps-title { font-size:13.5px; }
+    .print-sheet.format-full .pt-title, .print-sheet.format-full .pi-title, .print-sheet.format-full .pd-title { font-size:12.5px; }
+    .print-sheet.format-full .pt-meta, .print-sheet.format-full .pi-meta, .print-sheet.format-full .pd-meta, .print-sheet.format-full .pd-when { font-size:10.5px; }
+    .print-sheet.format-full .pn-text { font-size:11.5px; }
+    .print-sheet.format-full .print-task, .print-sheet.format-full .print-item, .print-sheet.format-full .print-date, .print-sheet.format-full .print-note { padding:4px 0; }
+    .print-sheet.format-full .print-check { width:11px; height:11px; }
   }
   * { box-sizing:border-box; } html,body{ margin:0; }
   body { font-family:var(--sans); background:var(--paper); color:var(--ink); -webkit-font-smoothing:antialiased; line-height:1.4; }
@@ -117,6 +174,22 @@
   .popover .pop-clear:hover { color:var(--ink); border-color:var(--muted-2); }
   .prislider-pop { display:flex; align-items:center; gap:10px; min-width:180px; }
   .prislider-pop input[type=range] { flex:1; accent-color:var(--signal); }
+
+  /* Print Center modal — a full overlay dialog (distinct from the small anchored .popover),
+     since it holds several grouped controls. Hidden on screen unless opened; @media print above
+     force-hides it too, as a safety net in case it's somehow still open when printing starts. */
+  .print-modal-backdrop { position:fixed; inset:0; background:rgba(5,2,10,.6); z-index:2000; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .print-modal { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:0 0 0 3px rgba(168,85,247,.12), var(--shadow); max-width:460px; width:100%; max-height:88vh; overflow-y:auto; padding:20px; }
+  .print-modal h2 { margin:0 0 2px; font-size:18px; }
+  .print-modal .pm-sub { font-size:12px; color:var(--muted); margin-bottom:16px; }
+  .pm-field { margin-bottom:16px; }
+  .pm-field:last-of-type { margin-bottom:0; }
+  .pm-label { font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:8px; }
+  .pm-row { display:flex; flex-wrap:wrap; gap:8px; }
+  .pm-check { display:inline-flex; align-items:center; gap:6px; font-size:13px; padding:6px 10px; border-radius:8px; border:1px solid var(--line); background:var(--surface-2); cursor:pointer; }
+  .pm-check input { accent-color:var(--signal); }
+  .print-modal select.ctrl { width:100%; }
+  .pm-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:20px; }
 
   /* important dates */
   .dates-section { margin-bottom:14px; }
@@ -432,11 +505,65 @@
   <p class="hint" id="hint"></p>
 </div>
 
+<div class="print-modal-backdrop hidden" id="printModalBackdrop">
+  <div class="print-modal" id="printModal" role="dialog" aria-modal="true" aria-labelledby="printModalTitle" tabindex="-1">
+    <h2 id="printModalTitle">Print Center</h2>
+    <div class="pm-sub">Builds a separate printer-friendly sheet — your screen layout doesn't change.</div>
+
+    <div class="pm-field">
+      <span class="pm-label">Format</span>
+      <div class="pm-row">
+        <label class="pm-check"><input type="radio" name="pmFormat" value="fridge" checked> Fridge sheet</label>
+        <label class="pm-check"><input type="radio" name="pmFormat" value="full"> Full planner</label>
+      </div>
+    </div>
+
+    <div class="pm-field">
+      <label class="pm-label" for="pmProfile">Profile</label>
+      <select class="ctrl" id="pmProfile"></select>
+    </div>
+
+    <div class="pm-field">
+      <span class="pm-label">Include sections</span>
+      <div class="pm-row">
+        <label class="pm-check"><input type="checkbox" id="pmSecTasks" checked> Tasks</label>
+        <label class="pm-check"><input type="checkbox" id="pmSecDates" checked> Important dates</label>
+        <label class="pm-check"><input type="checkbox" id="pmSecNotes" checked> Quick notes</label>
+        <label class="pm-check"><input type="checkbox" id="pmSecPlaces" checked> Places to go</label>
+        <label class="pm-check"><input type="checkbox" id="pmSecBills" checked> Bills</label>
+        <label class="pm-check"><input type="checkbox" id="pmSecShop" checked> Shopping list</label>
+      </div>
+    </div>
+
+    <div class="pm-field">
+      <span class="pm-label">Task options</span>
+      <div class="pm-row">
+        <label class="pm-check"><input type="checkbox" id="pmHideCompleted" checked> Hide completed tasks</label>
+        <label class="pm-check"><input type="checkbox" id="pmIncludeLater"> Include Later tasks</label>
+      </div>
+    </div>
+
+    <div class="pm-field">
+      <label class="pm-label" for="pmDateRange">Date range</label>
+      <select class="ctrl" id="pmDateRange">
+        <option value="today">Today</option>
+        <option value="next7" selected>Next 7 days</option>
+        <option value="all">All upcoming</option>
+      </select>
+    </div>
+
+    <div class="pm-actions">
+      <button class="btn sm" id="pmCancel">Cancel</button>
+      <button class="btn add" id="pmPrint">Print</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
 "use strict";
-const VERSION = "0.2.1-beta";
+const VERSION = "0.3-beta";
 
 /* ---------------- storage ---------------- */
 /* Grind-namespaced keys — deliberately isolated from the old Family Planner fork's `home.*`
@@ -1750,7 +1877,19 @@ document.getElementById("deleteCompletedBtn").addEventListener("click",()=>{
 });
 function updateSoundToggleLabel(){ const btn=document.getElementById("soundToggle"); if(btn) btn.textContent = settings.soundEnabled ? "Sound: On" : "Sound: Off"; }
 document.getElementById("soundToggle").addEventListener("click",()=>{ settings.soundEnabled=!settings.soundEnabled; saveSettings(); updateSoundToggleLabel(); });
-document.getElementById("printBtn").addEventListener("click",()=>window.print());
+/* A mouse/touch/pen activation of Print naturally blurs whatever inline field is being edited
+   BEFORE this click handler runs, and that blur commits+saves the edit (see wireTaskTitle/
+   wireInlineNoteText/etc.) — so by the time openPrintCenter()'s own closeActiveEdit(false) ran,
+   the save had already happened. Canceling the edit on pointerdown (before the browser ever
+   reassigns focus) closes that race for every pointer type; preventDefault() only suppresses the
+   native focus change for this one button, not blur behavior anywhere else. Keyboard activation
+   (Enter/Space) never fires pointerdown, so it still reaches the click handler below unaffected. */
+document.getElementById("printBtn").addEventListener("pointerdown",e=>{
+  if(!e.isPrimary || e.button!==0) return;
+  e.preventDefault();
+  closeActiveEdit(false);
+});
+document.getElementById("printBtn").addEventListener("click",openPrintCenter);
 document.getElementById("exportBtn").addEventListener("click",()=>{
   const bundle={version:VERSION,people,tasks,shop,places,importantDates,bills,notes};
   const blob=new Blob([JSON.stringify(bundle,null,2)],{type:"application/json"});
@@ -1782,6 +1921,279 @@ document.getElementById("importFile").addEventListener("change",e=>{
     editingId=null; placeEditingId=null; dateEditingId=null; billEditingId=null; savePeople(); saveTasks(); saveShop(); savePlaces(); saveDates(); saveBills(); saveNotes(); render();
   }catch(err){ alert("Couldn't read that file — expected a The Grind export (.json)."); } };
   r.readAsText(f); e.target.value="";
+});
+
+/* =====================================================================
+   PRINT CENTER
+   Builds a completely separate print-only document from current in-memory
+   data and hands it to window.print() — the live dashboard DOM is never
+   touched, and nothing here ever calls a save*() function or Firebase.
+   Choices reset each time the modal opens (deliberately not persisted).
+   ===================================================================== */
+let printPrevFocus=null;
+function openPrintCenter(){
+  closeActiveEdit(false); // opening Print Center must never commit/save whatever was being edited
+  const sel=document.getElementById("pmProfile");
+  sel.innerHTML = `<option value="all">All profiles</option>` + people.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
+  sel.value="all";
+  printPrevFocus=document.activeElement;
+  document.getElementById("printModalBackdrop").classList.remove("hidden");
+  document.addEventListener("keydown", printModalKeyHandler, true);
+  document.getElementById("printModal").focus();
+}
+function closePrintCenter(){
+  document.getElementById("printModalBackdrop").classList.add("hidden");
+  document.removeEventListener("keydown", printModalKeyHandler, true);
+  if(printPrevFocus && typeof printPrevFocus.focus==="function") printPrevFocus.focus();
+  printPrevFocus=null;
+}
+function printModalKeyHandler(e){
+  if(e.key==="Escape"){ e.preventDefault(); closePrintCenter(); return; }
+  if(e.key!=="Tab") return;
+  const modal=document.getElementById("printModal");
+  const focusables=[...modal.querySelectorAll('button,input,select,[tabindex]:not([tabindex="-1"])')].filter(el=>!el.disabled && el.offsetParent!==null);
+  if(!focusables.length) return;
+  const first=focusables[0], last=focusables[focusables.length-1];
+  if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
+  else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
+}
+document.getElementById("printModalBackdrop").addEventListener("mousedown",e=>{ if(e.target.id==="printModalBackdrop") closePrintCenter(); });
+document.getElementById("pmCancel").addEventListener("click",closePrintCenter);
+document.getElementById("pmPrint").addEventListener("click",()=>{ generateAndPrint(readPrintOptions()); closePrintCenter(); });
+
+function readPrintOptions(){
+  return {
+    format: document.querySelector('input[name="pmFormat"]:checked').value,
+    profile: document.getElementById("pmProfile").value,
+    sections: {
+      tasks: document.getElementById("pmSecTasks").checked,
+      dates: document.getElementById("pmSecDates").checked,
+      notes: document.getElementById("pmSecNotes").checked,
+      places: document.getElementById("pmSecPlaces").checked,
+      bills: document.getElementById("pmSecBills").checked,
+      shop: document.getElementById("pmSecShop").checked,
+    },
+    hideCompleted: document.getElementById("pmHideCompleted").checked,
+    includeLater: document.getElementById("pmIncludeLater").checked,
+    dateRange: document.getElementById("pmDateRange").value,
+  };
+}
+/* Shared profile rule for tasks/dates/places/bills: "all profiles", the selected profile, or
+   anything assigned to the family-wide pseudo-id. Shopping and Quick Notes skip this entirely —
+   they're not profile-specific. */
+function printProfileMatch(itemPeople, profileFilter){
+  if(profileFilter==="all") return true;
+  const ids=normPeople(itemPeople);
+  if(ids.includes("family")) return true;
+  return ids.includes(profileFilter);
+}
+function printProfileNames(itemPeople){
+  const ids=normPeople(itemPeople);
+  if(!ids.length) return "";
+  if(ids.includes("family")) return "All";
+  return ids.map(id=>getPerson(id).name).join(", ");
+}
+function addDaysStr(ymd, n){ const d=localMoment(ymd,"00:00"); if(!d) return ymd; d.setDate(d.getDate()+n); return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; }
+
+function printFilterTasks(opts){
+  const list=tasks.filter(t=>{
+    if(!printProfileMatch(t.people, opts.profile)) return false;
+    if(isLater(t)) return opts.includeLater;
+    if(opts.hideCompleted && isDone(t)) return false;
+    return true;
+  });
+  const tier=t=>isLater(t)?2:isDone(t)?1:0;
+  list.sort((a,b)=>(tier(a)-tier(b)) || ((timeToMin(a.time)??1e9)-(timeToMin(b.time)??1e9)) || ((b.priority||0)-(a.priority||0)));
+  return list;
+}
+/* Date-range filtering is deliberately calendar-day based (plain "YYYY-MM-DD" string compares),
+   matching how Today/Next 7/All upcoming read to a person looking at a fridge sheet — not the
+   time-of-day-aware isPastDate() the live dashboard uses for its own "ended" badge. */
+function printFilterDates(opts){
+  const ts=todayStr();
+  const windowEnd=addDaysStr(ts,6); // "next 7 days" = today..today+6 inclusive
+  const list=importantDates.filter(d=>{
+    if(!d.startDate) return false;
+    if(!printProfileMatch(d.people, opts.profile)) return false;
+    const start=d.startDate, end=d.endDate||d.startDate;
+    if(opts.dateRange==="today") return start<=ts && ts<=end;
+    if(opts.dateRange==="next7") return start<=windowEnd && end>=ts;
+    return end>=ts; // all upcoming
+  });
+  list.sort((a,b)=>(a.startDate||"").localeCompare(b.startDate||"") || (a.startTime||"").localeCompare(b.startTime||""));
+  return list;
+}
+function printFilterNotes(opts){ return sortedNotes(); } // profile-independent by design
+function printFilterPlaces(opts){
+  return sortedPlaces().filter(p=>printProfileMatch(p.people, opts.profile) && !(opts.hideCompleted && p.visited));
+}
+function printFilterBills(opts){
+  return sortedBills().filter(b=>printProfileMatch(b.people, opts.profile) && !(opts.hideCompleted && b.paid));
+}
+function printFilterShop(opts){
+  return [...shop].sort((a,b)=>(a.got?1:0)-(b.got?1:0)).filter(s=>!(opts.hideCompleted && s.got));
+}
+
+function printCheckSpan(checked){ return `<span class="print-check${checked?" checked":""}"></span>`; }
+function printTaskRow(t){
+  const checked=isDone(t);
+  const bits=[];
+  const profNames=printProfileNames(t.people); if(profNames) bits.push(esc(profNames));
+  if(t.time) bits.push(esc(fmt12(t.time)));
+  if(t.due) bits.push(`Due ${esc(fmtDate(t.due))}${t.dueTime?" "+esc(fmt12(t.dueTime)):""}`);
+  bits.push(`Priority ${t.priority}/10`);
+  bits.push(esc((STATUS[t.status]||STATUS.todo).label));
+  return `<div class="print-task${checked?" done":""}">${printCheckSpan(checked)}<div class="pt-body">
+    <div class="pt-title">${esc(t.task)||"(untitled)"}</div>
+    <div class="pt-meta">${bits.join(" · ")}</div>
+    ${t.notes?`<div class="pt-note">${esc(t.notes)}</div>`:""}
+  </div></div>`;
+}
+function printDateRow(d){
+  const cat=DATE_CATEGORIES[d.category]||DATE_CATEGORIES.other;
+  const when=dateDatePartText(d) + (dateTimePartText(d)?` · ${dateTimePartText(d)}`:"");
+  const bits=[esc(cat.label)];
+  const profNames=printProfileNames(d.people); if(profNames) bits.push(esc(profNames));
+  if(d.location) bits.push(esc(d.location));
+  return `<div class="print-date">
+    <div class="pd-title">${esc(d.title)||"(untitled)"}</div>
+    <div class="pd-when">${esc(when)}</div>
+    <div class="pd-meta">${bits.join(" · ")}</div>
+    ${d.note?`<div class="pd-note">${esc(d.note)}</div>`:""}
+  </div>`;
+}
+function printNoteRow(n){
+  return `<div class="print-note${n.pinned?" pinned":""}">${n.pinned?'<span class="pn-pin">Pinned</span>':""}<div class="pn-text">${esc(n.text)}</div></div>`;
+}
+function printPlaceRow(p){
+  const checked=p.visited;
+  const bits=[];
+  if(p.date) bits.push(esc(fmtDate(p.date)));
+  if(p.address) bits.push(esc(p.address));
+  const profNames=printProfileNames(p.people); if(profNames) bits.push(esc(profNames));
+  return `<div class="print-item${checked?" done":""}">${printCheckSpan(checked)}<div class="pi-body">
+    <div class="pi-title">${esc(p.name)||"(unnamed)"}</div>
+    ${bits.length?`<div class="pi-meta">${bits.join(" · ")}</div>`:""}
+    ${p.note?`<div class="pi-note">${esc(p.note)}</div>`:""}
+  </div></div>`;
+}
+function printBillRow(b){
+  const checked=b.paid;
+  const bits=[];
+  if(b.amount!==""&&b.amount!=null){ const m=fmtMoney(b.amount); if(m) bits.push(esc(m)); }
+  if(b.due) bits.push(`Due ${esc(fmtDate(b.due))}`);
+  const profNames=printProfileNames(b.people); if(profNames) bits.push(esc(profNames));
+  return `<div class="print-item${checked?" done":""}">${printCheckSpan(checked)}<div class="pi-body">
+    <div class="pi-title">${esc(b.name)||"(unnamed)"}</div>
+    ${bits.length?`<div class="pi-meta">${bits.join(" · ")}</div>`:""}
+    ${b.note?`<div class="pi-note">${esc(b.note)}</div>`:""}
+  </div></div>`;
+}
+function printShopRow(s){
+  return `<div class="print-item${s.got?" done":""}">${printCheckSpan(s.got)}<div class="pi-body"><div class="pi-title">${esc(s.item)}</div></div></div>`;
+}
+function printSectionHtml(title, count, bodyHtml){
+  return `<div class="print-section"><div class="print-section-head"><span class="ps-title">${esc(title)}</span><span class="ps-count">${count}</span></div>${bodyHtml}</div>`;
+}
+function buildPrintBody(data, opts){
+  let html=`<div class="print-col-1">`;
+  if(opts.sections.tasks && data.tasks.length) html+=printSectionHtml("Tasks", data.tasks.length, data.tasks.map(printTaskRow).join(""));
+  if(opts.sections.dates && data.dates.length) html+=printSectionHtml("Important Dates", data.dates.length, data.dates.map(printDateRow).join(""));
+  html+=`</div>`;
+  const lower=[];
+  if(opts.sections.notes && data.notes.length) lower.push(printSectionHtml("Quick Notes", data.notes.length, data.notes.map(printNoteRow).join("")));
+  if(opts.sections.places && data.places.length) lower.push(printSectionHtml("Places to Go", data.places.length, data.places.map(printPlaceRow).join("")));
+  if(opts.sections.bills && data.bills.length) lower.push(printSectionHtml("Bills", data.bills.length, data.bills.map(printBillRow).join("")));
+  if(opts.sections.shop && data.shop.length) lower.push(printSectionHtml("Shopping List", data.shop.length, data.shop.map(printShopRow).join("")));
+  if(lower.length) html+=`<div class="print-grid">${lower.join("")}</div>`;
+  return html;
+}
+/* Pure read-only build: reads current in-memory arrays and the passed-in options, mutates
+   nothing, saves nothing, never touches Firebase. */
+function buildPrintSheet(opts){
+  const sheet=document.createElement("div");
+  sheet.className="print-sheet format-"+(opts.format==="fridge"?"fridge":"full");
+
+  const data={
+    tasks: opts.sections.tasks ? printFilterTasks(opts) : [],
+    dates: opts.sections.dates ? printFilterDates(opts) : [],
+    notes: opts.sections.notes ? printFilterNotes(opts) : [],
+    places: opts.sections.places ? printFilterPlaces(opts) : [],
+    bills: opts.sections.bills ? printFilterBills(opts) : [],
+    shop: opts.sections.shop ? printFilterShop(opts) : [],
+  };
+  const hasAny = Object.keys(data).some(k=>opts.sections[k] && data[k].length);
+
+  const now=new Date();
+  const formatName = opts.format==="fridge" ? "Fridge Sheet" : "Full Planner";
+  const profileName = opts.profile==="all" ? "All Profiles" : esc(getPerson(opts.profile).name);
+  let html=`<div class="print-sheet-header">
+    <div class="ps-brand">THE GRIND</div>
+    <div class="ps-meta">${esc(formatName)} · ${profileName}</div>
+    <div class="ps-meta ps-printed">Printed ${esc(now.toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric",year:"numeric"}))} at ${esc(now.toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"}))}</div>
+  </div>`;
+
+  if(!hasAny){
+    html+=`<div class="print-empty">Nothing matching these print options.</div>`;
+  } else {
+    if(opts.format==="fridge"){
+      /* Always the selected profile's (or family-wide) Today tasks, regardless of Hide completed —
+         that option hides completed rows from the list below, it must not change this count. */
+      const todays=tasks.filter(t=>isToday(t) && printProfileMatch(t.people, opts.profile));
+      const doneToday=todays.filter(isDone).length;
+      html+=`<div class="print-summary">${doneToday} of ${todays.length} done today</div>`;
+    }
+    html+=buildPrintBody(data, opts);
+  }
+  sheet.innerHTML=html;
+  return sheet;
+}
+function generateAndPrint(opts){
+  const sheet=buildPrintSheet(opts);
+  document.body.appendChild(sheet);
+
+  /* All cleanup listeners are registered BEFORE window.print() is called, and cleanup itself is
+     idempotent (guarded by `done`) since afterprint, the print-media-query change, and the
+     fallback timer can all fire — we only want the first one to actually do anything. The
+     fallback is a generous 5 minutes so a print-preview left open doesn't lose its sheet mid-review;
+     it exists purely in case neither event fires in some browser. */
+  let done=false, mql=null, fallbackTimer=null;
+  function onMqlChange(e){ if(!e.matches) cleanup(); } // fires when leaving print mode
+  function cleanup(){
+    if(done) return; done=true;
+    window.removeEventListener("afterprint", cleanup);
+    if(mql){ if(mql.removeEventListener) mql.removeEventListener("change", onMqlChange); else if(mql.removeListener) mql.removeListener(onMqlChange); }
+    if(fallbackTimer) clearTimeout(fallbackTimer);
+    if(sheet.isConnected) sheet.remove();
+  }
+  window.addEventListener("afterprint", cleanup);
+  if(window.matchMedia){
+    mql=window.matchMedia("print");
+    if(mql.addEventListener) mql.addEventListener("change", onMqlChange);
+    else if(mql.addListener) mql.addListener(onMqlChange); // older Safari
+  }
+  fallbackTimer=setTimeout(cleanup, 300000); // 5 minutes
+
+  window.print();
+}
+
+/* A bare Ctrl+P (or the browser's own print menu item) skips the Print Center entirely, so
+   @media print's "hide everything but .print-sheet" rule would otherwise print a blank page —
+   this builds a default Fridge Sheet at the last possible moment, only when nothing was already
+   built by generateAndPrint(). Marked with a dedicated class so its own cleanup only ever touches
+   a sheet IT created, never interfering with generateAndPrint()'s own sheet/cleanup. Read-only,
+   like every other print-sheet build: no save call, no localStorage/Firebase write, no sound. */
+window.addEventListener("beforeprint", ()=>{
+  if(document.querySelector(".print-sheet")) return; // Print Center already built one for this print
+  const sheet=buildPrintSheet({ format:"fridge", profile:"all",
+    sections:{tasks:true,dates:true,notes:true,places:true,bills:true,shop:true},
+    hideCompleted:true, includeLater:false, dateRange:"next7" });
+  sheet.classList.add("print-sheet-fallback");
+  document.body.appendChild(sheet);
+});
+window.addEventListener("afterprint", ()=>{
+  const fallbackSheet=document.querySelector(".print-sheet-fallback");
+  if(fallbackSheet) fallbackSheet.remove();
 });
 
 /* ---------------- tick ---------------- */
