@@ -1099,7 +1099,7 @@ function wireTaskTitle(node, taskId){
       getEntity:()=>tasks.find(x=>x.id===taskId), onCommit:(entity,v)=>{ entity.task=v; saveTasks(); }, onDone:render });
   }
   node.addEventListener("click",open);
-  node.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
+  node.addEventListener("keydown",e=>{ if(e.target!==node) return; if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
 }
 function wireTaskNotes(node, taskId){
   node.classList.add("editable"); node.tabIndex=0; node.setAttribute("role","button"); node.setAttribute("aria-label","Edit note");
@@ -1110,7 +1110,7 @@ function wireTaskNotes(node, taskId){
       getEntity:()=>tasks.find(x=>x.id===taskId), onCommit:(entity,v)=>{ entity.notes=v; saveTasks(); }, onDone:render });
   }
   node.addEventListener("click",open);
-  node.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
+  node.addEventListener("keydown",e=>{ if(e.target!==node) return; if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
 }
 function openTaskPeoplePopover(anchor,taskId){
   const t0=tasks.find(x=>x.id===taskId); if(!t0) return;
@@ -1325,7 +1325,7 @@ function wireShopText(node, shopId){
       getEntity:()=>shop.find(x=>x.id===shopId), onCommit:(entity,v)=>{ entity.item=v; saveShop(); }, onDone:renderShop });
   }
   node.addEventListener("click",open);
-  node.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
+  node.addEventListener("keydown",e=>{ if(e.target!==node) return; if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
 }
 function renderShop(){
   const el=document.getElementById("shopList");
@@ -1378,7 +1378,7 @@ function wireInlinePlaceText(node, placeId, field, ariaLabel, required){
       getEntity:()=>places.find(x=>x.id===placeId), onCommit:(entity,v)=>{ entity[field]=v; savePlaces(); }, onDone:renderPlaces });
   }
   node.addEventListener("click",open);
-  node.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
+  node.addEventListener("keydown",e=>{ if(e.target!==node) return; if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
 }
 function openPlaceDatePopover(anchor, placeId){
   const p0=places.find(x=>x.id===placeId); if(!p0) return;
@@ -1493,7 +1493,7 @@ function wireInlineBillText(node, billId, field, ariaLabel, required){
       getEntity:()=>bills.find(x=>x.id===billId), onCommit:(entity,v)=>{ entity[field]=v; saveBills(); }, onDone:renderBills });
   }
   node.addEventListener("click",open);
-  node.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
+  node.addEventListener("keydown",e=>{ if(e.target!==node) return; if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
 }
 function openBillDuePopover(anchor, billId){
   const b0=bills.find(x=>x.id===billId); if(!b0) return;
@@ -1593,7 +1593,7 @@ function wireInlineNoteText(node, noteId){
       getEntity:()=>notes.find(x=>x.id===noteId), onCommit:(entity,v)=>{ entity.text=v; entity.updated=Date.now(); saveNotes(); }, onDone:renderNotes });
   }
   node.addEventListener("click",open);
-  node.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
+  node.addEventListener("keydown",e=>{ if(e.target!==node) return; if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
 }
 function renderNoteRow(n){
   const row=document.createElement("div"); row.className="note-row"+(n.pinned?" pinned":""); row.dataset.id=n.id;
@@ -1681,7 +1681,7 @@ function wireDateText(node, dateId, field, ariaLabel, required){
       onDone:renderDatesSection });
   }
   node.addEventListener("click",open);
-  node.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
+  node.addEventListener("keydown",e=>{ if(e.target!==node) return; if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
 }
 function openDateRangePopover(anchor, dateId){
   const d0=importantDates.find(x=>x.id===dateId); if(!d0) return;
