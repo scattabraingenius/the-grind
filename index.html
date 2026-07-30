@@ -6,10 +6,16 @@
 <title>The Grind</title>
 <style>
   /* ============================================================
-     THE GRIND — personal command center   (v0.3-beta)
+     THE GRIND — personal command center   (v0.4-beta)
      Forked from Family Planner but fully data-isolated: its own Firebase
      path (planners/the-grind-scattabrain-2026) and its own grind.* localStorage keys.
-     One day list (multi-profile tags), Places to Go + Shopping + Bills + Quick Notes.
+     One day list (multi-profile tags), Places to Go + Shopping + Bills + Quick Notes
+     + Before You Leave — a profile-independent checklist under an editable active
+     title (defaults to "Before You Leave") with reusable templates: save the current
+     checklist's item text as a named template, then load it back any time — a saved
+     template never changes when its loaded items are checked, edited, or deleted.
+     Manage templates via the "Templates" and "Save as template" buttons next to the
+     checklist heading (list/load/edit/duplicate/delete).
      A soft completion chime (Web Audio, no external file) plays when an item
      is checked off; toggle it off via Sound: On/Off (device-local setting).
      "Delete completed (N)" clears all done tasks across every profile in one shot.
@@ -181,7 +187,7 @@
   .print-modal-backdrop { position:fixed; inset:0; background:rgba(5,2,10,.6); z-index:2000; display:flex; align-items:center; justify-content:center; padding:20px; }
   .print-modal { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:0 0 0 3px rgba(168,85,247,.12), var(--shadow); max-width:460px; width:100%; max-height:88vh; overflow-y:auto; padding:20px; }
   .print-modal h2 { margin:0 0 2px; font-size:18px; }
-  .print-modal .pm-sub { font-size:12px; color:var(--muted); margin-bottom:16px; }
+  .print-modal .pm-sub, .tpl-modal .pm-sub { font-size:12px; color:var(--muted); margin-bottom:16px; }
   .pm-field { margin-bottom:16px; }
   .pm-field:last-of-type { margin-bottom:0; }
   .pm-label { font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:8px; }
@@ -375,6 +381,44 @@
   .bill-editor .who-opt { font-size:11px; padding:4px 8px 4px 6px; }
   .bill-editor .pe-actions { display:flex; gap:6px; justify-content:flex-end; margin-top:4px; }
 
+  /* before you leave (checklist text wraps in full — unlike shop/bill rows, which truncate) */
+  .byl { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:14px; box-shadow:var(--shadow); }
+  .byl-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; flex-wrap:wrap; row-gap:6px; }
+  .byl-title-wrap { display:flex; align-items:center; gap:4px; min-width:0; }
+  .byl-title-text { min-width:0; }
+  .byl-title-reset { color:var(--muted-2); background:none; border:none; cursor:pointer; font-size:13px; padding:2px 4px; flex:none; line-height:1; }
+  .byl-title-reset:hover { color:var(--ink); }
+  .byl-head-actions { display:flex; gap:6px; flex-wrap:wrap; }
+  .byl-list { display:flex; flex-direction:column; gap:6px; }
+  .byl-row { display:flex; align-items:center; gap:10px; padding:9px 10px; border:1px solid var(--line); border-radius:9px; background:var(--surface-2); }
+  .byl-row.done { opacity:.5; } .byl-row.done .byl-text { text-decoration:line-through; color:var(--muted); }
+  .byl-row .cbx { width:22px; height:22px; flex:none; }
+  .byl-text { flex:1; font-size:14px; white-space:pre-wrap; word-break:break-word; }
+  .byl-del { color:var(--muted-2); background:none; border:none; cursor:pointer; font-size:14px; flex:none; }
+  .byl-del:hover { color:var(--alarm); }
+  .byl-foot-actions { display:flex; gap:6px; }
+
+  /* Before You Leave templates — reuses the print-modal's dialog chrome (.pm-sub/.pm-actions/
+     .pm-field/.pm-label/.field classes above are the same ones the Print Center uses) rather
+     than inventing a second "themed modal" visual language. */
+  .tpl-modal-backdrop { position:fixed; inset:0; background:rgba(5,2,10,.6); z-index:2000; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .tpl-modal { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:0 0 0 3px rgba(168,85,247,.12), var(--shadow); max-width:480px; width:100%; max-height:88vh; overflow-y:auto; padding:20px; box-sizing:border-box; }
+  .tpl-modal h2 { margin:0 0 2px; font-size:18px; }
+  .tpl-empty { color:var(--muted); font-size:13px; padding:16px 2px; }
+  .tpl-list { display:flex; flex-direction:column; gap:8px; margin-top:4px; }
+  .tpl-card { border:1px solid var(--line); border-radius:10px; background:var(--surface-2); padding:10px 12px; display:flex; flex-direction:column; gap:8px; min-width:0; }
+  .tpl-card-name { font-weight:700; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .tpl-card-count { font-size:12px; color:var(--muted); margin-top:2px; }
+  .tpl-card-actions { display:flex; flex-wrap:wrap; gap:6px; }
+  .tpl-items { display:flex; flex-direction:column; gap:6px; margin:10px 0; max-height:40vh; overflow-y:auto; }
+  .tpl-item-row { display:flex; align-items:center; gap:6px; }
+  .tpl-item-row input[type=text] { flex:1; min-width:0; font-family:var(--sans); font-size:13px; padding:7px 9px; border:1px solid var(--line); border-radius:8px; background:var(--input-bg); color:var(--ink); outline:none; }
+  .tpl-item-row input[type=text]:focus { border-color:var(--signal); box-shadow:0 0 0 3px rgba(168,85,247,.14); }
+  .tpl-item-actions { display:flex; gap:3px; flex:none; }
+  .tpl-item-actions button { font-size:11px; padding:5px 7px; }
+  .tpl-add-item { display:flex; gap:6px; margin-bottom:2px; }
+  @media (max-width:480px){ .tpl-modal{ padding:16px; } }
+
   /* shopping */
   .shop { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:14px; box-shadow:var(--shadow); }
   .add-inline { display:flex; align-items:center; gap:8px; background:var(--input-bg); border:1px solid var(--line); border-radius:10px; padding:3px 3px 3px 12px; margin-bottom:12px; }
@@ -493,6 +537,24 @@
         <div class="shop-foot"><span class="shop-count" id="billStatus"></span><button class="shop-clear" id="billClear">Clear paid</button></div>
       </div>
 
+      <div class="byl">
+        <div class="byl-head">
+          <div class="panel-title" style="margin:0">
+            <span class="byl-title-wrap">
+              <span class="editable byl-title-text" id="bylTitleText" tabindex="0" role="button" aria-label="Edit checklist title"></span>
+              <button class="byl-title-reset" id="bylTitleReset" title="Reset title" aria-label="Reset checklist title">↺</button>
+            </span>
+          </div>
+          <div class="byl-head-actions">
+            <button class="btn sm" id="bylTemplatesBtn">Templates</button>
+            <button class="btn sm" id="bylSaveTemplateBtn">Save as template</button>
+          </div>
+        </div>
+        <div class="add-inline"><span class="plus">+</span><input id="bylInput" type="text" placeholder="Add an item, then Enter…" aria-label="Add item"></div>
+        <div class="byl-list" id="bylList"></div>
+        <div class="shop-foot"><span class="shop-count" id="bylStatus"></span><div class="byl-foot-actions"><button class="shop-clear" id="bylReset">Reset checks</button><button class="shop-clear" id="bylClear">Clear checked</button></div></div>
+      </div>
+
       <div class="shop">
         <div class="panel-title">Shopping list <span class="shop-count" id="shopCount"></span></div>
         <div class="add-inline"><span class="plus">+</span><input id="shopInput" type="text" placeholder="Add an item, then Enter…" aria-label="Add shopping item"></div>
@@ -531,6 +593,7 @@
         <label class="pm-check"><input type="checkbox" id="pmSecNotes" checked> Quick notes</label>
         <label class="pm-check"><input type="checkbox" id="pmSecPlaces" checked> Places to go</label>
         <label class="pm-check"><input type="checkbox" id="pmSecBills" checked> Bills</label>
+        <label class="pm-check"><input type="checkbox" id="pmSecBYL" checked> Before you leave</label>
         <label class="pm-check"><input type="checkbox" id="pmSecShop" checked> Shopping list</label>
       </div>
     </div>
@@ -559,17 +622,26 @@
   </div>
 </div>
 
+<!-- Before You Leave templates — one modal, body swapped between list/save/edit views by JS
+     (renderTplModal()) rather than three separate dialogs, so there's a single focus-trap/
+     Escape/backdrop-click implementation to keep correct. -->
+<div class="tpl-modal-backdrop hidden" id="tplModalBackdrop">
+  <div class="tpl-modal" id="tplModal" role="dialog" aria-modal="true" aria-labelledby="tplModalTitle" tabindex="-1">
+    <div id="tplModalBody"></div>
+  </div>
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
 "use strict";
-const VERSION = "0.3-beta";
+const VERSION = "0.4-beta";
 
 /* ---------------- storage ---------------- */
 /* Grind-namespaced keys — deliberately isolated from the old Family Planner fork's `home.*`
    keys, which live at the same browser origin (GitHub Pages paths don't isolate localStorage).
    Never read from or write to `home.*` here — that data belongs to the other app. */
-const K_TASKS="grind.plan.v1", K_SHOP="grind.shopping.v1", K_PEOPLE="grind.profiles.v1", K_PLACES="grind.places.v1", K_DATES="grind.dates.v1", K_BILLS="grind.bills.v1", K_PREFS="grind.viewprefs.v1", K_NOTES="grind.notes.v1", K_SETTINGS="grind.settings.v1";
+const K_TASKS="grind.plan.v1", K_SHOP="grind.shopping.v1", K_PEOPLE="grind.profiles.v1", K_PLACES="grind.places.v1", K_DATES="grind.dates.v1", K_BILLS="grind.bills.v1", K_PREFS="grind.viewprefs.v1", K_NOTES="grind.notes.v1", K_SETTINGS="grind.settings.v1", K_BYL="grind.before-you-leave.v1", K_BYL_TEMPLATES="grind.before-you-leave-templates.v1", K_BYL_TITLE="grind.before-you-leave-title.v1";
 function loadJSON(k){ try{ const r=localStorage.getItem(k); if(r) return JSON.parse(r); }catch(e){} return null; }
 function saveTasks(){ try{ localStorage.setItem(K_TASKS, JSON.stringify(tasks)); }catch(e){} pushCloud(); return true; }
 function saveShop(){ try{ localStorage.setItem(K_SHOP, JSON.stringify(shop)); }catch(e){} pushCloud(); }
@@ -581,6 +653,9 @@ function savePlaces(){ try{ localStorage.setItem(K_PLACES, JSON.stringify(places
 function saveDates(){ try{ localStorage.setItem(K_DATES, JSON.stringify(importantDates)); }catch(e){} pushCloud(); }
 function saveBills(){ try{ localStorage.setItem(K_BILLS, JSON.stringify(bills)); }catch(e){} pushCloud(); }
 function saveNotes(){ try{ localStorage.setItem(K_NOTES, JSON.stringify(notes)); }catch(e){} pushCloud(); }
+function saveBYL(){ try{ localStorage.setItem(K_BYL, JSON.stringify(beforeYouLeave)); }catch(e){} pushCloud(); }
+function saveBYLTemplates(){ try{ localStorage.setItem(K_BYL_TEMPLATES, JSON.stringify(beforeYouLeaveTemplates)); }catch(e){} pushCloud(); }
+function saveBYLTitle(){ try{ localStorage.setItem(K_BYL_TITLE, JSON.stringify(bylTitle)); }catch(e){} pushCloud(); }
 /* Device-local app settings (currently just sound) — deliberately never synced through Firebase,
    never included in the cloud payload, and never touched by import, so each device keeps its own. */
 function saveSettings(){ try{ localStorage.setItem(K_SETTINGS, JSON.stringify(settings)); }catch(e){} }
@@ -623,7 +698,10 @@ function initSync(){
       if(Array.isArray(v.importantDates)) importantDates=v.importantDates.map(migrateImportantDate); // same rule → older clients never erase this
       if(Array.isArray(v.bills)) bills=v.bills.map(migrateBill);       // same rule → older clients never erase this
       if(Array.isArray(v.notes)) notes=v.notes.map(migrateNote).filter(n=>n.text!=="");       // same rule → older clients never erase this
-      try{ localStorage.setItem(K_PEOPLE,JSON.stringify(people)); localStorage.setItem(K_TASKS,JSON.stringify(tasks)); localStorage.setItem(K_SHOP,JSON.stringify(shop)); localStorage.setItem(K_PLACES,JSON.stringify(places)); localStorage.setItem(K_DATES,JSON.stringify(importantDates)); localStorage.setItem(K_BILLS,JSON.stringify(bills)); localStorage.setItem(K_NOTES,JSON.stringify(notes)); }catch(e){}
+      if(Array.isArray(v.beforeYouLeave)) beforeYouLeave=v.beforeYouLeave.map(migrateBYLItem).filter(b=>b.item!=="");  // same rule → older clients never erase this
+      if(Array.isArray(v.beforeYouLeaveTemplates)) beforeYouLeaveTemplates=v.beforeYouLeaveTemplates.map(migrateBYLTemplate).filter(t=>t.name!==""&&t.items.length>0);  // same rule → older clients never erase this
+      if(typeof v.beforeYouLeaveTitle==="string" && v.beforeYouLeaveTitle.trim()!=="") bylTitle=normalizeBYLTitle(v.beforeYouLeaveTitle);  // malformed/blank remote titles must never overwrite the local title
+      try{ localStorage.setItem(K_PEOPLE,JSON.stringify(people)); localStorage.setItem(K_TASKS,JSON.stringify(tasks)); localStorage.setItem(K_SHOP,JSON.stringify(shop)); localStorage.setItem(K_PLACES,JSON.stringify(places)); localStorage.setItem(K_DATES,JSON.stringify(importantDates)); localStorage.setItem(K_BILLS,JSON.stringify(bills)); localStorage.setItem(K_NOTES,JSON.stringify(notes)); localStorage.setItem(K_BYL,JSON.stringify(beforeYouLeave)); localStorage.setItem(K_BYL_TEMPLATES,JSON.stringify(beforeYouLeaveTemplates)); localStorage.setItem(K_BYL_TITLE,JSON.stringify(bylTitle)); }catch(e){}
       remoteApplying=false;
       // Data is always safe to merge in (every commit path re-fetches its entity by id), but a full render()
       // would blow away a focused inline editor's DOM — so defer the redraw until editing ends.
@@ -639,7 +717,7 @@ function pushCloud(force){
      Since a stale v1.4 tab's set() has no importantDates key, its set() would still erase importantDates
      (update() only protects against writers that also use update() with a partial payload); this change
      protects future fields added the same way, but v1.4 tabs must still be closed/refreshed — see report. */
-  pushTimer=setTimeout(()=>{ try{ db.update({people,tasks,shop,places,importantDates,bills,notes,updated:Date.now()}); }catch(e){} }, 250);
+  pushTimer=setTimeout(()=>{ try{ db.update({people,tasks,shop,places,importantDates,bills,notes,beforeYouLeave,beforeYouLeaveTemplates,beforeYouLeaveTitle:bylTitle,updated:Date.now()}); }catch(e){} }, 250);
 }
 function updateSyncBadge(on){
   const el=document.getElementById("syncBadge"); if(!el) return;
@@ -696,6 +774,41 @@ function migrateNote(raw){
   return n;
 }
 
+/* ---------------- before you leave ---------------- */
+function blankBYLItem(text){ return { id:uid("byl"), item:text||"", done:false, created:Date.now() }; }
+/* Same defensive pattern as migrateNote: a malformed entry becomes a normal (possibly blank,
+   later filtered) item instead of crashing the app. */
+function migrateBYLItem(raw){
+  const src=(raw && typeof raw==="object" && !Array.isArray(raw)) ? raw : {};
+  const b=Object.assign(blankBYLItem(), src);
+  b.item=(b.item==null?"":b.item).toString().trim();
+  b.done=!!b.done;
+  if(typeof b.id!=="string" || b.id.trim()==="") b.id=uid("byl");
+  if(!Number.isFinite(b.created)) b.created=Date.now();
+  return b;
+}
+/* Reusable checklists ("Leaving for the airport", "Road trip"…). Deliberately just a name + an
+   ordered list of item strings — no profiles/schedules/notifications/done state. A template is
+   never mutated by loading, checking, editing, or deleting the checklist items it produced. */
+function blankBYLTemplate(name,items){ return { id:uid("bylt"), name:name||"", items:Array.isArray(items)?items.slice():[], created:Date.now(), updated:Date.now() }; }
+function migrateBYLTemplate(raw){
+  const src=(raw && typeof raw==="object" && !Array.isArray(raw)) ? raw : {};
+  const t=Object.assign(blankBYLTemplate(), src);
+  t.name=(t.name==null?"":t.name).toString().trim();
+  t.items=(Array.isArray(src.items)?src.items:[]).map(x=>(x==null?"":x.toString()).trim()).filter(x=>x!=="");
+  if(typeof t.id!=="string" || t.id.trim()==="") t.id=uid("bylt");
+  if(!Number.isFinite(t.created)) t.created=Date.now();
+  if(!Number.isFinite(t.updated)) t.updated=t.created;
+  return t;
+}
+const DEFAULT_BYL_TITLE="Before You Leave";
+/* Blank/non-string/malformed titles (local or remote) always normalize back to the default —
+   the active checklist never ends up with an unreadable or empty heading. */
+function normalizeBYLTitle(raw){
+  const t=(raw==null?"":raw).toString().trim();
+  return t===""?DEFAULT_BYL_TITLE:t;
+}
+
 /* ---------------- important dates ---------------- */
 /* Stored separately from tasks — never appear in the task list, never affect progress/overdue/Up Next.
    Structure is deliberately calendar-shaped (startDate/endDate/startTime/endTime) so a future full
@@ -732,6 +845,11 @@ let importantDates = (loadJSON(K_DATES) || []).map(migrateImportantDate);
 let bills = (loadJSON(K_BILLS) || []).map(migrateBill);
 const notesRaw = loadJSON(K_NOTES);
 let notes = (Array.isArray(notesRaw) ? notesRaw : []).map(migrateNote).filter(n=>n.text!=="");
+const bylRaw = loadJSON(K_BYL);
+let beforeYouLeave = (Array.isArray(bylRaw) ? bylRaw : []).map(migrateBYLItem).filter(b=>b.item!=="");
+const bylTemplatesRaw = loadJSON(K_BYL_TEMPLATES);
+let beforeYouLeaveTemplates = (Array.isArray(bylTemplatesRaw) ? bylTemplatesRaw : []).map(migrateBYLTemplate).filter(t=>t.name!==""&&t.items.length>0);
+let bylTitle = normalizeBYLTitle(loadJSON(K_BYL_TITLE));
 let settings = Object.assign({ soundEnabled:true }, loadJSON(K_SETTINGS)||{});
 
 /* ---------------- state ---------------- */
@@ -741,7 +859,11 @@ let pendingRemoteRender=false;
 /* Shared inline-edit / popover tracker (text fields + people/category/date-time/priority popovers).
    Only one of these may be open at a time; opening a new one commits/closes whatever is open. */
 let activeEdit=null; // { type, id, field, close(cancel) }
-function editingActive(){ return editingId!=null || placeEditingId!=null || dateEditingId!=null || billEditingId!=null || !!activeEdit; }
+/* Before You Leave templates UI state — separate from activeEdit since it's a modal, not an
+   inline row editor. tplEditId is non-null only while the template EDITOR view is open (not the
+   plain list), which is what gates deferred-render below, matching editingId/placeEditingId/etc. */
+let tplPrevFocus=null, tplView="list", tplEditId=null, tplDraft=null, tplDraftDirty=false;
+function editingActive(){ return editingId!=null || placeEditingId!=null || dateEditingId!=null || billEditingId!=null || !!activeEdit || tplEditId!=null; }
 
 /* =====================================================================
    SHARED INLINE-EDIT / POPOVER SYSTEM
@@ -1018,6 +1140,7 @@ function render(){
   renderShop();
   renderPlaces();
   renderBills();
+  renderBYL();
   renderDatesSection();
   const view=currentView();
   const next=computeNextUp();
@@ -1484,6 +1607,286 @@ function renderBills(){
   document.getElementById("billCount").textContent=bills.length?`${active}`:"";
   document.getElementById("billStatus").textContent=`${active} due · ${paid} paid`;
 }
+
+/* ---------------- before you leave ---------------- */
+/* Sorted by created ascending and never re-sorted on check/uncheck — checking an item must never
+   make it jump position, unlike Shopping's "got" sort. */
+function sortedBYL(){ return [...beforeYouLeave].sort((a,b)=>(a.created||0)-(b.created||0)); }
+function renderBYLTitle(){
+  const el=document.getElementById("bylTitleText");
+  if(isEditingField("bylTitle","single","title")) return; // don't clobber an active title edit
+  el.textContent=bylTitle;
+}
+function renderBYL(){
+  renderBYLTitle();
+  const el=document.getElementById("bylList");
+  el.innerHTML = beforeYouLeave.length ? "" : `<div class="empty-state" style="padding:24px 12px"><div class="big">Nothing here yet.</div>Add a reminder above.</div>`;
+  sortedBYL().forEach(b=>{ el.appendChild(renderBYLRow(b)); });
+  const left=beforeYouLeave.filter(b=>!b.done).length, done=beforeYouLeave.filter(b=>b.done).length;
+  document.getElementById("bylStatus").textContent=`${left} left · ${done} checked`;
+}
+function wireBYLTitleText(node){
+  node.classList.add("editable"); node.tabIndex=0; node.setAttribute("role","button"); node.setAttribute("aria-label","Edit checklist title");
+  function open(){
+    if(isEditingField("bylTitle","single","title")) return;
+    startInlineText({ type:"bylTitle", id:"single", field:"title", container:node, value:bylTitle, required:false, ariaLabel:"Checklist title",
+      getEntity:()=>({}), onCommit:(entity,v)=>{ const norm=normalizeBYLTitle(v); if(norm!==bylTitle){ bylTitle=norm; saveBYLTitle(); } }, onDone:renderBYL });
+  }
+  node.addEventListener("click",open);
+  node.addEventListener("keydown",e=>{ if(e.target!==node) return; if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
+}
+wireBYLTitleText(document.getElementById("bylTitleText"));
+function wireInlineBYLText(node, bylId){
+  node.classList.add("editable"); node.tabIndex=0; node.setAttribute("role","button"); node.setAttribute("aria-label","Edit reminder");
+  function open(){
+    if(isEditingField("byl",bylId,"item")) return;
+    const b=beforeYouLeave.find(x=>x.id===bylId); if(!b) return;
+    startInlineText({ type:"byl", id:bylId, field:"item", container:node, value:b.item, required:true, ariaLabel:"Reminder",
+      getEntity:()=>beforeYouLeave.find(x=>x.id===bylId), onCommit:(entity,v)=>{ entity.item=v; saveBYL(); }, onDone:renderBYL });
+  }
+  node.addEventListener("click",open);
+  node.addEventListener("keydown",e=>{ if(e.target!==node) return; if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
+}
+function renderBYLRow(b){
+  const row=document.createElement("div"); row.className="byl-row"+(b.done?" done":""); row.dataset.id=b.id;
+  row.innerHTML=`<input type="checkbox" class="cbx" ${b.done?"checked":""} aria-label="Done"><span class="byl-text" id="br-text">${esc(b.item)}</span><button class="byl-del" title="Remove">✕</button>`;
+  row.querySelector(".cbx").addEventListener("change",e=>{ const cur=beforeYouLeave.find(x=>x.id===b.id); if(!cur) return; const wasDone=cur.done; cur.done=e.target.checked; saveBYL(); if(e.target.checked&&!wasDone) playCompletionSound(); renderBYL(); });
+  wireInlineBYLText(row.querySelector("#br-text"), b.id);
+  row.querySelector(".byl-del").addEventListener("click",()=>{ if(confirm("Remove this reminder?")){ beforeYouLeave=beforeYouLeave.filter(x=>x.id!==b.id); saveBYL(); renderBYL(); } });
+  return row;
+}
+document.getElementById("bylInput").addEventListener("keydown",e=>{ if(e.key!=="Enter") return; const v=e.target.value.trim(); if(!v) return; beforeYouLeave.push(blankBYLItem(v)); e.target.value=""; saveBYL(); renderBYL(); });
+document.getElementById("bylReset").addEventListener("click",()=>{ if(!beforeYouLeave.some(b=>b.done)) return; beforeYouLeave.forEach(b=>{ b.done=false; }); saveBYL(); renderBYL(); });
+document.getElementById("bylClear").addEventListener("click",()=>{ if(!beforeYouLeave.some(b=>b.done)) return; beforeYouLeave=beforeYouLeave.filter(b=>!b.done); saveBYL(); renderBYL(); });
+document.getElementById("bylTitleReset").addEventListener("pointerdown",e=>{
+  if(!e.isPrimary || e.button!==0) return;
+  e.preventDefault();
+  closeActiveEdit(false);
+  e.currentTarget.focus();
+});
+document.getElementById("bylTitleReset").addEventListener("click",()=>{
+  if(bylTitle===DEFAULT_BYL_TITLE) return;
+  bylTitle=DEFAULT_BYL_TITLE; saveBYLTitle(); renderBYLTitle();
+});
+
+/* =====================================================================
+   BEFORE YOU LEAVE TEMPLATES
+   Reusable checklists ("Leaving for the airport", "Road trip"…). One
+   modal (#tplModalBackdrop/#tplModal) whose body is swapped between three
+   views by tplView — "list" (browse/Load/Edit/Duplicate/Delete), "save"
+   (name a new template from the current checklist), "edit" (rename +
+   add/edit/delete/reorder items, Save/Cancel) — mirroring the Print
+   Center's modal chrome (focus trap, Escape, backdrop click, focus
+   restore) rather than inventing a second accessible-dialog pattern.
+   Loading/saving/duplicating/deleting a template only ever reads or
+   writes beforeYouLeaveTemplates; the live checklist and its title are
+   only ever touched by loadBYLTemplate(). */
+function openTplModal(view){
+  closeActiveEdit(false); // opening this modal must never commit/save whatever inline edit was active
+  tplPrevFocus=document.activeElement;
+  tplEditId=null; tplDraft=null; tplDraftDirty=false;
+  tplView=view||"list";
+  renderTplModal();
+  document.getElementById("tplModalBackdrop").classList.remove("hidden");
+  document.addEventListener("keydown", tplModalKeyHandler, true);
+  document.getElementById("tplModal").focus();
+}
+function closeTplModal(){
+  document.getElementById("tplModalBackdrop").classList.add("hidden");
+  document.removeEventListener("keydown", tplModalKeyHandler, true);
+  tplEditId=null; tplDraft=null; tplDraftDirty=false;
+  if(tplPrevFocus && typeof tplPrevFocus.focus==="function") tplPrevFocus.focus();
+  tplPrevFocus=null;
+}
+/* Backdrop click and a non-editing Escape both funnel through here, so a click on the backdrop
+   can never silently discard an unsaved template edit — see tplModalKeyHandler for the edit view,
+   which instead routes Escape through cancelEditBYLTemplate()'s own dirty-check. */
+function requestCloseTplModal(){
+  if(tplView==="edit" && tplDraftDirty){ if(!confirm("Discard unsaved changes to this template?")) return; }
+  closeTplModal();
+}
+function tplModalKeyHandler(e){
+  if(e.key==="Escape"){
+    e.preventDefault();
+    if(tplView==="edit") cancelEditBYLTemplate(); else requestCloseTplModal();
+    return;
+  }
+  if(e.key!=="Tab") return;
+  const modal=document.getElementById("tplModal");
+  const focusables=[...modal.querySelectorAll('button,input,select,[tabindex]:not([tabindex="-1"])')].filter(el=>!el.disabled && el.offsetParent!==null);
+  if(!focusables.length) return;
+  const first=focusables[0], last=focusables[focusables.length-1];
+  /* Right after open(), focus sits on the modal container itself (tabindex="-1", not yet moved to
+     a specific control) — without this branch, the very first Shift+Tab wouldn't match "first" or
+     "last" and would escape the trap entirely instead of wrapping to the last control. */
+  if(document.activeElement===modal || !modal.contains(document.activeElement)){ e.preventDefault(); (e.shiftKey?last:first).focus(); }
+  else if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
+  else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
+}
+document.getElementById("tplModalBackdrop").addEventListener("mousedown",e=>{ if(e.target.id==="tplModalBackdrop"){ e.preventDefault(); requestCloseTplModal(); } });
+
+function renderTplModal(){
+  const body=document.getElementById("tplModalBody");
+  if(tplView==="edit") body.innerHTML=tplEditHtml();
+  else if(tplView==="save") body.innerHTML=tplSaveHtml();
+  else body.innerHTML=tplListHtml();
+  wireTplModalBody();
+}
+function tplListHtml(){
+  const head=`<h2 id="tplModalTitle">Before You Leave templates</h2>`;
+  if(!beforeYouLeaveTemplates.length){
+    return head+`<div class="tpl-empty">No saved templates yet.</div><div class="pm-actions"><button class="btn" id="tplCloseBtn">Close</button></div>`;
+  }
+  const cards=[...beforeYouLeaveTemplates].sort((a,b)=>(a.created||0)-(b.created||0)).map(t=>`
+    <div class="tpl-card" data-id="${esc(t.id)}">
+      <div class="tpl-card-info"><div class="tpl-card-name">${esc(t.name)}</div><div class="tpl-card-count">${t.items.length} item${t.items.length===1?"":"s"}</div></div>
+      <div class="tpl-card-actions">
+        <button class="btn sm tpl-load" aria-label="Load ${esc(t.name)}">Load</button>
+        <button class="btn sm tpl-edit" aria-label="Edit ${esc(t.name)}">Edit</button>
+        <button class="btn sm tpl-dup" aria-label="Duplicate ${esc(t.name)}">Duplicate</button>
+        <button class="btn sm tpl-del" aria-label="Delete ${esc(t.name)}">Delete</button>
+      </div>
+    </div>`).join("");
+  return head+`<div class="tpl-list">${cards}</div><div class="pm-actions"><button class="btn" id="tplCloseBtn">Close</button></div>`;
+}
+function tplSaveHtml(){
+  const prefill = bylTitle!==DEFAULT_BYL_TITLE ? esc(bylTitle) : "";
+  return `<h2 id="tplModalTitle">Save as template</h2>
+    <div class="pm-sub">Saves the current checklist item text as a reusable template. Checked state isn't saved.</div>
+    <div class="field"><label for="tplSaveName">Template name</label><input type="text" id="tplSaveName" value="${prefill}" placeholder="e.g. Leaving for the airport" aria-label="Template name"></div>
+    <div class="pm-actions"><button class="btn" id="tplSaveCancel">Cancel</button><button class="btn add" id="tplSaveConfirm">Save</button></div>`;
+}
+function tplEditHtml(){
+  const d=tplDraft;
+  const itemRows=d.items.map((txt,i)=>`
+    <div class="tpl-item-row" data-idx="${i}">
+      <input type="text" class="tpl-item-input" value="${esc(txt)}" aria-label="Item ${i+1} text">
+      <div class="tpl-item-actions">
+        <button class="btn sm tpl-item-up" title="Move up" aria-label="Move item ${i+1} up" ${i===0?"disabled":""}>↑</button>
+        <button class="btn sm tpl-item-down" title="Move down" aria-label="Move item ${i+1} down" ${i===d.items.length-1?"disabled":""}>↓</button>
+        <button class="btn sm tpl-item-del" title="Delete item" aria-label="Delete item ${i+1}">✕</button>
+      </div>
+    </div>`).join("");
+  return `<h2 id="tplModalTitle">Edit template</h2>
+    <div class="field"><label for="tplEditName">Template name</label><input type="text" id="tplEditName" value="${esc(d.name)}" aria-label="Template name"></div>
+    <div class="tpl-items" id="tplEditItems">${itemRows || `<div class="tpl-empty">No items yet — add one below.</div>`}</div>
+    <div class="tpl-add-item"><input type="text" id="tplAddItemInput" placeholder="Add an item, then Enter…" aria-label="New item text"><button class="btn sm" id="tplAddItemBtn">Add</button></div>
+    <div class="pm-actions"><button class="btn" id="tplEditCancel">Cancel</button><button class="btn add" id="tplEditSave">Save</button></div>`;
+}
+function wireTplModalBody(){
+  const body=document.getElementById("tplModalBody");
+  if(tplView==="list"){
+    body.querySelectorAll(".tpl-card").forEach(card=>{
+      const id=card.dataset.id;
+      card.querySelector(".tpl-load").addEventListener("click",()=>loadBYLTemplate(id));
+      card.querySelector(".tpl-edit").addEventListener("click",()=>startEditBYLTemplate(id));
+      card.querySelector(".tpl-dup").addEventListener("click",()=>duplicateBYLTemplate(id));
+      card.querySelector(".tpl-del").addEventListener("click",()=>deleteBYLTemplate(id));
+    });
+    const closeBtn=body.querySelector("#tplCloseBtn"); if(closeBtn) closeBtn.addEventListener("click",closeTplModal);
+  } else if(tplView==="save"){
+    const nameInp=body.querySelector("#tplSaveName");
+    body.querySelector("#tplSaveCancel").addEventListener("click",closeTplModal);
+    body.querySelector("#tplSaveConfirm").addEventListener("click",()=>confirmSaveBYLTemplate(nameInp.value));
+    nameInp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); confirmSaveBYLTemplate(nameInp.value); } });
+  } else if(tplView==="edit"){
+    wireTplEditView();
+  }
+}
+function startEditBYLTemplate(id){
+  const t=beforeYouLeaveTemplates.find(x=>x.id===id); if(!t) return;
+  tplEditId=id; tplDraft={ name:t.name, items:[...t.items] }; tplDraftDirty=false;
+  tplView="edit"; renderTplModal();
+}
+function wireTplEditView(){
+  const body=document.getElementById("tplModalBody");
+  const nameInp=body.querySelector("#tplEditName");
+  nameInp.addEventListener("input",()=>{ tplDraft.name=nameInp.value; tplDraftDirty=true; });
+  body.querySelectorAll(".tpl-item-row").forEach(row=>{
+    const idx=+row.dataset.idx;
+    const inp=row.querySelector(".tpl-item-input");
+    inp.addEventListener("input",()=>{ tplDraft.items[idx]=inp.value; tplDraftDirty=true; });
+    const upBtn=row.querySelector(".tpl-item-up");
+    if(!upBtn.disabled) upBtn.addEventListener("click",()=>{ const a=tplDraft.items; [a[idx-1],a[idx]]=[a[idx],a[idx-1]]; tplDraftDirty=true; renderTplModal(); });
+    const downBtn=row.querySelector(".tpl-item-down");
+    if(!downBtn.disabled) downBtn.addEventListener("click",()=>{ const a=tplDraft.items; [a[idx+1],a[idx]]=[a[idx],a[idx+1]]; tplDraftDirty=true; renderTplModal(); });
+    row.querySelector(".tpl-item-del").addEventListener("click",()=>{ tplDraft.items.splice(idx,1); tplDraftDirty=true; renderTplModal(); });
+  });
+  const addInp=body.querySelector("#tplAddItemInput");
+  function addItem(){ const v=addInp.value.trim(); if(!v) return; tplDraft.items.push(v); tplDraftDirty=true; renderTplModal(); }
+  body.querySelector("#tplAddItemBtn").addEventListener("click",addItem);
+  addInp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); addItem(); } });
+  body.querySelector("#tplEditCancel").addEventListener("click",cancelEditBYLTemplate);
+  body.querySelector("#tplEditSave").addEventListener("click",saveEditBYLTemplate);
+}
+function cancelEditBYLTemplate(){
+  if(tplDraftDirty && !confirm("Discard unsaved changes to this template?")) return;
+  tplEditId=null; tplDraft=null; tplDraftDirty=false;
+  tplView="list"; renderTplModal();
+}
+function saveEditBYLTemplate(){
+  const name=(tplDraft.name||"").toString().trim();
+  const items=tplDraft.items.map(x=>(x||"").toString().trim()).filter(x=>x!=="");
+  if(!name){ alert("Enter a template name."); return; }
+  if(!items.length){ alert("A template needs at least one item."); return; }
+  const t=beforeYouLeaveTemplates.find(x=>x.id===tplEditId);
+  if(t){ t.name=name; t.items=items; t.updated=Date.now(); saveBYLTemplates(); }
+  tplEditId=null; tplDraft=null; tplDraftDirty=false;
+  tplView="list"; renderTplModal();
+}
+function confirmSaveBYLTemplate(nameRaw){
+  const name=(nameRaw||"").toString().trim();
+  if(!name){ alert("Enter a template name."); return; }
+  const items=sortedBYL().map(b=>b.item).filter(x=>x!=="");
+  if(!items.length){ closeTplModal(); return; }
+  beforeYouLeaveTemplates.push(blankBYLTemplate(name, items));
+  saveBYLTemplates();
+  closeTplModal();
+}
+function loadBYLTemplate(id){
+  const t=beforeYouLeaveTemplates.find(x=>x.id===id); if(!t) return;
+  if(!confirm(`Add all ${t.items.length} items from "${t.name}" to ${bylTitle}?`)) return;
+  const wasEmpty = beforeYouLeave.length===0;
+  const now=Date.now();
+  const fresh=t.items.map((txt,i)=>({ id:uid("byl"), item:txt, done:false, created:now+i }));
+  beforeYouLeave=beforeYouLeave.concat(fresh);
+  saveBYL();
+  if(wasEmpty){ bylTitle=normalizeBYLTitle(t.name); saveBYLTitle(); }
+  renderBYL();
+  closeTplModal();
+}
+function duplicateBYLTemplate(id){
+  const t=beforeYouLeaveTemplates.find(x=>x.id===id); if(!t) return;
+  const now=Date.now();
+  beforeYouLeaveTemplates.push({ id:uid("bylt"), name:`${t.name} — Copy`, items:[...t.items], created:now, updated:now });
+  saveBYLTemplates();
+  renderTplModal();
+}
+function deleteBYLTemplate(id){
+  const t=beforeYouLeaveTemplates.find(x=>x.id===id); if(!t) return;
+  if(!confirm(`Permanently delete the "${t.name}" template?`)) return;
+  beforeYouLeaveTemplates=beforeYouLeaveTemplates.filter(x=>x.id!==id);
+  saveBYLTemplates();
+  renderTplModal();
+}
+document.getElementById("bylTemplatesBtn").addEventListener("pointerdown",e=>{
+  if(!e.isPrimary || e.button!==0) return;
+  e.preventDefault();
+  closeActiveEdit(false);
+  e.currentTarget.focus();
+});
+document.getElementById("bylTemplatesBtn").addEventListener("click",()=>openTplModal("list"));
+document.getElementById("bylSaveTemplateBtn").addEventListener("pointerdown",e=>{
+  if(!e.isPrimary || e.button!==0) return;
+  e.preventDefault();
+  closeActiveEdit(false);
+  e.currentTarget.focus();
+});
+document.getElementById("bylSaveTemplateBtn").addEventListener("click",()=>{
+  if(!beforeYouLeave.length){ alert("Add at least one item to Before You Leave before saving a template."); return; }
+  openTplModal("save");
+});
+
 function wireInlineBillText(node, billId, field, ariaLabel, required){
   node.classList.add("editable"); node.tabIndex=0; node.setAttribute("role","button"); node.setAttribute("aria-label",ariaLabel);
   function open(){
@@ -1881,17 +2284,18 @@ document.getElementById("soundToggle").addEventListener("click",()=>{ settings.s
    BEFORE this click handler runs, and that blur commits+saves the edit (see wireTaskTitle/
    wireInlineNoteText/etc.) — so by the time openPrintCenter()'s own closeActiveEdit(false) ran,
    the save had already happened. Canceling the edit on pointerdown (before the browser ever
-   reassigns focus) closes that race for every pointer type; preventDefault() only suppresses the
-   native focus change for this one button, not blur behavior anywhere else. Keyboard activation
+   reassigns focus) closes that race for every pointer type; preventDefault() suppresses the native
+   blur, then focus() explicitly makes Print the restore target. Keyboard activation
    (Enter/Space) never fires pointerdown, so it still reaches the click handler below unaffected. */
 document.getElementById("printBtn").addEventListener("pointerdown",e=>{
   if(!e.isPrimary || e.button!==0) return;
   e.preventDefault();
   closeActiveEdit(false);
+  e.currentTarget.focus();
 });
 document.getElementById("printBtn").addEventListener("click",openPrintCenter);
 document.getElementById("exportBtn").addEventListener("click",()=>{
-  const bundle={version:VERSION,people,tasks,shop,places,importantDates,bills,notes};
+  const bundle={version:VERSION,people,tasks,shop,places,importantDates,bills,notes,beforeYouLeave,beforeYouLeaveTemplates,beforeYouLeaveTitle:bylTitle};
   const blob=new Blob([JSON.stringify(bundle,null,2)],{type:"application/json"});
   const url=URL.createObjectURL(blob); const a=document.createElement("a");
   a.href=url; a.download=`the-grind-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(url);
@@ -1917,8 +2321,14 @@ document.getElementById("importFile").addEventListener("change",e=>{
          still blank after coercion — a malformed entry never crashes the app, it's just discarded.
          Settings are deliberately never touched here — sound stays this device's own preference. */
       if(Array.isArray(d.notes)) notes=d.notes.map(migrateNote).filter(n=>n.text!=="");
+      if(Array.isArray(d.beforeYouLeave)) beforeYouLeave=d.beforeYouLeave.map(migrateBYLItem).filter(b=>b.item!=="");
+      /* Older exports have no beforeYouLeaveTemplates/beforeYouLeaveTitle fields at all — leaving
+         the current in-memory values untouched in that case, same as every other collection above,
+         rather than treating "absent" as "clear/reset these". */
+      if(Array.isArray(d.beforeYouLeaveTemplates)) beforeYouLeaveTemplates=d.beforeYouLeaveTemplates.map(migrateBYLTemplate).filter(t=>t.name!==""&&t.items.length>0);
+      if(typeof d.beforeYouLeaveTitle==="string" && d.beforeYouLeaveTitle.trim()!=="") bylTitle=normalizeBYLTitle(d.beforeYouLeaveTitle);
     }
-    editingId=null; placeEditingId=null; dateEditingId=null; billEditingId=null; savePeople(); saveTasks(); saveShop(); savePlaces(); saveDates(); saveBills(); saveNotes(); render();
+    editingId=null; placeEditingId=null; dateEditingId=null; billEditingId=null; tplEditId=null; tplDraft=null; tplDraftDirty=false; savePeople(); saveTasks(); saveShop(); savePlaces(); saveDates(); saveBills(); saveNotes(); saveBYL(); saveBYLTemplates(); saveBYLTitle(); render();
   }catch(err){ alert("Couldn't read that file — expected a The Grind export (.json)."); } };
   r.readAsText(f); e.target.value="";
 });
@@ -1954,10 +2364,11 @@ function printModalKeyHandler(e){
   const focusables=[...modal.querySelectorAll('button,input,select,[tabindex]:not([tabindex="-1"])')].filter(el=>!el.disabled && el.offsetParent!==null);
   if(!focusables.length) return;
   const first=focusables[0], last=focusables[focusables.length-1];
-  if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
+  if(document.activeElement===modal || !modal.contains(document.activeElement)){ e.preventDefault(); (e.shiftKey?last:first).focus(); }
+  else if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
   else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
 }
-document.getElementById("printModalBackdrop").addEventListener("mousedown",e=>{ if(e.target.id==="printModalBackdrop") closePrintCenter(); });
+document.getElementById("printModalBackdrop").addEventListener("mousedown",e=>{ if(e.target.id==="printModalBackdrop"){ e.preventDefault(); closePrintCenter(); } });
 document.getElementById("pmCancel").addEventListener("click",closePrintCenter);
 document.getElementById("pmPrint").addEventListener("click",()=>{ generateAndPrint(readPrintOptions()); closePrintCenter(); });
 
@@ -1971,6 +2382,7 @@ function readPrintOptions(){
       notes: document.getElementById("pmSecNotes").checked,
       places: document.getElementById("pmSecPlaces").checked,
       bills: document.getElementById("pmSecBills").checked,
+      byl: document.getElementById("pmSecBYL").checked,
       shop: document.getElementById("pmSecShop").checked,
     },
     hideCompleted: document.getElementById("pmHideCompleted").checked,
@@ -2033,6 +2445,7 @@ function printFilterBills(opts){
 function printFilterShop(opts){
   return [...shop].sort((a,b)=>(a.got?1:0)-(b.got?1:0)).filter(s=>!(opts.hideCompleted && s.got));
 }
+function printFilterBYL(opts){ return sortedBYL().filter(b=>!(opts.hideCompleted && b.done)); } // profile-independent by design
 
 function printCheckSpan(checked){ return `<span class="print-check${checked?" checked":""}"></span>`; }
 function printTaskRow(t){
@@ -2092,6 +2505,9 @@ function printBillRow(b){
 function printShopRow(s){
   return `<div class="print-item${s.got?" done":""}">${printCheckSpan(s.got)}<div class="pi-body"><div class="pi-title">${esc(s.item)}</div></div></div>`;
 }
+function printBYLRow(b){
+  return `<div class="print-item${b.done?" done":""}">${printCheckSpan(b.done)}<div class="pi-body"><div class="pi-title">${esc(b.item)}</div></div></div>`;
+}
 function printSectionHtml(title, count, bodyHtml){
   return `<div class="print-section"><div class="print-section-head"><span class="ps-title">${esc(title)}</span><span class="ps-count">${count}</span></div>${bodyHtml}</div>`;
 }
@@ -2104,6 +2520,7 @@ function buildPrintBody(data, opts){
   if(opts.sections.notes && data.notes.length) lower.push(printSectionHtml("Quick Notes", data.notes.length, data.notes.map(printNoteRow).join("")));
   if(opts.sections.places && data.places.length) lower.push(printSectionHtml("Places to Go", data.places.length, data.places.map(printPlaceRow).join("")));
   if(opts.sections.bills && data.bills.length) lower.push(printSectionHtml("Bills", data.bills.length, data.bills.map(printBillRow).join("")));
+  if(opts.sections.byl && data.byl.length) lower.push(printSectionHtml(bylTitle, data.byl.length, data.byl.map(printBYLRow).join("")));
   if(opts.sections.shop && data.shop.length) lower.push(printSectionHtml("Shopping List", data.shop.length, data.shop.map(printShopRow).join("")));
   if(lower.length) html+=`<div class="print-grid">${lower.join("")}</div>`;
   return html;
@@ -2120,6 +2537,7 @@ function buildPrintSheet(opts){
     notes: opts.sections.notes ? printFilterNotes(opts) : [],
     places: opts.sections.places ? printFilterPlaces(opts) : [],
     bills: opts.sections.bills ? printFilterBills(opts) : [],
+    byl: opts.sections.byl ? printFilterBYL(opts) : [],
     shop: opts.sections.shop ? printFilterShop(opts) : [],
   };
   const hasAny = Object.keys(data).some(k=>opts.sections[k] && data[k].length);
