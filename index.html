@@ -6,7 +6,7 @@
 <title>The Grind</title>
 <style>
   /* ============================================================
-     THE GRIND — personal command center   (v0.4-beta)
+     THE GRIND — personal command center   (v0.5-beta)
      Forked from Family Planner but fully data-isolated: its own Firebase
      path (planners/the-grind-scattabrain-2026) and its own grind.* localStorage keys.
      One day list (multi-profile tags), Places to Go + Shopping + Bills + Quick Notes
@@ -16,6 +16,12 @@
      template never changes when its loaded items are checked, edited, or deleted.
      Manage templates via the "Templates" and "Save as template" buttons next to the
      checklist heading (list/load/edit/duplicate/delete).
+     Multi-profile focus: each real profile has its own on/off toggle (not a single-choice
+     filter) — Tasks, Important Dates, Places, and Bills all show whatever intersects the
+     enabled profiles, plus anything tagged shared/family. All-on and all-off both stay
+     meaningful states, not just "everyone." Which profiles are enabled is a device-local
+     preference (grind.activeProfiles.v1) — never synced through Firebase or import/export,
+     same as view prefs and sound.
      A soft completion chime (Web Audio, no external file) plays when an item
      is checked off; toggle it off via Sound: On/Off (device-local setting).
      "Delete completed (N)" clears all done tasks across every profile in one shot.
@@ -149,7 +155,9 @@
   .pfilter { display:inline-flex; align-items:center; gap:7px; font-size:13px; font-weight:600; padding:6px 12px 6px 8px; border-radius:99px; background:var(--card); border:1px solid var(--line); cursor:pointer; color:var(--ink); }
   .pfilter .dot { width:14px; height:14px; border-radius:50%; flex:none; }
   .pfilter.active { border-color:var(--ink); box-shadow:0 0 0 1px var(--ink); }
-  .pfilter.all { padding-left:12px; }
+  .pfilter:focus-visible { outline:2px solid var(--signal); outline-offset:2px; }
+  .pfilter-actions { display:inline-flex; gap:6px; }
+  .focus-summary { font-family:var(--mono); font-size:11.5px; color:var(--muted-2); margin:-6px 0 14px; }
   .pb-edit { margin-left:auto; }
 
   .people-editor { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:14px; margin-bottom:14px; box-shadow:var(--shadow); }
@@ -495,6 +503,7 @@
   </div>
 
   <div class="peoplebar" id="peoplebar"></div>
+  <div class="focus-summary" id="focusSummary"></div>
   <div class="people-editor hidden" id="peopleEditor"></div>
 
   <div class="panels">
@@ -635,13 +644,13 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
 "use strict";
-const VERSION = "0.4-beta";
+const VERSION = "0.5-beta";
 
 /* ---------------- storage ---------------- */
 /* Grind-namespaced keys — deliberately isolated from the old Family Planner fork's `home.*`
    keys, which live at the same browser origin (GitHub Pages paths don't isolate localStorage).
    Never read from or write to `home.*` here — that data belongs to the other app. */
-const K_TASKS="grind.plan.v1", K_SHOP="grind.shopping.v1", K_PEOPLE="grind.profiles.v1", K_PLACES="grind.places.v1", K_DATES="grind.dates.v1", K_BILLS="grind.bills.v1", K_PREFS="grind.viewprefs.v1", K_NOTES="grind.notes.v1", K_SETTINGS="grind.settings.v1", K_BYL="grind.before-you-leave.v1", K_BYL_TEMPLATES="grind.before-you-leave-templates.v1", K_BYL_TITLE="grind.before-you-leave-title.v1";
+const K_TASKS="grind.plan.v1", K_SHOP="grind.shopping.v1", K_PEOPLE="grind.profiles.v1", K_PLACES="grind.places.v1", K_DATES="grind.dates.v1", K_BILLS="grind.bills.v1", K_PREFS="grind.viewprefs.v1", K_NOTES="grind.notes.v1", K_SETTINGS="grind.settings.v1", K_BYL="grind.before-you-leave.v1", K_BYL_TEMPLATES="grind.before-you-leave-templates.v1", K_BYL_TITLE="grind.before-you-leave-title.v1", K_ACTIVE_PROFILES="grind.activeProfiles.v1";
 function loadJSON(k){ try{ const r=localStorage.getItem(k); if(r) return JSON.parse(r); }catch(e){} return null; }
 function saveTasks(){ try{ localStorage.setItem(K_TASKS, JSON.stringify(tasks)); }catch(e){} pushCloud(); return true; }
 function saveShop(){ try{ localStorage.setItem(K_SHOP, JSON.stringify(shop)); }catch(e){} pushCloud(); }
@@ -656,6 +665,10 @@ function saveNotes(){ try{ localStorage.setItem(K_NOTES, JSON.stringify(notes));
 function saveBYL(){ try{ localStorage.setItem(K_BYL, JSON.stringify(beforeYouLeave)); }catch(e){} pushCloud(); }
 function saveBYLTemplates(){ try{ localStorage.setItem(K_BYL_TEMPLATES, JSON.stringify(beforeYouLeaveTemplates)); }catch(e){} pushCloud(); }
 function saveBYLTitle(){ try{ localStorage.setItem(K_BYL_TITLE, JSON.stringify(bylTitle)); }catch(e){} pushCloud(); }
+/* Which profiles are currently "in focus" — a device-local display preference (like view prefs),
+   never synced through Firebase and never included in import/export. A missing or malformed
+   value defaults to every real profile enabled; a saved empty array is a deliberate "none". */
+function saveActiveProfiles(){ try{ localStorage.setItem(K_ACTIVE_PROFILES, JSON.stringify([...activeProfiles])); }catch(e){} }
 /* Device-local app settings (currently just sound) — deliberately never synced through Firebase,
    never included in the cloud payload, and never touched by import, so each device keeps its own. */
 function saveSettings(){ try{ localStorage.setItem(K_SETTINGS, JSON.stringify(settings)); }catch(e){} }
@@ -691,7 +704,7 @@ function initSync(){
       const v=snap.val();
       if(!v){ pushCloud(true); return; }                 // cloud empty → seed from this device
       remoteApplying=true;
-      if(Array.isArray(v.people)) people=v.people;
+      if(Array.isArray(v.people)){ people=v.people; const validIds=new Set(people.map(p=>p.id)); const cleaned=new Set([...activeProfiles].filter(id=>validIds.has(id))); if(cleaned.size!==activeProfiles.size){ activeProfiles=cleaned; saveActiveProfiles(); } }
       if(Array.isArray(v.tasks))  tasks=v.tasks.map(migrateTask);
       if(Array.isArray(v.shop))   shop=v.shop.map(s=>Object.assign(blankShop(),s));
       if(Array.isArray(v.places)) places=v.places.map(migratePlace);   // only overwrite if present → never erased by an old client
@@ -732,6 +745,14 @@ const SEED_PEOPLE=[
   {id:"p1",name:"Scatta",color:"#A855F7"},
 ];
 let people = loadJSON(K_PEOPLE) || SEED_PEOPLE.slice();
+function loadActiveProfiles(){
+  let raw;
+  try{ const r=localStorage.getItem(K_ACTIVE_PROFILES); raw = r!=null ? JSON.parse(r) : undefined; }catch(e){ raw = undefined; }
+  if(!Array.isArray(raw)) return new Set(people.map(p=>p.id));
+  const validIds = new Set(people.map(p=>p.id));
+  return new Set(raw.filter(id=>typeof id==="string" && validIds.has(id)));
+}
+let activeProfiles = loadActiveProfiles();
 function uid(p){ return (p||"t")+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 function getPerson(id){
   if(id==="family") return {id:"family",name:"All",color:"#8595A8"};
@@ -853,7 +874,7 @@ let bylTitle = normalizeBYLTitle(loadJSON(K_BYL_TITLE));
 let settings = Object.assign({ soundEnabled:true }, loadJSON(K_SETTINGS)||{});
 
 /* ---------------- state ---------------- */
-let editingId=null, placeEditingId=null, dateEditingId=null, billEditingId=null, activePerson="all", overdueSet=new Set();
+let editingId=null, placeEditingId=null, dateEditingId=null, billEditingId=null, overdueSet=new Set();
 let datesAllOpen=false, pastDatesOpen=false;
 let pendingRemoteRender=false;
 /* Shared inline-edit / popover tracker (text fields + people/category/date-time/priority popovers).
@@ -1052,18 +1073,36 @@ function validateImportantDate(startDate,endDate,startTime,endTime){
   return null;
 }
 function activeDatesSorted(){
-  return importantDates.filter(d=>!isPastDate(d)).sort((a,b)=>
+  return importantDates.filter(d=>!isPastDate(d)&&focusMatch(d.people)).sort((a,b)=>
     (a.startDate||"9999-99-99").localeCompare(b.startDate||"9999-99-99") ||
     (a.startTime||"00:00").localeCompare(b.startTime||"00:00") ||
     (a.created||0)-(b.created||0));
 }
 function pastDatesSorted(){
-  return importantDates.filter(isPastDate).sort((a,b)=>
+  return importantDates.filter(d=>isPastDate(d)&&focusMatch(d.people)).sort((a,b)=>
     (b.endDate||b.startDate||"").localeCompare(a.endDate||a.startDate||"") || (b.created||0)-(a.created||0));
 }
 
+/* ---------------- profile focus ---------------- */
+/* Shared match rule for every focus-aware section (Tasks, Dates, Places, Bills):
+   visible if it's tagged "family", or intersects the enabled profile set. A genuinely
+   unassigned item is visible only when every real profile is enabled — this preserves
+   the old single-select "all" behavior instead of reinterpreting unassigned as family-wide. */
+function focusMatch(ids){
+  const norm=normPeople(ids);
+  if(norm.includes("family")) return true;
+  if(!norm.length) return activeProfiles.size===people.length;
+  return norm.some(id=>activeProfiles.has(id));
+}
+function focusSuffixText(){
+  if(activeProfiles.size===0) return " for shared items";
+  if(activeProfiles.size===people.length) return "";
+  const names=people.filter(p=>activeProfiles.has(p.id)).map(p=>p.name);
+  return ` for ${names.join(", ")}`;
+}
+
 /* ---------------- next up ---------------- */
-function personVisible(t){ if(activePerson==="all") return true; if(isFamilyTask(t)) return true; return taskPeopleIds(t).includes(activePerson); }
+function personVisible(t){ return focusMatch(taskPeopleIds(t)); }
 /* Up Next = soonest FUTURE timed task today. Missed (past-time) tasks are flagged in their row, not here. */
 function computeNextUp(){
   const nm=nowMin();
@@ -1144,45 +1183,62 @@ function render(){
   renderDatesSection();
   const view=currentView();
   const next=computeNextUp();
-  const laterCount=tasks.filter(isLater).length;
+  const focusedTasks=tasks.filter(t=>focusMatch(taskPeopleIds(t)));
+  const laterCount=focusedTasks.filter(isLater).length;
   document.getElementById("laterLbl").textContent=laterCount?`Later (${laterCount})`:"Later";
   renderNextUp(next);
   renderProgress();
 
   listEl.innerHTML="";
   if(!tasks.length){ listEl.innerHTML=`<div class="empty-state"><div class="big">No plans yet.</div>Add the first thing for today above, and tag who it's for.</div>`; }
-  else if(!view.length){ listEl.innerHTML=`<div class="empty-state"><div class="big">Nothing here.</div>Try another person or clear filters.</div>`; }
+  else if(!view.length){ listEl.innerHTML=`<div class="empty-state"><div class="big">Nothing here.</div>Try another focus or clear filters.</div>`; }
   overdueSet=new Set(tasks.filter(isOverdue).map(t=>t.id)); let laterShown=false;
   view.forEach(t=>{
     if(isLater(t)&&!laterShown){ const h=document.createElement("div"); h.className="later-head"; h.textContent="◴ Moved to later"; listEl.appendChild(h); laterShown=true; }
     if(editingId===t.id) listEl.appendChild(renderEditor(t)); else listEl.appendChild(renderRow(t,next&&next.id===t.id));
   });
 
-  const done=tasks.filter(isDone).length; const over=tasks.filter(isOverdue).length;
+  const done=tasks.filter(isDone).length;
   const delCompletedBtn=document.getElementById("deleteCompletedBtn");
   delCompletedBtn.textContent=`Delete completed (${done})`;
   delCompletedBtn.disabled=done===0;
   delCompletedBtn.classList.toggle("hidden", done===0);
-  document.getElementById("hint").textContent=`${tasks.length} items • ${done} done • ${over} overdue • ${laterCount} later • ${places.filter(p=>!p.visited).length} places • ${shop.filter(s=>!s.got).length} to buy • ${bills.filter(b=>!b.paid).length} bills due • The Grind v${VERSION}`;
+  const focusedDone=focusedTasks.filter(isDone).length, focusedOver=focusedTasks.filter(isOverdue).length;
+  const focusedPlaces=places.filter(p=>focusMatch(p.people)&&!p.visited).length;
+  const focusedBills=bills.filter(b=>focusMatch(b.people)&&!b.paid).length;
+  document.getElementById("hint").textContent=`${focusedTasks.length} items • ${focusedDone} done • ${focusedOver} overdue • ${laterCount} later • ${focusedPlaces} places • ${shop.filter(s=>!s.got).length} to buy • ${focusedBills} bills due • The Grind v${VERSION}`;
 }
 
 function renderProgress(){
-  const todays=tasks.filter(isToday); const tot=todays.length; const done=todays.filter(isDone).length;
+  const focused=tasks.filter(t=>focusMatch(taskPeopleIds(t)));
+  const todays=focused.filter(isToday); const tot=todays.length; const done=todays.filter(isDone).length;
   document.getElementById("progressCount").textContent=`${done} of ${tot} done`;
   document.getElementById("progressBar").style.width=tot?(done/tot*100)+"%":"0%";
-  const over=tasks.filter(isOverdue).length;
+  const over=focused.filter(isOverdue).length;
   const oc=document.getElementById("overdueChip"); if(oc) oc.textContent = over ? `⚠ ${over} overdue` : "";
 }
 
 function renderPeopleBar(){
   const bar=document.getElementById("peoplebar");
-  const chip=(id,name,color,all,count)=>`<button class="pfilter ${all?'all':''} ${activePerson===id?'active':''}" data-p="${id}">${all?'':`<span class="dot" style="background:${color}"></span>`}${esc(name)}${(!all&&count)?` (${count})`:''}</button>`;
-  let html=chip("all","All","",true,0);
-  people.forEach(p=>html+=chip(p.id,p.name,p.color,false,personCount(p.id)));
+  const chip=(p)=>`<button class="pfilter ${activeProfiles.has(p.id)?'active':''}" data-p="${p.id}" aria-pressed="${activeProfiles.has(p.id)}"><span class="dot" style="background:${p.color}"></span>${esc(p.name)}${personCount(p.id)?` (${personCount(p.id)})`:''}</button>`;
+  let html=`<div class="pfilter-actions"><button class="btn sm" id="pfAll">All</button><button class="btn sm" id="pfNone">None</button></div>`;
+  people.forEach(p=>html+=chip(p));
   html+=`<button class="btn sm pb-edit" id="pbEdit">Edit profiles</button>`;
   bar.innerHTML=html;
-  bar.querySelectorAll(".pfilter").forEach(b=>b.addEventListener("click",()=>{ activePerson=b.dataset.p; render(); }));
+  bar.querySelectorAll(".pfilter").forEach(b=>b.addEventListener("click",()=>{
+    const id=b.dataset.p;
+    if(activeProfiles.has(id)) activeProfiles.delete(id); else activeProfiles.add(id);
+    saveActiveProfiles(); render();
+  }));
+  document.getElementById("pfAll").addEventListener("click",()=>{ activeProfiles=new Set(people.map(p=>p.id)); saveActiveProfiles(); render(); });
+  document.getElementById("pfNone").addEventListener("click",()=>{ activeProfiles=new Set(); saveActiveProfiles(); render(); });
   document.getElementById("pbEdit").addEventListener("click",togglePeopleEditor);
+  const summary=document.getElementById("focusSummary");
+  if(summary){
+    if(activeProfiles.size===people.length) summary.textContent = people.length ? "Viewing: everyone" : "Viewing: shared items only";
+    else if(activeProfiles.size===0) summary.textContent="Viewing: shared items only";
+    else summary.textContent=`Viewing: ${people.filter(p=>activeProfiles.has(p.id)).map(p=>p.name).join(", ")}`;
+  }
 }
 
 function togglePeopleEditor(){ closeActiveEdit(true); const pe=document.getElementById("peopleEditor"); pe.classList.toggle("hidden"); if(!pe.classList.contains("hidden")) renderPeopleEditor(); }
@@ -1207,9 +1263,9 @@ function renderPeopleEditor(){
       else if(e.key==="Escape"){ e.preventDefault(); const person=people.find(x=>x.id===id); nameInput.value=person?person.name:""; nameInput.blur(); }
     });
     row.querySelector(".swatch").addEventListener("click",()=>{ const person=people.find(x=>x.id===id); if(!person) return; const i=PALETTE.indexOf(person.color); person.color=PALETTE[(i+1)%PALETTE.length]; savePeople(); renderPeopleEditor(); renderPeopleBar(); render(); });
-    row.querySelector(".rm").addEventListener("click",()=>{ const person=people.find(x=>x.id===id); if(!person) return; if(confirm(`Remove ${person.name}? They'll be removed from any assigned items.`)){ people=people.filter(x=>x.id!==id); tasks.forEach(t=>{ t.people=taskPeopleIds(t).filter(x=>x!==id); }); places.forEach(pl=>{ pl.people=normPeople(pl.people).filter(x=>x!==id); }); importantDates.forEach(dt=>{ dt.people=normPeople(dt.people).filter(x=>x!==id); }); bills.forEach(bill=>{ bill.people=normPeople(bill.people).filter(x=>x!==id); }); if(activePerson===id) activePerson="all"; savePeople(); saveTasks(); savePlaces(); saveDates(); saveBills(); renderPeopleEditor(); render(); } });
+    row.querySelector(".rm").addEventListener("click",()=>{ const person=people.find(x=>x.id===id); if(!person) return; if(confirm(`Remove ${person.name}? They'll be removed from any assigned items.`)){ people=people.filter(x=>x.id!==id); tasks.forEach(t=>{ t.people=taskPeopleIds(t).filter(x=>x!==id); }); places.forEach(pl=>{ pl.people=normPeople(pl.people).filter(x=>x!==id); }); importantDates.forEach(dt=>{ dt.people=normPeople(dt.people).filter(x=>x!==id); }); bills.forEach(bill=>{ bill.people=normPeople(bill.people).filter(x=>x!==id); }); activeProfiles.delete(id); savePeople(); saveTasks(); savePlaces(); saveDates(); saveBills(); saveActiveProfiles(); renderPeopleEditor(); render(); } });
   });
-  pe.querySelector("#peAdd").addEventListener("click",()=>{ const color=PALETTE[people.length%PALETTE.length]; people.push({id:uid("p"),name:"New profile",color}); savePeople(); renderPeopleEditor(); renderPeopleBar(); });
+  pe.querySelector("#peAdd").addEventListener("click",()=>{ const color=PALETTE[people.length%PALETTE.length]; people.push({id:uid("p"),name:"New profile",color}); savePeople(); renderPeopleEditor(); render(); });
 }
 
 /* ---------------- task inline editing (shared by row + Up Next) ---------------- */
@@ -1316,7 +1372,7 @@ function wireTaskDue(node, taskId){
 }
 
 function renderNextUp(t){
-  if(!t){ nextEl.className="nextup empty"; nextEl.innerHTML=`<div><div class="eyebrow">Up next</div><div style="font-size:15px;margin-top:3px;color:#B7C6D6">Nothing coming up${activePerson!=='all'?' for '+esc(getPerson(activePerson).name):''}. Add a time to something to see it here.</div></div>`; return; }
+  if(!t){ nextEl.className="nextup empty"; nextEl.innerHTML=`<div><div class="eyebrow">Up next</div><div style="font-size:15px;margin-top:3px;color:#B7C6D6">Nothing coming up${esc(focusSuffixText())}. Add a time to something to see it here.</div></div>`; return; }
   const s=timeToMin(t.time);
   let count,subl;
   if(s!=null){ const d=s-nowMin(); if(d<=0){ count=`<div class="count">now</div>`; subl="Happening now"; } else { count=`<div class="count">${fmtDelta(d)}</div>`; subl="Until"; } }
@@ -1486,10 +1542,13 @@ function sortedPlaces(){
 }
 function renderPlaces(){
   const el=document.getElementById("placeList");
-  el.innerHTML = places.length ? "" : `<div class="empty-state" style="padding:24px 12px"><div class="big">No places yet.</div>Add somewhere to go above.</div>`;
-  sortedPlaces().forEach(pl=>{ el.appendChild(placeEditingId===pl.id ? renderPlaceEditor(pl) : renderPlaceRow(pl)); });
-  const active=places.filter(p=>!p.visited).length, visited=places.filter(p=>p.visited).length;
-  document.getElementById("placeCount").textContent=places.length?`${active}`:"";
+  const focused=sortedPlaces().filter(p=>focusMatch(p.people));
+  if(!places.length) el.innerHTML=`<div class="empty-state" style="padding:24px 12px"><div class="big">No places yet.</div>Add somewhere to go above.</div>`;
+  else if(!focused.length) el.innerHTML=`<div class="empty-state" style="padding:24px 12px"><div class="big">Nothing here.</div>Try another focus.</div>`;
+  else el.innerHTML="";
+  focused.forEach(pl=>{ el.appendChild(placeEditingId===pl.id ? renderPlaceEditor(pl) : renderPlaceRow(pl)); });
+  const active=focused.filter(p=>!p.visited).length, visited=focused.filter(p=>p.visited).length;
+  document.getElementById("placeCount").textContent=focused.length?`${active}`:"";
   document.getElementById("placeStatus").textContent=`${active} to visit · ${visited} visited`;
 }
 function wireInlinePlaceText(node, placeId, field, ariaLabel, required){
@@ -1601,10 +1660,13 @@ function sortedBills(){
 }
 function renderBills(){
   const el=document.getElementById("billList");
-  el.innerHTML = bills.length ? "" : `<div class="empty-state" style="padding:24px 12px"><div class="big">No bills yet.</div>Add one to track above.</div>`;
-  sortedBills().forEach(b=>{ el.appendChild(billEditingId===b.id ? renderBillEditor(b) : renderBillRow(b)); });
-  const active=bills.filter(b=>!b.paid).length, paid=bills.filter(b=>b.paid).length;
-  document.getElementById("billCount").textContent=bills.length?`${active}`:"";
+  const focused=sortedBills().filter(b=>focusMatch(b.people));
+  if(!bills.length) el.innerHTML=`<div class="empty-state" style="padding:24px 12px"><div class="big">No bills yet.</div>Add one to track above.</div>`;
+  else if(!focused.length) el.innerHTML=`<div class="empty-state" style="padding:24px 12px"><div class="big">Nothing here.</div>Try another focus.</div>`;
+  else el.innerHTML="";
+  focused.forEach(b=>{ el.appendChild(billEditingId===b.id ? renderBillEditor(b) : renderBillRow(b)); });
+  const active=focused.filter(b=>!b.paid).length, paid=focused.filter(b=>b.paid).length;
+  document.getElementById("billCount").textContent=focused.length?`${active}`:"";
   document.getElementById("billStatus").textContent=`${active} due · ${paid} paid`;
 }
 
@@ -2256,12 +2318,12 @@ document.getElementById("closeAllDatesBtn").addEventListener("click",()=>{ dates
 document.getElementById("pastDatesToggle").addEventListener("click",()=>{ pastDatesOpen=!pastDatesOpen; renderDatesAllPanel(); });
 
 /* ---------------- quick add / add ---------------- */
-document.getElementById("quickInput").addEventListener("keydown",e=>{ if(e.key!=="Enter") return; const v=e.target.value.trim(); if(!v) return; const t=blankTask(v); if(activePerson!=="all") t.people=[activePerson]; tasks.unshift(t); e.target.value=""; saveTasks(); render(); });
+document.getElementById("quickInput").addEventListener("keydown",e=>{ if(e.key!=="Enter") return; const v=e.target.value.trim(); if(!v) return; const t=blankTask(v); if(activeProfiles.size===1) t.people=[...activeProfiles]; tasks.unshift(t); e.target.value=""; saveTasks(); render(); });
 document.getElementById("addBtn").addEventListener("click",()=>{
   closeActiveEdit(true);
   const quickInput=document.getElementById("quickInput");
   const t=blankTask(quickInput.value.trim());
-  if(activePerson!=="all") t.people=[activePerson];
+  if(activeProfiles.size===1) t.people=[...activeProfiles];
   tasks.unshift(t);
   quickInput.value="";
   editingId=t.id; render();
