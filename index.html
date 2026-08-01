@@ -6,10 +6,10 @@
 <title>The Grind</title>
 <style>
   /* ============================================================
-     THE GRIND — personal command center   (v0.6-beta)
+     THE GRIND — personal command center   (v0.7-beta)
      Forked from Family Planner but fully data-isolated: its own Firebase
      path (planners/the-grind-scattabrain-2026) and its own grind.* localStorage keys.
-     One day list (multi-profile tags), Places to Go + Shopping + Bills + Quick Notes
+     One day list (multi-profile tags) with Done/Later/Someday views, Places to Go + Shopping + Bills + Quick Notes
      + Before You Leave — a profile-independent checklist under an editable active
      title (defaults to "Before You Leave") with reusable templates: save the current
      checklist's item text as a named template, then load it back any time — a saved
@@ -531,8 +531,9 @@
           <option value="person">Sort: Profile</option>
           <option value="added">Sort: Added</option>
         </select>
-        <label class="toggle"><input type="checkbox" id="hideDone"> Hide done</label>
+        <label class="toggle"><input type="checkbox" id="showDone"> <span id="doneLbl">Done</span></label>
         <label class="toggle"><input type="checkbox" id="showLater"> <span id="laterLbl">Later</span></label>
+        <label class="toggle"><input type="checkbox" id="showSomeday"> <span id="somedayLbl">Someday</span></label>
         <button class="shop-clear hidden" id="deleteCompletedBtn">Delete completed (0)</button>
       </div>
       <div class="list" id="list"></div>
@@ -665,7 +666,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
 "use strict";
-const VERSION = "0.6-beta";
+const VERSION = "0.7-beta";
 
 /* ---------------- storage ---------------- */
 /* Grind-namespaced keys — deliberately isolated from the old Family Planner fork's `home.*`
@@ -675,9 +676,9 @@ const K_TASKS="grind.plan.v1", K_SHOP="grind.shopping.v1", K_PEOPLE="grind.profi
 function loadJSON(k){ try{ const r=localStorage.getItem(k); if(r) return JSON.parse(r); }catch(e){} return null; }
 function saveTasks(){ try{ localStorage.setItem(K_TASKS, JSON.stringify(tasks)); }catch(e){} pushCloud(); return true; }
 function saveShop(){ try{ localStorage.setItem(K_SHOP, JSON.stringify(shop)); }catch(e){} pushCloud(); }
-/* View-only filters (Hide done / Later) — deliberately local-only, never pushed to Firebase,
+/* View-only filters (Done / Later / Someday) — deliberately local-only, never pushed to Firebase,
    since they're per-device display preferences, not shared planner data. */
-function saveViewPrefs(){ try{ localStorage.setItem(K_PREFS, JSON.stringify({ hideDone:document.getElementById("hideDone").checked, showLater:document.getElementById("showLater").checked })); }catch(e){} }
+function saveViewPrefs(){ try{ localStorage.setItem(K_PREFS, JSON.stringify({ showDone:document.getElementById("showDone").checked, showLater:document.getElementById("showLater").checked, showSomeday:document.getElementById("showSomeday").checked })); }catch(e){} }
 function savePeople(){ try{ localStorage.setItem(K_PEOPLE, JSON.stringify(people)); }catch(e){} pushCloud(); }
 function savePlaces(){ try{ localStorage.setItem(K_PLACES, JSON.stringify(places)); }catch(e){} pushCloud(); }
 function saveDates(){ try{ localStorage.setItem(K_DATES, JSON.stringify(importantDates)); }catch(e){} pushCloud(); }
@@ -1057,6 +1058,8 @@ function fmtDate(ymd){ const d=new Date(ymd+"T00:00"); return isNaN(d)?ymd:d.toL
 function fmtWhen(iso){ const d=new Date(iso); return isNaN(d)?iso:d.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"}); }
 function isDone(t){ return t.status==="done"; }
 function isLater(t){ return t.status==="later"; }
+function isScheduledLater(t){ return isLater(t)&&!!t.showOn; }
+function isSomeday(t){ return isLater(t)&&!t.showOn; }
 function isActive(t){ return t.status==="todo"||t.status==="doing"; }
 function esc(s){ return (s??"").toString().replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function todayStr(){ const d=new Date(); return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; }
@@ -1105,7 +1108,8 @@ function dueBadge(t){ if(!t.due||isDone(t)) return "";
   if(diff===1) return `<span class="due soon">due tomorrow</span>`;
   return `<span class="due">due ${esc(fmtDate(t.due))}</span>`;
 }
-function normalizeLater(){ let ch=false; const now=new Date(); tasks.forEach(t=>{ if(isLater(t)&&t.showOn&&new Date(t.showOn)<=now){ t.status="todo"; t.showOn=""; ch=true; } }); if(ch) saveTasks(); return ch; }
+/* A parked task returns at the start of its selected local calendar day; the task time remains available for scheduling/Up Next and must not delay its return from Later. */
+function normalizeLater(){ let ch=false; const today=todayStr(); tasks.forEach(t=>{ if(isLater(t)&&typeof t.showOn==="string"&&/^\d{4}-\d{2}-\d{2}/.test(t.showOn)&&t.showOn.slice(0,10)<=today){ t.status="todo"; t.showOn=""; ch=true; } }); if(ch) saveTasks(); return ch; }
 
 /* ---------------- important-date status / countdown ---------------- */
 function isDateRange(d){ return !!d.startDate && !!d.endDate && d.endDate!==d.startDate; }
@@ -1227,12 +1231,14 @@ const listEl=document.getElementById("list"), nextEl=document.getElementById("ne
 function currentView(){
   const q=document.getElementById("searchInput").value.trim().toLowerCase();
   const sort=document.getElementById("sortBy").value;
-  const hideDone=document.getElementById("hideDone").checked;
+  const showDone=document.getElementById("showDone").checked;
   const showLater=document.getElementById("showLater").checked;
+  const showSomeday=document.getElementById("showSomeday").checked;
   let v=tasks.filter(t=>{
     if(!personVisible(t)) return false;
-    if(isLater(t)&&!showLater) return false;
-    if(hideDone&&isDone(t)) return false;
+    if(isScheduledLater(t)&&!showLater) return false;
+    if(isSomeday(t)&&!showSomeday) return false;
+    if(isDone(t)&&!showDone) return false;
     if(q){ const names=taskPeopleIds(t).map(id=>getPerson(id).name).join(" "); const hay=[t.task,t.notes,names].join(" ").toLowerCase(); if(!hay.includes(q)) return false; }
     return true;
   });
@@ -1243,7 +1249,7 @@ function currentView(){
     added:(a,b)=>(b.created||0)-(a.created||0),
   }[sort] || ((a,b)=>0);
   const secondary=(a,b)=> ((b.priority||0)-(a.priority||0)) || ((timeToMin(a.time)??1e9)-(timeToMin(b.time)??1e9));
-  const tier=t=>isLater(t)?2:isDone(t)?1:0;
+  const tier=t=>isSomeday(t)?3:isScheduledLater(t)?2:isDone(t)?1:0;
   v.sort((a,b)=>(tier(a)-tier(b)) || cmp(a,b) || secondary(a,b));
   return v;
 }
@@ -1261,17 +1267,23 @@ function render(){
   const view=currentView();
   const next=computeNextUp();
   const focusedTasks=tasks.filter(t=>focusMatch(taskPeopleIds(t)));
-  const laterCount=focusedTasks.filter(isLater).length;
+  const doneCount=focusedTasks.filter(isDone).length;
+  const laterCount=focusedTasks.filter(isScheduledLater).length;
+  const somedayCount=focusedTasks.filter(isSomeday).length;
+  document.getElementById("doneLbl").textContent=doneCount?`Done (${doneCount})`:"Done";
   document.getElementById("laterLbl").textContent=laterCount?`Later (${laterCount})`:"Later";
+  document.getElementById("somedayLbl").textContent=somedayCount?`Someday (${somedayCount})`:"Someday";
   renderNextUp(next);
   renderProgress();
 
   listEl.innerHTML="";
   if(!tasks.length){ listEl.innerHTML=`<div class="empty-state"><div class="big">No plans yet.</div>Add the first thing for today above, and tag who it's for.</div>`; }
   else if(!view.length){ listEl.innerHTML=`<div class="empty-state"><div class="big">Nothing here.</div>Try another focus or clear filters.</div>`; }
-  overdueSet=new Set(tasks.filter(isOverdue).map(t=>t.id)); let laterShown=false;
+  overdueSet=new Set(tasks.filter(isOverdue).map(t=>t.id)); let doneShown=false, laterShown=false, somedayShown=false;
   view.forEach(t=>{
-    if(isLater(t)&&!laterShown){ const h=document.createElement("div"); h.className="later-head"; h.textContent="◴ Moved to later"; listEl.appendChild(h); laterShown=true; }
+    if(isDone(t)&&!doneShown){ const h=document.createElement("div"); h.className="later-head"; h.textContent="✓ Done"; listEl.appendChild(h); doneShown=true; }
+    if(isScheduledLater(t)&&!laterShown){ const h=document.createElement("div"); h.className="later-head"; h.textContent="◴ Moved to later"; listEl.appendChild(h); laterShown=true; }
+    if(isSomeday(t)&&!somedayShown){ const h=document.createElement("div"); h.className="later-head"; h.textContent="◇ Someday"; listEl.appendChild(h); somedayShown=true; }
     if(editingId===t.id) listEl.appendChild(renderEditor(t)); else listEl.appendChild(renderRow(t,next&&next.id===t.id));
   });
 
@@ -1486,9 +1498,9 @@ function renderNextUp(t){
 }
 
 function statusOptionsHtml(t){
-  const base=[["todo","To do"],["doing","Doing"],["done","Done"],["tomorrow","Move to tomorrow"],["pickday","Move to a day…"]];
-  let h=""; if(isLater(t)) h+=`<option value="later" selected>${t.showOn?"Later → "+esc(fmtWhen(t.showOn)):"Later"}</option>`;
-  h+=base.map(([v,l])=>`<option value="${v}" ${v===t.status?"selected":""}>${l}</option>`).join(""); return h;
+  const base=[["todo",isSomeday(t)?"Move to today":"To do"],["doing","Doing"],["done","Done"],["tomorrow","Move to tomorrow"],["pickday","Move to a day…"],["someday",isSomeday(t)?"Someday":"Move to Someday"]];
+  let h=""; if(isScheduledLater(t)) h+=`<option value="later" selected>Later → ${esc(fmtWhen(t.showOn))}</option>`;
+  h+=base.map(([v,l])=>`<option value="${v}" ${(v===t.status||(v==="someday"&&isSomeday(t)))?"selected":""}>${l}</option>`).join(""); return h;
 }
 
 function renderRow(t,isNext){
@@ -1528,6 +1540,7 @@ function renderRow(t,isNext){
   el.querySelector(".status-sel").addEventListener("change",e=>{ const v=e.target.value; const cur=tasks.find(x=>x.id===t.id); if(!cur) return;
     if(v==="tomorrow"){ cur.status="later"; cur.showOn=tomorrowLocal(cur.time||"08:00"); saveTasks(); render(); }
     else if(v==="pickday"){ cur.status="later"; if(!cur.showOn) cur.showOn=tomorrowLocal(cur.time||"08:00"); closeActiveEdit(true); editingId=cur.id; render(); }
+    else if(v==="someday"){ cur.status="later"; cur.showOn=""; saveTasks(); render(); }
     else if(v==="later"){ /* no-op */ }
     else { cur.status=v; cur.showOn=""; saveTasks(); render(); } });
   el.querySelector(".edit").addEventListener("click",()=>{ closeActiveEdit(true); editingId=t.id; render(); });
@@ -1549,7 +1562,7 @@ function renderEditor(t){
         <div class="prislider"><input type="range" id="e-pri" min="1" max="10" value="${t.priority}"><span class="prival" id="e-prival" style="background:${priColor(t.priority)}">${t.priority}</span></div>
       </div>
       <div class="field full"><label>Status</label><select id="e-status">${statusOptionsHtml(t)}</select></div>
-      <div class="field full ${isLater(t)?"":"hidden"}" id="e-showon-wrap"><label>Comes back on</label><div class="reappear-inline"><input type="datetime-local" id="e-showon" value="${t.showOn||""}"><button type="button" class="btn" id="e-tmrw">Tomorrow</button></div></div>
+      <div class="field full ${isScheduledLater(t)?"":"hidden"}" id="e-showon-wrap"><label>Comes back on</label><div class="reappear-inline"><input type="datetime-local" id="e-showon" value="${t.showOn||""}"><button type="button" class="btn" id="e-tmrw">Tomorrow</button></div></div>
       <div class="field full"><label>Notes</label><textarea id="e-notes" placeholder="Anything to remember…">${esc(t.notes)}</textarea></div>
     </div>
     <div class="actions"><button class="btn del-e">Delete</button><button class="btn cancel-e">Cancel</button><button class="btn add save-e">Save</button></div>`;
@@ -1576,6 +1589,7 @@ function renderEditor(t){
     cur.notes=el.querySelector("#e-notes").value.trim();
     const sv=ss.value;
     if(sv==="todo"||sv==="doing"||sv==="done"){ cur.status=sv; cur.showOn=""; }
+    else if(sv==="someday"){ cur.status="later"; cur.showOn=""; }
     else { cur.status="later"; cur.showOn=showon.value||tomorrowLocal(cur.time||"08:00"); }
     editingId=null; saveTasks(); render();
   });
@@ -2607,8 +2621,8 @@ document.getElementById("addBtn").addEventListener("click",()=>{
 });
 
 /* ---------------- toolbar ---------------- */
-["searchInput","sortBy","hideDone","showLater"].forEach(id=>document.getElementById(id).addEventListener("input",render));
-["hideDone","showLater"].forEach(id=>document.getElementById(id).addEventListener("input",saveViewPrefs));
+["searchInput","sortBy","showDone","showLater","showSomeday"].forEach(id=>document.getElementById(id).addEventListener("input",render));
+["showDone","showLater","showSomeday"].forEach(id=>document.getElementById(id).addEventListener("input",saveViewPrefs));
 document.getElementById("deleteCompletedBtn").addEventListener("click",()=>{
   const n=tasks.filter(isDone).length;
   if(!n) return;
@@ -2753,7 +2767,7 @@ function printFilterTasks(opts){
     if(opts.hideCompleted && isDone(t)) return false;
     return true;
   });
-  const tier=t=>isLater(t)?2:isDone(t)?1:0;
+  const tier=t=>isSomeday(t)?3:isScheduledLater(t)?2:isDone(t)?1:0;
   list.sort((a,b)=>(tier(a)-tier(b)) || ((timeToMin(a.time)??1e9)-(timeToMin(b.time)??1e9)) || ((b.priority||0)-(a.priority||0)));
   return list;
 }
@@ -2969,7 +2983,7 @@ function tick(){ const d=new Date(); document.getElementById("clock").innerHTML=
 
 /* ---------------- init ---------------- */
 document.getElementById("datestr").textContent=new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
-{ const vp=loadJSON(K_PREFS); if(vp){ document.getElementById("hideDone").checked=!!vp.hideDone; document.getElementById("showLater").checked=!!vp.showLater; } }
+{ const vp=loadJSON(K_PREFS); if(vp){ document.getElementById("showDone").checked=typeof vp.showDone==="boolean"?vp.showDone:(typeof vp.hideDone==="boolean"?!vp.hideDone:false); document.getElementById("showLater").checked=!!vp.showLater; document.getElementById("showSomeday").checked=!!vp.showSomeday; } }
 updateSoundToggleLabel();
 render(); initSync(); tick(); setInterval(tick,1000);
 </script>
