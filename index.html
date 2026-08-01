@@ -6,7 +6,7 @@
 <title>The Grind</title>
 <style>
   /* ============================================================
-     THE GRIND — personal command center   (v0.5-beta)
+     THE GRIND — personal command center   (v0.6-beta)
      Forked from Family Planner but fully data-isolated: its own Firebase
      path (planners/the-grind-scattabrain-2026) and its own grind.* localStorage keys.
      One day list (multi-profile tags), Places to Go + Shopping + Bills + Quick Notes
@@ -22,6 +22,10 @@
      meaningful states, not just "everyone." Which profiles are enabled is a device-local
      preference (grind.activeProfiles.v1) — never synced through Firebase or import/export,
      same as view prefs and sound.
+     Named focus presets (Work, Home, Everything, …) save a combination of enabled profiles
+     under a name for manual one-click context switching — "Save current" and "Manage presets"
+     next to the profile chips. Presets are device-local (grind.focusPresets.v1), never synced
+     through Firebase or import/export; there's no automatic switching by time, location, or URL.
      A soft completion chime (Web Audio, no external file) plays when an item
      is checked off; toggle it off via Sound: On/Off (device-local setting).
      "Delete completed (N)" clears all done tasks across every profile in one shot.
@@ -158,6 +162,14 @@
   .pfilter:focus-visible { outline:2px solid var(--signal); outline-offset:2px; }
   .pfilter-actions { display:inline-flex; gap:6px; }
   .focus-summary { font-family:var(--mono); font-size:11.5px; color:var(--muted-2); margin:-6px 0 14px; }
+  .preset-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:-6px 0 14px; }
+  .focus-label { font-size:12.5px; font-weight:700; color:var(--muted); margin-right:2px; }
+  .preset-chip { display:inline-flex; align-items:center; font-size:12.5px; font-weight:600; padding:5px 11px; border-radius:99px; background:var(--card); border:1px solid var(--line); cursor:pointer; color:var(--ink); max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .preset-chip.active { border-color:var(--signal); box-shadow:0 0 0 1px var(--signal); color:var(--signal-dim); }
+  .preset-chip:focus-visible { outline:2px solid var(--signal); outline-offset:2px; }
+  .preset-check-list { display:flex; flex-direction:column; gap:2px; margin:4px 0 2px; max-height:260px; overflow-y:auto; }
+  .preset-check-row { display:flex; align-items:center; gap:8px; font-size:13.5px; padding:6px 2px; cursor:pointer; }
+  @media (max-width:480px){ .preset-chip { max-width:100px; } }
   .pb-edit { margin-left:auto; }
 
   .people-editor { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:14px; margin-bottom:14px; box-shadow:var(--shadow); }
@@ -504,6 +516,7 @@
 
   <div class="peoplebar" id="peoplebar"></div>
   <div class="focus-summary" id="focusSummary"></div>
+  <div class="preset-bar" id="presetBar"></div>
   <div class="people-editor hidden" id="peopleEditor"></div>
 
   <div class="panels">
@@ -640,17 +653,25 @@
   </div>
 </div>
 
+<!-- Named focus presets — same body-swap/list-save-edit modal chrome as the BYL templates modal
+     above, reusing its .tpl-modal styling and focus-trap/Escape/backdrop-click pattern. -->
+<div class="tpl-modal-backdrop hidden" id="presetModalBackdrop">
+  <div class="tpl-modal" id="presetModal" role="dialog" aria-modal="true" aria-labelledby="presetModalTitle" tabindex="-1">
+    <div id="presetModalBody"></div>
+  </div>
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
 "use strict";
-const VERSION = "0.5-beta";
+const VERSION = "0.6-beta";
 
 /* ---------------- storage ---------------- */
 /* Grind-namespaced keys — deliberately isolated from the old Family Planner fork's `home.*`
    keys, which live at the same browser origin (GitHub Pages paths don't isolate localStorage).
    Never read from or write to `home.*` here — that data belongs to the other app. */
-const K_TASKS="grind.plan.v1", K_SHOP="grind.shopping.v1", K_PEOPLE="grind.profiles.v1", K_PLACES="grind.places.v1", K_DATES="grind.dates.v1", K_BILLS="grind.bills.v1", K_PREFS="grind.viewprefs.v1", K_NOTES="grind.notes.v1", K_SETTINGS="grind.settings.v1", K_BYL="grind.before-you-leave.v1", K_BYL_TEMPLATES="grind.before-you-leave-templates.v1", K_BYL_TITLE="grind.before-you-leave-title.v1", K_ACTIVE_PROFILES="grind.activeProfiles.v1";
+const K_TASKS="grind.plan.v1", K_SHOP="grind.shopping.v1", K_PEOPLE="grind.profiles.v1", K_PLACES="grind.places.v1", K_DATES="grind.dates.v1", K_BILLS="grind.bills.v1", K_PREFS="grind.viewprefs.v1", K_NOTES="grind.notes.v1", K_SETTINGS="grind.settings.v1", K_BYL="grind.before-you-leave.v1", K_BYL_TEMPLATES="grind.before-you-leave-templates.v1", K_BYL_TITLE="grind.before-you-leave-title.v1", K_ACTIVE_PROFILES="grind.activeProfiles.v1", K_FOCUS_PRESETS="grind.focusPresets.v1";
 function loadJSON(k){ try{ const r=localStorage.getItem(k); if(r) return JSON.parse(r); }catch(e){} return null; }
 function saveTasks(){ try{ localStorage.setItem(K_TASKS, JSON.stringify(tasks)); }catch(e){} pushCloud(); return true; }
 function saveShop(){ try{ localStorage.setItem(K_SHOP, JSON.stringify(shop)); }catch(e){} pushCloud(); }
@@ -669,6 +690,10 @@ function saveBYLTitle(){ try{ localStorage.setItem(K_BYL_TITLE, JSON.stringify(b
    never synced through Firebase and never included in import/export. A missing or malformed
    value defaults to every real profile enabled; a saved empty array is a deliberate "none". */
 function saveActiveProfiles(){ try{ localStorage.setItem(K_ACTIVE_PROFILES, JSON.stringify([...activeProfiles])); }catch(e){} }
+/* Named focus presets (Work, Home, …) — device-local like activeProfiles: never synced through
+   Firebase, never included in import/export. Storing raw arrays, not a Set, since order matters
+   here (display order is preserved for the UI and for "first match wins" tie-breaking). */
+function saveFocusPresets(){ try{ localStorage.setItem(K_FOCUS_PRESETS, JSON.stringify(focusPresets)); }catch(e){} }
 /* Device-local app settings (currently just sound) — deliberately never synced through Firebase,
    never included in the cloud payload, and never touched by import, so each device keeps its own. */
 function saveSettings(){ try{ localStorage.setItem(K_SETTINGS, JSON.stringify(settings)); }catch(e){} }
@@ -704,7 +729,15 @@ function initSync(){
       const v=snap.val();
       if(!v){ pushCloud(true); return; }                 // cloud empty → seed from this device
       remoteApplying=true;
-      if(Array.isArray(v.people)){ people=v.people; const validIds=new Set(people.map(p=>p.id)); const cleaned=new Set([...activeProfiles].filter(id=>validIds.has(id))); if(cleaned.size!==activeProfiles.size){ activeProfiles=cleaned; saveActiveProfiles(); } }
+      if(Array.isArray(v.people)){
+        people=v.people;
+        const validIds=new Set(people.map(p=>p.id));
+        const cleaned=new Set([...activeProfiles].filter(id=>validIds.has(id)));
+        if(cleaned.size!==activeProfiles.size){ activeProfiles=cleaned; saveActiveProfiles(); }
+        let presetsChanged=false;
+        focusPresets.forEach(p=>{ const before=p.profileIds.length; p.profileIds=p.profileIds.filter(id=>validIds.has(id)); if(p.profileIds.length!==before) presetsChanged=true; });
+        if(presetsChanged) saveFocusPresets();
+      }
       if(Array.isArray(v.tasks))  tasks=v.tasks.map(migrateTask);
       if(Array.isArray(v.shop))   shop=v.shop.map(s=>Object.assign(blankShop(),s));
       if(Array.isArray(v.places)) places=v.places.map(migratePlace);   // only overwrite if present → never erased by an old client
@@ -754,6 +787,40 @@ function loadActiveProfiles(){
 }
 let activeProfiles = loadActiveProfiles();
 function uid(p){ return (p||"t")+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+/* A malformed/legacy stored preset must never crash the app — unsalvageable entries (no name)
+   are silently dropped on load; everything else is repaired in place (missing id/timestamps
+   generated, profileIds deduped down to currently-real, non-"family" ids). */
+function sanitizeFocusPreset(raw){
+  if(!raw || typeof raw!=="object") return null;
+  const name=(typeof raw.name==="string"?raw.name:"").trim();
+  if(!name) return null;
+  const validIds=new Set(people.map(p=>p.id));
+  const profileIds=Array.isArray(raw.profileIds) ? [...new Set(raw.profileIds.filter(id=>typeof id==="string" && id!=="family" && validIds.has(id)))] : [];
+  const id=(typeof raw.id==="string" && raw.id.trim()!=="") ? raw.id : uid("fp");
+  const created=Number.isFinite(raw.created) ? raw.created : Date.now();
+  const updated=Number.isFinite(raw.updated) ? raw.updated : created;
+  return { id, name, profileIds, created, updated };
+}
+function loadFocusPresets(){
+  const raw=loadJSON(K_FOCUS_PRESETS);
+  if(!Array.isArray(raw)) return [];
+  return raw.map(sanitizeFocusPreset).filter(Boolean);
+}
+let focusPresets = loadFocusPresets();
+/* Reorders a profile-id list to match current people[] display order — used whenever a preset's
+   profileIds are written, so stored order always reflects "who's shown first", not click order. */
+function orderedProfileIds(ids){
+  const set=new Set(ids);
+  return people.filter(p=>set.has(p.id)).map(p=>p.id);
+}
+/* First saved preset (in stable array/display order) whose profile set exactly matches the
+   currently-enabled profiles — null means the current focus is "Custom" (no exact match). */
+function matchedFocusPreset(){
+  for(const p of focusPresets){
+    if(p.profileIds.length===activeProfiles.size && p.profileIds.every(id=>activeProfiles.has(id))) return p;
+  }
+  return null;
+}
 function getPerson(id){
   if(id==="family") return {id:"family",name:"All",color:"#8595A8"};
   const p=people.find(x=>x.id===id); return p || {id:"",name:"Unassigned",color:"#3A4757",none:true};
@@ -1100,6 +1167,15 @@ function focusSuffixText(){
   const names=people.filter(p=>activeProfiles.has(p.id)).map(p=>p.name);
   return ` for ${names.join(", ")}`;
 }
+/* Applying a preset only ever swaps activeProfiles and re-renders — every focus-aware section
+   keeps using focusMatch()/activeProfiles exactly as before, no separate filtering path. */
+function applyFocusPreset(id){
+  const p=focusPresets.find(x=>x.id===id); if(!p) return;
+  const validIds=new Set(people.map(x=>x.id));
+  activeProfiles=new Set(p.profileIds.filter(pid=>validIds.has(pid)));
+  saveActiveProfiles();
+  render();
+}
 
 /* ---------------- next up ---------------- */
 function personVisible(t){ return focusMatch(taskPeopleIds(t)); }
@@ -1175,6 +1251,7 @@ function currentView(){
 function render(){
   normalizeLater();
   renderPeopleBar();
+  renderPresetBar();
   renderNotes();
   renderShop();
   renderPlaces();
@@ -1241,6 +1318,20 @@ function renderPeopleBar(){
   }
 }
 
+function renderPresetBar(){
+  const bar=document.getElementById("presetBar"); if(!bar) return;
+  const matched=matchedFocusPreset();
+  const chips=focusPresets.map(p=>`<button class="preset-chip ${matched&&matched.id===p.id?'active':''}" data-id="${esc(p.id)}" aria-pressed="${!!(matched&&matched.id===p.id)}" title="${esc(p.name)}">${esc(p.name)}</button>`).join("");
+  bar.innerHTML=`<span class="focus-label" id="focusLabel">Focus: ${matched?esc(matched.name):"Custom"}</span>${chips}<button class="btn sm" id="presetSaveBtn">Save current</button><button class="btn sm" id="presetManageBtn">Manage presets</button>`;
+  bar.querySelectorAll(".preset-chip").forEach(b=>b.addEventListener("click",()=>applyFocusPreset(b.dataset.id)));
+  const saveBtn=bar.querySelector("#presetSaveBtn");
+  saveBtn.addEventListener("pointerdown",e=>{ if(!e.isPrimary||e.button!==0) return; e.preventDefault(); closeActiveEdit(false); e.currentTarget.focus(); });
+  saveBtn.addEventListener("click",()=>openPresetModal("save"));
+  const manageBtn=bar.querySelector("#presetManageBtn");
+  manageBtn.addEventListener("pointerdown",e=>{ if(!e.isPrimary||e.button!==0) return; e.preventDefault(); closeActiveEdit(false); e.currentTarget.focus(); });
+  manageBtn.addEventListener("click",()=>openPresetModal("manage"));
+}
+
 function togglePeopleEditor(){ closeActiveEdit(true); const pe=document.getElementById("peopleEditor"); pe.classList.toggle("hidden"); if(!pe.classList.contains("hidden")) renderPeopleEditor(); }
 function renderPeopleEditor(){
   const pe=document.getElementById("peopleEditor");
@@ -1263,7 +1354,7 @@ function renderPeopleEditor(){
       else if(e.key==="Escape"){ e.preventDefault(); const person=people.find(x=>x.id===id); nameInput.value=person?person.name:""; nameInput.blur(); }
     });
     row.querySelector(".swatch").addEventListener("click",()=>{ const person=people.find(x=>x.id===id); if(!person) return; const i=PALETTE.indexOf(person.color); person.color=PALETTE[(i+1)%PALETTE.length]; savePeople(); renderPeopleEditor(); renderPeopleBar(); render(); });
-    row.querySelector(".rm").addEventListener("click",()=>{ const person=people.find(x=>x.id===id); if(!person) return; if(confirm(`Remove ${person.name}? They'll be removed from any assigned items.`)){ people=people.filter(x=>x.id!==id); tasks.forEach(t=>{ t.people=taskPeopleIds(t).filter(x=>x!==id); }); places.forEach(pl=>{ pl.people=normPeople(pl.people).filter(x=>x!==id); }); importantDates.forEach(dt=>{ dt.people=normPeople(dt.people).filter(x=>x!==id); }); bills.forEach(bill=>{ bill.people=normPeople(bill.people).filter(x=>x!==id); }); activeProfiles.delete(id); savePeople(); saveTasks(); savePlaces(); saveDates(); saveBills(); saveActiveProfiles(); renderPeopleEditor(); render(); } });
+    row.querySelector(".rm").addEventListener("click",()=>{ const person=people.find(x=>x.id===id); if(!person) return; if(confirm(`Remove ${person.name}? They'll be removed from any assigned items.`)){ people=people.filter(x=>x.id!==id); tasks.forEach(t=>{ t.people=taskPeopleIds(t).filter(x=>x!==id); }); places.forEach(pl=>{ pl.people=normPeople(pl.people).filter(x=>x!==id); }); importantDates.forEach(dt=>{ dt.people=normPeople(dt.people).filter(x=>x!==id); }); bills.forEach(bill=>{ bill.people=normPeople(bill.people).filter(x=>x!==id); }); activeProfiles.delete(id); focusPresets.forEach(p=>{ p.profileIds=p.profileIds.filter(x=>x!==id); }); savePeople(); saveTasks(); savePlaces(); saveDates(); saveBills(); saveActiveProfiles(); saveFocusPresets(); renderPeopleEditor(); render(); } });
   });
   pe.querySelector("#peAdd").addEventListener("click",()=>{ const color=PALETTE[people.length%PALETTE.length]; people.push({id:uid("p"),name:"New profile",color}); savePeople(); renderPeopleEditor(); render(); });
 }
@@ -1948,6 +2039,192 @@ document.getElementById("bylSaveTemplateBtn").addEventListener("click",()=>{
   if(!beforeYouLeave.length){ alert("Add at least one item to Before You Leave before saving a template."); return; }
   openTplModal("save");
 });
+
+/* =====================================================================
+   NAMED FOCUS PRESETS
+   Same modal chrome as the BYL templates modal above (list/save/edit
+   views swapped into one #presetModalBackdrop/#presetModal, focus trap,
+   Escape, backdrop click, focus restore). A preset is nothing more than
+   a named, saved activeProfiles combination — applying one only ever
+   swaps activeProfiles and calls render(); it never touches planner data
+   or introduces a second filtering path (see applyFocusPreset() above).
+   ===================================================================== */
+let presetPrevFocus=null, presetView="manage", presetEditId=null, presetDraft=null, presetDraftDirty=false;
+function openPresetModal(view){
+  closeActiveEdit(false); // opening this modal must never commit/save whatever inline edit was active
+  presetPrevFocus=document.activeElement;
+  presetEditId=null; presetDraft=null; presetDraftDirty=false;
+  presetView=view||"manage";
+  renderPresetModal();
+  document.getElementById("presetModalBackdrop").classList.remove("hidden");
+  document.addEventListener("keydown", presetModalKeyHandler, true);
+  document.getElementById("presetModal").focus();
+}
+function closePresetModal(){
+  document.getElementById("presetModalBackdrop").classList.add("hidden");
+  document.removeEventListener("keydown", presetModalKeyHandler, true);
+  presetEditId=null; presetDraft=null; presetDraftDirty=false;
+  if(presetPrevFocus && typeof presetPrevFocus.focus==="function") presetPrevFocus.focus();
+  presetPrevFocus=null;
+}
+function requestClosePresetModal(){
+  if(presetView==="edit" && presetDraftDirty){ if(!confirm("Discard unsaved changes to this preset?")) return; }
+  closePresetModal();
+}
+function presetModalKeyHandler(e){
+  if(e.key==="Escape"){
+    e.preventDefault();
+    if(presetView==="edit") cancelEditFocusPreset(); else requestClosePresetModal();
+    return;
+  }
+  if(e.key!=="Tab") return;
+  const modal=document.getElementById("presetModal");
+  const focusables=[...modal.querySelectorAll('button,input,select,[tabindex]:not([tabindex="-1"])')].filter(el=>!el.disabled && el.offsetParent!==null);
+  if(!focusables.length) return;
+  const first=focusables[0], last=focusables[focusables.length-1];
+  if(document.activeElement===modal || !modal.contains(document.activeElement)){ e.preventDefault(); (e.shiftKey?last:first).focus(); }
+  else if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
+  else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
+}
+document.getElementById("presetModalBackdrop").addEventListener("mousedown",e=>{ if(e.target.id==="presetModalBackdrop"){ e.preventDefault(); requestClosePresetModal(); } });
+
+function renderPresetModal(){
+  const body=document.getElementById("presetModalBody");
+  if(presetView==="edit") body.innerHTML=presetEditHtml();
+  else if(presetView==="save") body.innerHTML=presetSaveHtml();
+  else body.innerHTML=presetListHtml();
+  wirePresetModalBody();
+}
+function presetListHtml(){
+  const head=`<h2 id="presetModalTitle">Manage focus presets</h2>`;
+  if(!focusPresets.length){
+    return head+`<div class="tpl-empty">No saved presets yet.</div><div class="pm-actions"><button class="btn" id="presetCloseBtn">Close</button></div>`;
+  }
+  const cards=focusPresets.map((p,i)=>{
+    const names = p.profileIds.length ? p.profileIds.map(id=>{ const per=people.find(x=>x.id===id); return per?esc(per.name):null; }).filter(Boolean).join(", ") : "Shared only";
+    return `<div class="tpl-card" data-id="${esc(p.id)}">
+      <div class="tpl-card-info"><div class="tpl-card-name">${esc(p.name)}</div><div class="tpl-card-count">${names}</div></div>
+      <div class="tpl-card-actions">
+        <button class="btn sm preset-up" title="Move up" aria-label="Move ${esc(p.name)} up" ${i===0?"disabled":""}>↑</button>
+        <button class="btn sm preset-down" title="Move down" aria-label="Move ${esc(p.name)} down" ${i===focusPresets.length-1?"disabled":""}>↓</button>
+        <button class="btn sm preset-edit" aria-label="Edit ${esc(p.name)}">Edit</button>
+        <button class="btn sm preset-dup" aria-label="Duplicate ${esc(p.name)}">Duplicate</button>
+        <button class="btn sm preset-del" aria-label="Delete ${esc(p.name)}">Delete</button>
+      </div>
+    </div>`;
+  }).join("");
+  return head+`<div class="tpl-list">${cards}</div><div class="pm-actions"><button class="btn" id="presetCloseBtn">Close</button></div>`;
+}
+function presetSaveHtml(){
+  return `<h2 id="presetModalTitle">Save current focus</h2>
+    <div class="pm-sub">Saves which profiles are enabled right now as a reusable, named preset.</div>
+    <div class="field"><label for="presetSaveName">Preset name</label><input type="text" id="presetSaveName" value="" placeholder="e.g. Work" aria-label="Preset name"></div>
+    <div class="pm-actions"><button class="btn" id="presetSaveCancel">Cancel</button><button class="btn add" id="presetSaveConfirm">Save</button></div>`;
+}
+function presetEditHtml(){
+  const d=presetDraft;
+  const checks=people.map(p=>`<label class="preset-check-row"><input type="checkbox" class="preset-check" data-id="${esc(p.id)}" ${d.profileIds.includes(p.id)?"checked":""}> ${esc(p.name)}</label>`).join("");
+  return `<h2 id="presetModalTitle">Edit preset</h2>
+    <div class="field"><label for="presetEditName">Preset name</label><input type="text" id="presetEditName" value="${esc(d.name)}" aria-label="Preset name"></div>
+    <div class="preset-check-list">${checks || `<div class="tpl-empty">No profiles exist yet.</div>`}</div>
+    <div class="pm-actions"><button class="btn" id="presetEditCancel">Cancel</button><button class="btn add" id="presetEditSave">Save</button></div>`;
+}
+function wirePresetModalBody(){
+  const body=document.getElementById("presetModalBody");
+  if(presetView==="manage"){
+    body.querySelectorAll(".tpl-card").forEach(card=>{
+      const id=card.dataset.id;
+      card.querySelector(".preset-edit").addEventListener("click",()=>startEditFocusPreset(id));
+      card.querySelector(".preset-dup").addEventListener("click",()=>duplicateFocusPreset(id));
+      card.querySelector(".preset-del").addEventListener("click",()=>deleteFocusPreset(id));
+      const upBtn=card.querySelector(".preset-up"); if(!upBtn.disabled) upBtn.addEventListener("click",()=>moveFocusPreset(id,-1));
+      const downBtn=card.querySelector(".preset-down"); if(!downBtn.disabled) downBtn.addEventListener("click",()=>moveFocusPreset(id,1));
+    });
+    const closeBtn=body.querySelector("#presetCloseBtn"); if(closeBtn) closeBtn.addEventListener("click",closePresetModal);
+  } else if(presetView==="save"){
+    const nameInp=body.querySelector("#presetSaveName");
+    body.querySelector("#presetSaveCancel").addEventListener("click",closePresetModal);
+    body.querySelector("#presetSaveConfirm").addEventListener("click",()=>confirmSaveFocusPreset(nameInp.value));
+    nameInp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); confirmSaveFocusPreset(nameInp.value); } });
+  } else if(presetView==="edit"){
+    wirePresetEditView();
+  }
+}
+function startEditFocusPreset(id){
+  const p=focusPresets.find(x=>x.id===id); if(!p) return;
+  presetEditId=id; presetDraft={ name:p.name, profileIds:[...p.profileIds] }; presetDraftDirty=false;
+  presetView="edit"; renderPresetModal();
+}
+function wirePresetEditView(){
+  const body=document.getElementById("presetModalBody");
+  const nameInp=body.querySelector("#presetEditName");
+  nameInp.addEventListener("input",()=>{ presetDraft.name=nameInp.value; presetDraftDirty=true; });
+  body.querySelectorAll(".preset-check").forEach(cb=>{
+    cb.addEventListener("change",()=>{
+      const id=cb.dataset.id;
+      if(cb.checked){ if(!presetDraft.profileIds.includes(id)) presetDraft.profileIds.push(id); }
+      else{ presetDraft.profileIds=presetDraft.profileIds.filter(x=>x!==id); }
+      presetDraftDirty=true;
+    });
+  });
+  body.querySelector("#presetEditCancel").addEventListener("click",cancelEditFocusPreset);
+  body.querySelector("#presetEditSave").addEventListener("click",saveEditFocusPreset);
+}
+function cancelEditFocusPreset(){
+  if(presetDraftDirty && !confirm("Discard unsaved changes to this preset?")) return;
+  presetEditId=null; presetDraft=null; presetDraftDirty=false;
+  presetView="manage"; renderPresetModal();
+}
+function saveEditFocusPreset(){
+  const name=(presetDraft.name||"").toString().trim();
+  if(!name){ alert("Enter a preset name."); return; }
+  const p=focusPresets.find(x=>x.id===presetEditId);
+  if(p){ p.name=name; p.profileIds=orderedProfileIds(presetDraft.profileIds); p.updated=Date.now(); saveFocusPresets(); }
+  presetEditId=null; presetDraft=null; presetDraftDirty=false;
+  presetView="manage"; renderPresetModal();
+  renderPresetBar();
+}
+function confirmSaveFocusPreset(nameRaw){
+  const name=(nameRaw||"").toString().trim();
+  if(!name){ alert("Enter a preset name."); return; }
+  const profileIds=orderedProfileIds([...activeProfiles]);
+  const existing=focusPresets.find(p=>p.name===name);
+  if(existing){
+    if(!confirm(`A preset named "${existing.name}" already exists. Replace its saved profile combination?`)) return;
+    existing.profileIds=profileIds;
+    existing.updated=Date.now();
+  } else {
+    focusPresets.push({ id:uid("fp"), name, profileIds, created:Date.now(), updated:Date.now() });
+  }
+  saveFocusPresets();
+  closePresetModal();
+  renderPresetBar();
+}
+function duplicateFocusPreset(id){
+  const p=focusPresets.find(x=>x.id===id); if(!p) return;
+  const now=Date.now();
+  const idx=focusPresets.indexOf(p);
+  focusPresets.splice(idx+1,0,{ id:uid("fp"), name:`${p.name} — Copy`, profileIds:[...p.profileIds], created:now, updated:now });
+  saveFocusPresets();
+  renderPresetModal();
+  renderPresetBar();
+}
+function deleteFocusPreset(id){
+  const p=focusPresets.find(x=>x.id===id); if(!p) return;
+  if(!confirm(`Permanently delete the "${p.name}" focus preset?`)) return;
+  focusPresets=focusPresets.filter(x=>x.id!==id);
+  saveFocusPresets();
+  renderPresetModal();
+  renderPresetBar();
+}
+function moveFocusPreset(id, dir){
+  const idx=focusPresets.findIndex(x=>x.id===id); if(idx<0) return;
+  const newIdx=idx+dir; if(newIdx<0 || newIdx>=focusPresets.length) return;
+  [focusPresets[idx],focusPresets[newIdx]]=[focusPresets[newIdx],focusPresets[idx]];
+  saveFocusPresets();
+  renderPresetModal();
+  renderPresetBar();
+}
 
 function wireInlineBillText(node, billId, field, ariaLabel, required){
   node.classList.add("editable"); node.tabIndex=0; node.setAttribute("role","button"); node.setAttribute("aria-label",ariaLabel);
