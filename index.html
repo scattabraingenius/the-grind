@@ -6,7 +6,7 @@
 <title>The Grind</title>
 <style>
   /* ============================================================
-     THE GRIND — personal command center   (v0.8-beta)
+     THE GRIND — personal command center   (v0.9-beta)
      Forked from Family Planner but fully data-isolated: its own Firebase
      path (planners/the-grind-scattabrain-2026) and its own grind.* localStorage keys.
      One day list (multi-profile tags) with Done/Later/Someday views, Places to Go + Shopping + Bills + Quick Notes
@@ -28,6 +28,12 @@
      Print button opens a Print Center: builds a separate, printer- and fridge-friendly
      sheet (Fridge Sheet / Full Planner) from current data — the on-screen dashboard
      itself is never printed and is never touched while building it.
+     Linked Family Planner tasks (Daddy): a read-only view into Daddy's Family Planner tasks
+     (private + family-wide), shown in the main list only while the Daddy profile is in focus.
+     Family Planner remains the sole source of truth — linked tasks are never copied into
+     grind.plan.v1, The Grind's own Firebase payload, or its JSON export/import; only a status
+     change (To do/Doing/Done) writes back, via a guarded, ID-based Firebase transaction into
+     Family Planner's own node.
      Optional live cloud sync across devices (Firebase — see config block).
      Self-contained, offline, saves to localStorage.
      Edit SEED_PEOPLE / palette to taste.
@@ -133,6 +139,8 @@
   .bar > span { display:block; height:100%; width:0%; background:linear-gradient(90deg,var(--signal),#23B877); border-radius:99px; transition:width .35s ease; }
   .util { display:flex; gap:8px; align-items:center; }
   .sync-badge { font-family:var(--mono); font-size:11px; font-weight:600; margin-right:2px; white-space:nowrap; }
+  .family-link-status { font-family:var(--mono); font-size:11px; color:var(--muted-2); white-space:nowrap; }
+  .family-link-status:empty { display:none; }
 
   .btn { font-family:var(--sans); font-size:13px; font-weight:600; border:1px solid var(--line); background:var(--card); color:var(--ink); padding:8px 12px; border-radius:10px; cursor:pointer; box-shadow:var(--shadow); white-space:nowrap; }
   .btn:hover { border-color:var(--muted-2); }
@@ -278,6 +286,9 @@
   .row.done { opacity:.5; background:var(--done-bg); }
   .row.done .task-title { text-decoration:line-through; color:var(--muted); }
   .row.parked { opacity:.62; background:var(--done-bg); border-left-color:#9B87F5; }
+  .row.linked { border-left-color:var(--signal-dim); }
+  .row.linked .pri, .row.linked .task-title, .row.linked .cell-time { cursor:default; }
+  .linked-tag { font-family:var(--mono); font-size:9.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--muted-2); border:1px solid var(--line); border-radius:99px; padding:2px 7px; white-space:nowrap; }
 
   .cbx { appearance:none; -webkit-appearance:none; width:20px; height:20px; border:2px solid var(--muted-2); border-radius:6px; cursor:pointer; position:relative; flex:none; background:var(--card); }
   .cbx:checked { background:#23B877; border-color:#23B877; }
@@ -477,6 +488,7 @@
       </div>
       <div class="util">
         <span class="sync-badge" id="syncBadge"></span>
+        <span class="family-link-status" id="familyLinkStatus"></span>
         <button class="btn sm" id="soundToggle">Sound: On</button>
         <button class="btn sm" id="printBtn">🖨 Print</button>
         <button class="btn sm" id="exportBtn">Export</button>
@@ -646,7 +658,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
 "use strict";
-const VERSION = "0.8-beta";
+const VERSION = "0.9-beta";
 
 /* ---------------- storage ---------------- */
 /* Grind-namespaced keys — deliberately isolated from the old Family Planner fork's `home.*`
@@ -709,6 +721,7 @@ function initSync(){
       const v=snap.val();
       if(!v){ pushCloud(true); return; }                 // cloud empty → seed from this device
       remoteApplying=true;
+      let daddyRepaired=false;
       if(Array.isArray(v.people)){
         people=v.people;
         const validIds=new Set(people.map(p=>p.id));
@@ -717,6 +730,13 @@ function initSync(){
         let presetsChanged=false;
         focusPresets.forEach(p=>{ const before=p.profileIds.length; p.profileIds=p.profileIds.filter(id=>validIds.has(id)); if(p.profileIds.length!==before) presetsChanged=true; });
         if(presetsChanged) saveFocusPresets();
+        // Self-healing: if a remote `people` snapshot ever raced with a locally-added-but-not-yet-
+        // pushed Daddy profile, re-add it locally — idempotent, never creates a duplicate (see
+        // ensureGrindDaddyProfile). savePeople() writes localStorage here regardless, but pushCloud()
+        // silently no-ops while remoteApplying is still true, so the repair alone would otherwise
+        // never reach Grind's own Firebase node — daddyRepaired defers that push to just below,
+        // after remoteApplying is reset to false.
+        if(daddyFamilyId) daddyRepaired=ensureGrindDaddyProfile();
       }
       if(Array.isArray(v.tasks))  tasks=v.tasks.map(migrateTask);
       if(Array.isArray(v.shop))   shop=v.shop.map(s=>Object.assign(blankShop(),s));
@@ -728,6 +748,11 @@ function initSync(){
       if(typeof v.beforeYouLeaveTitle==="string" && v.beforeYouLeaveTitle.trim()!=="") bylTitle=normalizeBYLTitle(v.beforeYouLeaveTitle);  // malformed/blank remote titles must never overwrite the local title
       try{ localStorage.setItem(K_PEOPLE,JSON.stringify(people)); localStorage.setItem(K_TASKS,JSON.stringify(tasks)); localStorage.setItem(K_SHOP,JSON.stringify(shop)); localStorage.setItem(K_PLACES,JSON.stringify(places)); localStorage.setItem(K_DATES,JSON.stringify(importantDates)); localStorage.setItem(K_BILLS,JSON.stringify(bills)); localStorage.setItem(K_NOTES,JSON.stringify(notes)); localStorage.setItem(K_BYL,JSON.stringify(beforeYouLeave)); localStorage.setItem(K_BYL_TITLE,JSON.stringify(bylTitle)); }catch(e){}
       remoteApplying=false;
+      // Repair push happens strictly after remoteApplying is reset, so it goes through the normal
+      // guard exactly like any other local change — never bypassing it, never firing while a remote
+      // snapshot is still being applied, and (since ensureGrindDaddyProfile is idempotent and the
+      // next snapshot will already contain Daddy) never looping.
+      if(daddyRepaired) pushCloud();
       // Data is always safe to merge in (every commit path re-fetches its entity by id), but a full render()
       // would blow away a focused inline editor's DOM — so defer the redraw until editing ends.
       if(!editingActive()) render(); else pendingRemoteRender=true;
@@ -750,6 +775,65 @@ function updateSyncBadge(on){
   el.textContent = on ? "● Synced" : "● Offline"; el.style.color = on ? "#23B877" : "var(--star)";
   el.title = on ? "Live sync on" : "Reconnecting…";
 }
+/* Restrained, shown only where useful — silent when Firebase isn't configured at all (that's
+   already communicated by the sync badge above) and silent once things are working normally.
+   A write failure shows for exactly the render pass it triggers, then clears itself. */
+function renderFamilyLinkStatus(){
+  const el=document.getElementById("familyLinkStatus"); if(!el) return;
+  if(familyWriteErrorFlag){ el.textContent="Family link: couldn't save that change"; familyWriteErrorFlag=false; return; }
+  if(!syncConfigured()){ el.textContent=""; return; }
+  el.textContent = familyLinkOk ? "" : "Family link unavailable";
+}
+
+/* =====================================================================
+   FAMILY PLANNER LINK (read-only, Daddy only) — v0.9
+   A completely separate Firebase reference into Family Planner's own node
+   (planners/ccafc-home), never the-grind's own ref/payload. The Grind only
+   ever reads `people`/`tasks` from it; it writes back ONLY when the user
+   changes a linked task's status, via an ID-based transaction (see
+   writeLinkedTaskStatus below) — never set(), never a blind array write.
+   Family Planner remains the sole source of truth: linked tasks are never
+   copied into `tasks`/grind.plan.v1/the Grind's own Firebase payload/export.
+   applyFamilySnapshot() is a standalone function (not inlined in the on("value")
+   callback) so it can also be driven directly by a mocked snapshot in tests,
+   without touching real Firebase.
+   ===================================================================== */
+const FAMILY_APP_ID="ccafc-home";
+let familyDb=null;
+let familyPeopleSnapshot=[], familyTasksSnapshot=[];
+let daddyFamilyId=null, grindDaddyProfileId=null, familyLinkOk=false, familyWriteErrorFlag=false;
+function applyFamilySnapshot(v){
+  familyPeopleSnapshot=(v && Array.isArray(v.people)) ? v.people : [];
+  familyTasksSnapshot=(v && Array.isArray(v.tasks)) ? v.tasks : [];
+  resolveDaddyProfile();
+  if(!editingActive()) render(); else pendingRemoteRender=true;
+}
+function initFamilyLink(){
+  if(!syncConfigured()) return; // no Firebase configured at all — Grind loads normally, link simply stays off
+  try{
+    familyDb=firebase.database().ref("planners/"+FAMILY_APP_ID);
+    familyDb.on("value", snap=>applyFamilySnapshot(snap.val()), ()=>{ familyLinkOk=false; if(!editingActive()) render(); });
+  }catch(e){ /* family link unavailable — never blocks the rest of the app */ }
+}
+/* Guards against duplicate writes from one click; also lets a failed/aborted transaction show a
+   single restrained status line without any manual state reconciliation — the linked task's
+   displayed value always comes straight from familyTasksSnapshot, so nothing to "roll back". */
+let linkedWriteInFlight=new Set();
+function writeLinkedTaskStatus(sourceId, newStatus){
+  if(!familyDb || linkedWriteInFlight.has(sourceId)) return;
+  linkedWriteInFlight.add(sourceId);
+  familyDb.child("tasks").transaction(current=>{
+    if(!Array.isArray(current)) return; // nothing to update against — abort safely
+    const idx=current.findIndex(x=>x && x.id===sourceId);
+    if(idx<0) return; // source task no longer exists — abort safely
+    const next=current.slice();
+    next[idx]=Object.assign({}, next[idx], { status:newStatus, showOn:"" });
+    return next;
+  }, (error, committed)=>{
+    linkedWriteInFlight.delete(sourceId);
+    if(error || !committed){ familyWriteErrorFlag=true; if(!editingActive()) render(); }
+  });
+}
 
 /* ---------------- profiles + palette ---------------- */
 const PALETTE=["#16BBD4","#F06595","#9B87F5","#F2A81D","#23B877","#F0575C","#3B97E6","#E8A0C0"];
@@ -757,6 +841,30 @@ const SEED_PEOPLE=[
   {id:"p1",name:"Scatta",color:"#A855F7"},
 ];
 let people = loadJSON(K_PEOPLE) || SEED_PEOPLE.slice();
+/* Stable id so the linked Daddy profile is reused across reloads/devices instead of being
+   recreated — but if a "Daddy" profile already exists under some OTHER id (e.g. the user made
+   one before this feature existed), that one is reused as-is and never duplicated or re-id'd. */
+const GRIND_DADDY_ID="linked-family-daddy";
+/* Returns true only when it actually added Daddy (so a caller running inside a remoteApplying
+   window — see the-grind's own sync handler below — knows a repair push is owed once that window
+   closes; pushCloud() silently no-ops while remoteApplying, so the caller must trigger it after). */
+function ensureGrindDaddyProfile(){
+  const byId=people.find(p=>p.id===GRIND_DADDY_ID);
+  if(byId){ grindDaddyProfileId=GRIND_DADDY_ID; return false; }
+  const byName=people.find(p=>typeof p.name==="string" && p.name.trim().toLowerCase()==="daddy");
+  if(byName){ grindDaddyProfileId=byName.id; return false; }
+  people.push({ id:GRIND_DADDY_ID, name:"Daddy", color:"#9B87F5" });
+  grindDaddyProfileId=GRIND_DADDY_ID;
+  savePeople();
+  return true;
+}
+/* Resolved once per family snapshot, matched case-insensitively after trimming; task matching
+   afterward always uses the cached daddyFamilyId, never a fresh by-name search per task. */
+function resolveDaddyProfile(){
+  const daddy=familyPeopleSnapshot.find(p=>p && typeof p.id==="string" && typeof p.name==="string" && p.name.trim().toLowerCase()==="daddy");
+  if(daddy){ daddyFamilyId=daddy.id; familyLinkOk=true; ensureGrindDaddyProfile(); }
+  else { daddyFamilyId=null; familyLinkOk=false; }
+}
 function loadActiveProfiles(){
   let raw;
   try{ const r=localStorage.getItem(K_ACTIVE_PROFILES); raw = r!=null ? JSON.parse(r) : undefined; }catch(e){ raw = undefined; }
@@ -1069,6 +1177,45 @@ function dueBadge(t){ if(!t.due||isDone(t)) return "";
 /* A parked task returns at the start of its selected local calendar day; the task time remains available for scheduling/Up Next and must not delay its return from Later. */
 function normalizeLater(){ let ch=false; const today=todayStr(); tasks.forEach(t=>{ if(isLater(t)&&typeof t.showOn==="string"&&/^\d{4}-\d{2}-\d{2}/.test(t.showOn)&&t.showOn.slice(0,10)<=today){ t.status="todo"; t.showOn=""; ch=true; } }); if(ch) saveTasks(); return ch; }
 
+/* ---------------- linked Family Planner tasks (Daddy) ---------------- */
+/* Same calendar-day rollover rule as normalizeLater(), but derived at display time only — a linked
+   task is never mutated in memory or written back merely because it's stale. The normalized status
+   is written to Family Planner only if/when the user next explicitly changes this task (see
+   writeLinkedTaskStatus). This avoids any write-on-snapshot-arrival loop. */
+function linkedEffectiveStatus(raw){
+  if(raw.status==="later" && typeof raw.showOn==="string" && /^\d{4}-\d{2}-\d{2}/.test(raw.showOn) && raw.showOn.slice(0,10)<=todayStr()) return "todo";
+  return typeof raw.status==="string" ? raw.status : "todo";
+}
+/* Daddy's private Family Planner tasks, plus Family Planner's own family-wide tasks (both apply to
+   Daddy) — represented here purely as Daddy-linked tasks, never as Grind's own "family" concept and
+   never bringing in any other Family Planner profile. Recomputed fresh on every render; never cached
+   or written to localStorage — Family Planner remains the only source of truth for this data. */
+function daddyLinkedTasks(){
+  if(!daddyFamilyId) return [];
+  return familyTasksSnapshot.filter(raw=>raw && typeof raw==="object" && typeof raw.id==="string").filter(raw=>{
+    const ids=Array.isArray(raw.people) ? raw.people.filter(x=>typeof x==="string") : [];
+    return ids.includes(daddyFamilyId) || ids.includes("family");
+  }).map(raw=>{
+    const status=linkedEffectiveStatus(raw);
+    return {
+      id: "linked-"+raw.id,
+      sourceId: raw.id,
+      linked: true,
+      task: typeof raw.task==="string" ? raw.task : "",
+      time: typeof raw.time==="string" ? raw.time : "",
+      due: typeof raw.due==="string" ? raw.due : "",
+      dueTime: typeof raw.dueTime==="string" ? raw.dueTime : "",
+      priority: typeof raw.priority==="number" ? raw.priority : 5,
+      notes: typeof raw.notes==="string" ? raw.notes : "",
+      status,
+      showOn: status==="later" ? raw.showOn : "",
+      created: typeof raw.created==="number" ? raw.created : 0,
+      people: grindDaddyProfileId ? [grindDaddyProfileId] : [],
+    };
+  });
+}
+function daddyLinkedVisible(){ return !!(grindDaddyProfileId && activeProfiles.has(grindDaddyProfileId)); }
+
 /* ---------------- important-date status / countdown ---------------- */
 function isDateRange(d){ return !!d.startDate && !!d.endDate && d.endDate!==d.startDate; }
 function dateEndMoment(d){ const endYmd=d.endDate||d.startDate; if(!endYmd) return null; const tm=/^\d{2}:\d{2}$/.test(d.endTime||"")?d.endTime:"23:59"; return localMoment(endYmd,tm); }
@@ -1141,7 +1288,11 @@ function applyFocusPreset(id){
 
 /* ---------------- next up ---------------- */
 function personVisible(t){ return focusMatch(taskPeopleIds(t)); }
-/* Up Next = soonest FUTURE timed task today. Missed (past-time) tasks are flagged in their row, not here. */
+/* Up Next = soonest FUTURE timed task today. Missed (past-time) tasks are flagged in their row, not here.
+   Deliberately native-tasks-only (v0.9): Up Next wires full inline editing (title/people/time/due) by
+   task id, and a linked Family task must stay read-only — doing that safely would mean building a
+   second, parallel read-only Up Next renderer. Linked tasks still appear in the main list and in
+   today's progress count; see the v0.9 final report for this trade-off. */
 function computeNextUp(){
   const nm=nowMin();
   const c=tasks.filter(t=>isActive(t)&&isToday(t)&&personVisible(t)&&timeToMin(t.time)!=null&&timeToMin(t.time)>=nm);
@@ -1186,14 +1337,13 @@ function makeWhoPicker(container, initial, onChange){
 /* ---------------- render ---------------- */
 const listEl=document.getElementById("list"), nextEl=document.getElementById("nextup");
 
-function currentView(){
+function filteredTaskList(sourceTasks, keepEditingId){
   const q=document.getElementById("searchInput").value.trim().toLowerCase();
-  const sort=document.getElementById("sortBy").value;
   const showDone=document.getElementById("showDone").checked;
   const showLater=document.getElementById("showLater").checked;
   const showSomeday=document.getElementById("showSomeday").checked;
-  let v=tasks.filter(t=>{
-    if(t.id===editingId) return true; // an active draft/editor must never disappear behind view filters
+  return sourceTasks.filter(t=>{
+    if(keepEditingId!=null && t.id===keepEditingId) return true; // an active draft/editor must never disappear behind view filters
     if(!personVisible(t)) return false;
     if(isScheduledLater(t)&&!showLater) return false;
     if(isSomeday(t)&&!showSomeday) return false;
@@ -1201,6 +1351,9 @@ function currentView(){
     if(q){ const names=taskPeopleIds(t).map(id=>getPerson(id).name).join(" "); const hay=[t.task,t.notes,names].join(" ").toLowerCase(); if(!hay.includes(q)) return false; }
     return true;
   });
+}
+function sortTaskList(list){
+  const sort=document.getElementById("sortBy").value;
   const cmp={
     time:(a,b)=>(timeToMin(a.time)??1e9)-(timeToMin(b.time)??1e9),
     priority:(a,b)=>(b.priority||0)-(a.priority||0),
@@ -1209,8 +1362,16 @@ function currentView(){
   }[sort] || ((a,b)=>0);
   const secondary=(a,b)=> ((b.priority||0)-(a.priority||0)) || ((timeToMin(a.time)??1e9)-(timeToMin(b.time)??1e9));
   const tier=t=>isSomeday(t)?3:isScheduledLater(t)?2:isDone(t)?1:0;
-  v.sort((a,b)=>(tier(a)-tier(b)) || cmp(a,b) || secondary(a,b));
-  return v;
+  return [...list].sort((a,b)=>(tier(a)-tier(b)) || cmp(a,b) || secondary(a,b));
+}
+function currentView(){ return sortTaskList(filteredTaskList(tasks, editingId)); }
+/* Native tasks + (when Daddy is in focus) Daddy's linked Family Planner tasks, filtered and sorted
+   together through the exact same rules above — one merged Done/Later/Someday grouping, no separate
+   filtering path, no duplicate section headings. */
+function currentCombinedView(){
+  const native=filteredTaskList(tasks, editingId);
+  const linked=daddyLinkedVisible() ? filteredTaskList(daddyLinkedTasks(), null) : [];
+  return sortTaskList(native.concat(linked));
 }
 
 function render(){
@@ -1223,9 +1384,12 @@ function render(){
   renderBills();
   renderBYL();
   renderDatesSection();
-  const view=currentView();
+  const linkedAll=daddyLinkedVisible() ? daddyLinkedTasks() : [];
+  const view=currentCombinedView();
   const next=computeNextUp();
-  const focusedTasks=tasks.filter(t=>focusMatch(taskPeopleIds(t)));
+  /* Displayed Daddy/focus counts include visible linked tasks; native-only aggregates (Delete
+     completed's own count, the live overdue tick-set) are kept strictly to `tasks` — see comments below. */
+  const focusedTasks=tasks.filter(t=>focusMatch(taskPeopleIds(t))).concat(linkedAll);
   const doneCount=focusedTasks.filter(isDone).length;
   const laterCount=focusedTasks.filter(isScheduledLater).length;
   const somedayCount=focusedTasks.filter(isSomeday).length;
@@ -1234,19 +1398,22 @@ function render(){
   document.getElementById("somedayLbl").textContent=somedayCount?`Someday (${somedayCount})`:"Someday";
   renderNextUp(next);
   renderProgress();
+  renderFamilyLinkStatus();
 
   listEl.innerHTML="";
-  if(!tasks.length){ listEl.innerHTML=`<div class="empty-state"><div class="big">No plans yet.</div>Add the first thing for today above, and tag who it's for.</div>`; }
+  if(!tasks.length && !linkedAll.length){ listEl.innerHTML=`<div class="empty-state"><div class="big">No plans yet.</div>Add the first thing for today above, and tag who it's for.</div>`; }
   else if(!view.length){ listEl.innerHTML=`<div class="empty-state"><div class="big">Nothing here.</div>Try another focus or clear filters.</div>`; }
   overdueSet=new Set(tasks.filter(isOverdue).map(t=>t.id)); let doneShown=false, laterShown=false, somedayShown=false;
   view.forEach(t=>{
     if(isDone(t)&&!doneShown){ const h=document.createElement("div"); h.className="later-head"; h.textContent="✓ Done"; listEl.appendChild(h); doneShown=true; }
     if(isScheduledLater(t)&&!laterShown){ const h=document.createElement("div"); h.className="later-head"; h.textContent="◴ Moved to later"; listEl.appendChild(h); laterShown=true; }
     if(isSomeday(t)&&!somedayShown){ const h=document.createElement("div"); h.className="later-head"; h.textContent="◇ Someday"; listEl.appendChild(h); somedayShown=true; }
-    if(editingId===t.id) listEl.appendChild(renderEditor(t)); else listEl.appendChild(renderRow(t,next&&next.id===t.id));
+    if(t.linked) listEl.appendChild(renderLinkedRow(t));
+    else if(editingId===t.id) listEl.appendChild(renderEditor(t));
+    else listEl.appendChild(renderRow(t,next&&next.id===t.id));
   });
 
-  const done=tasks.filter(isDone).length;
+  const done=tasks.filter(isDone).length; // native-only — Delete completed must never touch linked Family tasks
   const delCompletedBtn=document.getElementById("deleteCompletedBtn");
   delCompletedBtn.textContent=`Delete completed (${done})`;
   delCompletedBtn.disabled=done===0;
@@ -1258,7 +1425,7 @@ function render(){
 }
 
 function renderProgress(){
-  const focused=tasks.filter(t=>focusMatch(taskPeopleIds(t)));
+  const focused=tasks.filter(t=>focusMatch(taskPeopleIds(t))).concat(daddyLinkedVisible() ? daddyLinkedTasks() : []);
   const todays=focused.filter(isToday); const tot=todays.length; const done=todays.filter(isDone).length;
   document.getElementById("progressCount").textContent=`${done} of ${tot} done`;
   document.getElementById("progressBar").style.width=tot?(done/tot*100)+"%":"0%";
@@ -1504,6 +1671,49 @@ function renderRow(t,isNext){
     else { cur.status=v; cur.showOn=""; saveTasks(); render(); } });
   el.querySelector(".edit").addEventListener("click",()=>{ closeActiveEdit(true); editingId=t.id; render(); });
   el.querySelector(".del").addEventListener("click",()=>{ if(confirm(`Delete "${t.task||"this item"}"?`)){ tasks=tasks.filter(x=>x.id!==t.id); saveTasks(); render(); } });
+  return el;
+}
+
+/* Read-only row for a linked Family Planner task (Daddy). Only Done/Doing/To do are ever write
+   targets — no title/people/priority/time/due/notes editing, no Move-to-tomorrow/a-day, no delete —
+   those controls are simply not rendered, per v0.9's "first release" scope, rather than shown
+   disabled. A currently-parked task (genuinely future-dated Later, or undated Someday — a stale
+   dated Later is already normalized to "todo" by linkedEffectiveStatus() before this ever runs) gets
+   one extra, disabled option showing its real state, so the select never silently defaults to
+   "To do" for a task that isn't actually To do; merely rendering that option writes nothing. */
+function linkedStatusOptionsHtml(t){
+  let parkedOption="";
+  if(isScheduledLater(t)) parkedOption=`<option value="later" selected disabled>Later → ${esc(fmtWhen(t.showOn))}</option>`;
+  else if(isSomeday(t)) parkedOption=`<option value="later" selected disabled>Someday</option>`;
+  return parkedOption + ["todo","doing","done"].map(v=>`<option value="${v}" ${v===t.status?"selected":""}>${STATUS[v].label}</option>`).join("");
+}
+function renderLinkedRow(t){
+  const el=document.createElement("div");
+  el.className="row linked"+(isDone(t)?" done":"")+(isLater(t)?" parked":"")+(isOverdue(t)?" overdue":"");
+  el.dataset.id=t.id;
+  const noteHtml = t.notes ? `<span class="task-note">${esc(t.notes)}</span>` : "";
+  const dueHtml = t.due ? `<span class="due">due ${esc(fmtDate(t.due))}${t.dueTime?" "+esc(fmt12(t.dueTime)):""}</span>` : "";
+  const reHtml = (isLater(t)&&t.showOn) ? `<span class="re">↩ ${esc(fmtWhen(t.showOn))}</span>` : "";
+  const metaParts=[dueHtml,reHtml,noteHtml].filter(Boolean);
+  const metaHtml = metaParts.length ? `<div class="task-meta">${metaParts.join(' <span style="opacity:.4">·</span> ')}</div>` : "";
+  el.innerHTML=`
+    <input type="checkbox" class="cbx" ${isDone(t)?"checked":""} aria-label="Done">
+    <div class="pri" style="background:${priColor(t.priority)}" title="Priority ${t.priority}/10 (read-only — from Family Planner)">${t.priority}<span class="fill"><i style="width:${t.priority*10}%"></i></span></div>
+    <div class="r-who">${peopleChipsHtml(t.people)}<span class="linked-tag" title="Linked from Family Planner — read-only in The Grind">Family</span></div>
+    <div class="r-title"><div class="task-title">${esc(t.task)||"(untitled)"}</div>${metaHtml}</div>
+    <div class="r-meta"><div class="cell-time"><span class="t ${t.time?'':'none'}">${t.time?esc(fmt12(t.time)):"—"}</span></div></div>
+    <div class="r-status"><select class="status-sel" style="background:${STATUS[t.status]?STATUS[t.status].color:STATUS.todo.color}" aria-label="Status (Family-linked, To do/Doing/Done only)">${linkedStatusOptionsHtml(t)}</select></div>
+    <div class="rowactions"></div>`;
+  el.querySelector(".cbx").addEventListener("change",e=>{
+    const wasDone=isDone(t); const newStatus=e.target.checked?"done":"todo";
+    if(e.target.checked && !wasDone) playCompletionSound();
+    writeLinkedTaskStatus(t.sourceId, newStatus);
+  });
+  el.querySelector(".status-sel").addEventListener("change",e=>{
+    const wasDone=isDone(t); const newStatus=e.target.value;
+    if(newStatus==="done" && !wasDone) playCompletionSound();
+    writeLinkedTaskStatus(t.sourceId, newStatus);
+  });
   return el;
 }
 
@@ -2498,7 +2708,10 @@ function printProfileNames(itemPeople){
 function addDaysStr(ymd, n){ const d=localMoment(ymd,"00:00"); if(!d) return ymd; d.setDate(d.getDate()+n); return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; }
 
 function printFilterTasks(opts){
-  const list=tasks.filter(t=>{
+  /* daddyLinkedTasks() is a pure read (no localStorage/Firebase write, no sound) — printProfileMatch
+     naturally includes these only for "all" or the Grind Daddy profile itself, same as any other
+     profile-tagged item, so no extra gating is needed here. */
+  const list=tasks.concat(daddyLinkedTasks()).filter(t=>{
     if(!printProfileMatch(t.people, opts.profile)) return false;
     if(isLater(t)) return opts.includeLater;
     if(opts.hideCompleted && isDone(t)) return false;
@@ -2546,6 +2759,7 @@ function printTaskRow(t){
   if(t.due) bits.push(`Due ${esc(fmtDate(t.due))}${t.dueTime?" "+esc(fmt12(t.dueTime)):""}`);
   bits.push(`Priority ${t.priority}/10`);
   bits.push(esc((STATUS[t.status]||STATUS.todo).label));
+  if(t.linked) bits.push("Family-linked");
   return `<div class="print-task${checked?" done":""}">${printCheckSpan(checked)}<div class="pt-body">
     <div class="pt-title">${esc(t.task)||"(untitled)"}</div>
     <div class="pt-meta">${bits.join(" · ")}</div>
@@ -2647,7 +2861,7 @@ function buildPrintSheet(opts){
     if(opts.format==="fridge"){
       /* Always the selected profile's (or family-wide) Today tasks, regardless of Hide completed —
          that option hides completed rows from the list below, it must not change this count. */
-      const todays=tasks.filter(t=>isToday(t) && printProfileMatch(t.people, opts.profile));
+      const todays=tasks.concat(daddyLinkedTasks()).filter(t=>isToday(t) && printProfileMatch(t.people, opts.profile));
       const doneToday=todays.filter(isDone).length;
       html+=`<div class="print-summary">${doneToday} of ${todays.length} done today</div>`;
     }
@@ -2722,7 +2936,7 @@ function tick(){ const d=new Date(); document.getElementById("clock").innerHTML=
 document.getElementById("datestr").textContent=new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
 { const vp=loadJSON(K_PREFS); if(vp){ document.getElementById("showDone").checked=typeof vp.showDone==="boolean"?vp.showDone:(typeof vp.hideDone==="boolean"?!vp.hideDone:false); document.getElementById("showLater").checked=!!vp.showLater; document.getElementById("showSomeday").checked=!!vp.showSomeday; } }
 updateSoundToggleLabel();
-render(); initSync(); tick(); setInterval(tick,1000);
+render(); initSync(); initFamilyLink(); tick(); setInterval(tick,1000);
 </script>
 </body>
 </html>
