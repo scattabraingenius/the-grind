@@ -6,7 +6,7 @@
 <title>The Grind</title>
 <style>
   /* ============================================================
-     THE GRIND — personal command center   (v0.7-beta)
+     THE GRIND — personal command center   (v0.7.1-beta)
      Forked from Family Planner but fully data-isolated: its own Firebase
      path (planners/the-grind-scattabrain-2026) and its own grind.* localStorage keys.
      One day list (multi-profile tags) with Done/Later/Someday views, Places to Go + Shopping + Bills + Quick Notes
@@ -666,7 +666,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
 "use strict";
-const VERSION = "0.7-beta";
+const VERSION = "0.7.1-beta";
 
 /* ---------------- storage ---------------- */
 /* Grind-namespaced keys — deliberately isolated from the old Family Planner fork's `home.*`
@@ -1235,6 +1235,7 @@ function currentView(){
   const showLater=document.getElementById("showLater").checked;
   const showSomeday=document.getElementById("showSomeday").checked;
   let v=tasks.filter(t=>{
+    if(t.id===editingId) return true; // an active draft/editor must never disappear behind view filters
     if(!personVisible(t)) return false;
     if(isScheduledLater(t)&&!showLater) return false;
     if(isSomeday(t)&&!showSomeday) return false;
@@ -2609,12 +2610,12 @@ document.getElementById("closeAllDatesBtn").addEventListener("click",()=>{ dates
 document.getElementById("pastDatesToggle").addEventListener("click",()=>{ pastDatesOpen=!pastDatesOpen; renderDatesAllPanel(); });
 
 /* ---------------- quick add / add ---------------- */
-document.getElementById("quickInput").addEventListener("keydown",e=>{ if(e.key!=="Enter") return; const v=e.target.value.trim(); if(!v) return; const t=blankTask(v); if(activeProfiles.size===1) t.people=[...activeProfiles]; tasks.unshift(t); e.target.value=""; saveTasks(); render(); });
+document.getElementById("quickInput").addEventListener("keydown",e=>{ if(e.key!=="Enter") return; const v=e.target.value.trim(); if(!v) return; const t=blankTask(v); t.people=people.filter(p=>activeProfiles.has(p.id)).map(p=>p.id); tasks.unshift(t); e.target.value=""; if(activeProfiles.size===0) editingId=t.id; saveTasks(); render(); });
 document.getElementById("addBtn").addEventListener("click",()=>{
   closeActiveEdit(true);
   const quickInput=document.getElementById("quickInput");
   const t=blankTask(quickInput.value.trim());
-  if(activeProfiles.size===1) t.people=[...activeProfiles];
+  t.people=people.filter(p=>activeProfiles.has(p.id)).map(p=>p.id);
   tasks.unshift(t);
   quickInput.value="";
   editingId=t.id; render();
