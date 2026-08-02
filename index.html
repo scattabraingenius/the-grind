@@ -1816,7 +1816,7 @@ function sortedPlaces(){
 }
 function renderPlaces(){
   const el=document.getElementById("placeList");
-  const focused=sortedPlaces().filter(p=>focusMatch(p.people));
+  const focused=sortedPlaces().filter(p=>p.id===placeEditingId || focusMatch(p.people)); // an active editor must never disappear behind the focus filter
   if(!places.length) el.innerHTML=`<div class="empty-state" style="padding:24px 12px"><div class="big">No places yet.</div>Add somewhere to go above.</div>`;
   else if(!focused.length) el.innerHTML=`<div class="empty-state" style="padding:24px 12px"><div class="big">Nothing here.</div>Try another focus.</div>`;
   else el.innerHTML="";
@@ -1918,7 +1918,7 @@ function renderPlaceEditor(pl){
   setTimeout(()=>box.querySelector("#pe-name").focus(),0);
   return box;
 }
-document.getElementById("placeInput").addEventListener("keydown",e=>{ if(e.key!=="Enter") return; const v=e.target.value.trim(); if(!v) return; places.unshift(blankPlace(v)); e.target.value=""; savePlaces(); renderPlaces(); });
+document.getElementById("placeInput").addEventListener("keydown",e=>{ if(e.key!=="Enter") return; const v=e.target.value.trim(); if(!v) return; const pl=blankPlace(v); pl.people=people.filter(p=>activeProfiles.has(p.id)).map(p=>p.id); places.unshift(pl); e.target.value=""; if(activeProfiles.size===0) placeEditingId=pl.id; savePlaces(); render(); });
 document.getElementById("placeClear").addEventListener("click",()=>{ if(!places.some(p=>p.visited)) return; places=places.filter(p=>!p.visited); savePlaces(); renderPlaces(); });
 
 /* ---------------- bills ---------------- */
@@ -1934,7 +1934,7 @@ function sortedBills(){
 }
 function renderBills(){
   const el=document.getElementById("billList");
-  const focused=sortedBills().filter(b=>focusMatch(b.people));
+  const focused=sortedBills().filter(b=>b.id===billEditingId || focusMatch(b.people)); // an active editor must never disappear behind the focus filter
   if(!bills.length) el.innerHTML=`<div class="empty-state" style="padding:24px 12px"><div class="big">No bills yet.</div>Add one to track above.</div>`;
   else if(!focused.length) el.innerHTML=`<div class="empty-state" style="padding:24px 12px"><div class="big">Nothing here.</div>Try another focus.</div>`;
   else el.innerHTML="";
@@ -2277,7 +2277,7 @@ function renderBillEditor(b){
   setTimeout(()=>box.querySelector("#be-name").focus(),0);
   return box;
 }
-document.getElementById("billInput").addEventListener("keydown",e=>{ if(e.key!=="Enter") return; const v=e.target.value.trim(); if(!v) return; bills.unshift(blankBill(v)); e.target.value=""; saveBills(); renderBills(); });
+document.getElementById("billInput").addEventListener("keydown",e=>{ if(e.key!=="Enter") return; const v=e.target.value.trim(); if(!v) return; const b=blankBill(v); b.people=people.filter(p=>activeProfiles.has(p.id)).map(p=>p.id); bills.unshift(b); e.target.value=""; if(activeProfiles.size===0) billEditingId=b.id; saveBills(); render(); });
 document.getElementById("billClear").addEventListener("click",()=>{ if(!bills.some(b=>b.paid)) return; bills=bills.filter(b=>!b.paid); saveBills(); renderBills(); });
 
 /* ---------------- quick notes ---------------- */
