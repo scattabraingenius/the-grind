@@ -6,12 +6,21 @@
 <title>The Grind</title>
 <style>
   /* ============================================================
-     THE GRIND — personal command center   (v0.9-beta)
+     THE GRIND — personal command center   (v1.0-beta)
      Forked from Family Planner but fully data-isolated: its own Firebase
      path (planners/the-grind-scattabrain-2026) and its own grind.* localStorage keys.
-     One day list (multi-profile tags) with Done/Later/Someday views, Places to Go + Shopping + Bills + Quick Notes
-     + Before You Leave — a profile-independent checklist with large checkboxes, stable order,
-     and an editable active title (defaults to "Before You Leave").
+     One day list (multi-profile tags) with Done/Later/Someday views, Shopping + Quick Notes
+     + Before You Leave — a profile-independent checklist with large checkboxes; unchecked items
+     stay on top and checked items automatically move to the bottom, and it has an editable
+     active title (defaults to "Before You Leave").
+     Word Lab: a daily-featured vocabulary word (deterministic by local calendar date, no network
+     request, 58-word built-in catalog) — mark Learning/Learned, add your own sentence, browse
+     "Another word", or add fully custom words of your own.
+     The Vault: a place to save bars, quotes, and ideas — typed, sourced, favoritable, searchable,
+     more structure and permanence than Quick Notes.
+     Places to Go and Bills were retired from the visible dashboard in v1.0 (replaced by Word Lab
+     and The Vault) but their data, storage keys, and sync are fully retained for compatibility —
+     nothing is migrated, cleared, or lost.
      Multi-profile focus: each real profile has its own on/off toggle (not a single-choice
      filter) — Tasks, Important Dates, Places, and Bills all show whatever intersects the
      enabled profiles, plus anything tagged shared/family. All-on and all-off both stay
@@ -386,6 +395,50 @@
   .place-editor .who-opt { font-size:11px; padding:4px 8px 4px 6px; }
   .place-editor .pe-actions { display:flex; gap:6px; justify-content:flex-end; margin-top:4px; }
 
+  /* ---- Word Lab (v1.0) ---- */
+  .wordlab { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:14px; box-shadow:var(--shadow); }
+  .wl-card { display:flex; flex-direction:column; gap:8px; }
+  .wl-word-row { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+  .wl-word { font-size:17px; font-weight:700; color:var(--ink); word-break:break-word; }
+  .wl-pos { font-family:var(--mono); font-size:11px; color:var(--muted-2); font-style:italic; }
+  .wl-status { margin-left:auto; font-family:var(--mono); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; padding:3px 8px; border-radius:99px; border:1px solid var(--line); color:var(--muted); }
+  .wl-status.learned { color:#23B877; border-color:#23B877; }
+  .wl-status.learning { color:var(--signal-dim); border-color:var(--signal); }
+  .wl-pron { font-family:var(--mono); font-size:12px; color:var(--muted-2); }
+  .wl-def { font-size:13.5px; line-height:1.5; color:var(--ink); white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere; }
+  .wl-example { font-size:13px; line-height:1.45; color:var(--muted); font-style:italic; white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere; }
+  .wl-sentence-label { font-family:var(--mono); font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:2px; }
+  .wl-sentence { font-size:13px; line-height:1.45; white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere; padding:6px 8px; border-radius:8px; background:var(--surface-2); border:1px solid var(--line); min-height:20px; }
+  .wl-sentence-empty { color:var(--muted-2); }
+  .wl-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:2px; }
+  .wl-actions .btn[disabled] { opacity:.45; cursor:default; }
+
+  /* ---- The Vault (v1.0) ---- */
+  .vault { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:14px; box-shadow:var(--shadow); }
+  .vault-capture { display:flex; flex-direction:column; gap:6px; margin-bottom:10px; }
+  .vault-input { font-size:13px; line-height:1.45; padding:8px 10px; border:1px solid var(--line); border-radius:9px; background:var(--input-bg); color:var(--ink); outline:none; resize:vertical; min-height:44px; font-family:inherit; }
+  .vault-input:focus { border-color:var(--signal); }
+  .vault-capture-row { display:flex; gap:6px; flex-wrap:wrap; }
+  .vault-capture-row #vaultSource { flex:1; min-width:0; font-size:13px; padding:7px 9px; border:1px solid var(--line); border-radius:7px; background:var(--card); color:var(--ink); outline:none; }
+  .vault-capture-row #vaultSource:focus { border-color:var(--signal); }
+  .vault-controls { display:flex; gap:6px; margin-bottom:8px; }
+  .vault-controls .search { flex:1; min-width:0; }
+  .vault-list { display:flex; flex-direction:column; gap:6px; }
+  .vault-row { display:flex; flex-direction:column; gap:5px; padding:9px 10px; border:1px solid var(--line); border-left:3px solid transparent; border-radius:9px; background:var(--surface-2); }
+  .vault-row.favorite { border-left-color:var(--star); }
+  .vault-row-head { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .vault-type-badge { font-family:var(--mono); font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; padding:2px 7px; border-radius:99px; border:1px solid var(--line); color:var(--muted); }
+  .vault-type-badge.bar { color:#3B97E6; border-color:#3B97E6; }
+  .vault-type-badge.quote { color:var(--signal-dim); border-color:var(--signal); }
+  .vault-type-badge.idea { color:#F2A81D; border-color:#F2A81D; }
+  .vault-source { font-size:11.5px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .vault-date { font-family:var(--mono); font-size:10px; color:var(--muted-2); margin-left:auto; white-space:nowrap; }
+  .vault-text { font-size:13.5px; line-height:1.5; white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere; }
+  .vault-row-actions { display:flex; gap:4px; justify-content:flex-end; }
+  .vault-fav, .vault-copy, .vault-del { color:var(--muted-2); background:none; border:none; cursor:pointer; font-size:13px; padding:2px 4px; line-height:1; }
+  .vault-fav.on { color:var(--star); }
+  .vault-fav:hover { color:var(--ink); } .vault-copy:hover { color:var(--signal-dim); } .vault-del:hover { color:var(--alarm); }
+
   /* bills (mirrors places to go) */
   .bills { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:14px; box-shadow:var(--shadow); }
   .bill-list { display:flex; flex-direction:column; gap:6px; }
@@ -552,18 +605,54 @@
         <div class="note-list" id="noteList"></div>
       </div>
 
-      <div class="places">
+      <!-- v1.0: Places/Bills removed from the visible dashboard (see Word Lab / The Vault below),
+           but kept fully intact and hidden — data, storage keys, sync, and import/export all
+           untouched for backward compatibility. Never delete this markup; renderPlaces()/renderBills()
+           still run every render() and would throw without it. -->
+      <div class="places hidden">
         <div class="panel-title">Places to go <span class="shop-count" id="placeCount"></span></div>
         <div class="add-inline"><span class="plus">+</span><input id="placeInput" type="text" placeholder="Add a place, then Enter…" aria-label="Add place"></div>
         <div class="place-list" id="placeList"></div>
         <div class="shop-foot"><span class="shop-count" id="placeStatus"></span><button class="shop-clear" id="placeClear">Clear visited</button></div>
       </div>
 
-      <div class="bills">
+      <div class="bills hidden">
         <div class="panel-title">Bills <span class="shop-count" id="billCount"></span></div>
         <div class="add-inline"><span class="plus">+</span><input id="billInput" type="text" placeholder="Add a bill, then Enter…" aria-label="Add bill"></div>
         <div class="bill-list" id="billList"></div>
         <div class="shop-foot"><span class="shop-count" id="billStatus"></span><button class="shop-clear" id="billClear">Clear paid</button></div>
+      </div>
+
+      <div class="wordlab">
+        <div class="panel-title">Word Lab</div>
+        <div class="wl-card" id="wlCard"></div>
+      </div>
+
+      <div class="vault">
+        <div class="panel-title">The Vault <span class="shop-count" id="vaultCount"></span></div>
+        <div class="vault-capture">
+          <textarea id="vaultInput" class="vault-input" placeholder="Save a bar, quote, or idea, then Enter… (Shift+Enter for a new line)" aria-label="Add to the Vault" rows="2"></textarea>
+          <div class="vault-capture-row">
+            <select class="ctrl" id="vaultType" aria-label="Type">
+              <option value="bar">Bar</option>
+              <option value="quote">Quote</option>
+              <option value="idea">Idea</option>
+            </select>
+            <input type="text" id="vaultSource" placeholder="Source / author (optional)" aria-label="Source or author">
+            <button class="btn add" id="vaultAddBtn">Add</button>
+          </div>
+        </div>
+        <div class="vault-controls">
+          <input type="text" id="vaultSearch" class="search" placeholder="Search the Vault…" aria-label="Search the Vault">
+          <select class="ctrl" id="vaultFilter" aria-label="Filter">
+            <option value="all">All</option>
+            <option value="bar">Bars</option>
+            <option value="quote">Quotes</option>
+            <option value="idea">Ideas</option>
+            <option value="favorites">Favorites</option>
+          </select>
+        </div>
+        <div class="vault-list" id="vaultList"></div>
       </div>
 
       <div class="byl">
@@ -616,8 +705,8 @@
         <label class="pm-check"><input type="checkbox" id="pmSecTasks" checked> Tasks</label>
         <label class="pm-check"><input type="checkbox" id="pmSecDates" checked> Important dates</label>
         <label class="pm-check"><input type="checkbox" id="pmSecNotes" checked> Quick notes</label>
-        <label class="pm-check"><input type="checkbox" id="pmSecPlaces" checked> Places to go</label>
-        <label class="pm-check"><input type="checkbox" id="pmSecBills" checked> Bills</label>
+        <label class="pm-check"><input type="checkbox" id="pmSecWordLab" checked> Word Lab</label>
+        <label class="pm-check"><input type="checkbox" id="pmSecVault" checked> The Vault</label>
         <label class="pm-check"><input type="checkbox" id="pmSecBYL" checked> Before you leave</label>
         <label class="pm-check"><input type="checkbox" id="pmSecShop" checked> Shopping list</label>
       </div>
@@ -654,17 +743,24 @@
   </div>
 </div>
 
+<!-- Word Lab custom-word editor — same reusable modal chrome as presets above. -->
+<div class="tpl-modal-backdrop hidden" id="wordModalBackdrop">
+  <div class="tpl-modal" id="wordModal" role="dialog" aria-modal="true" aria-labelledby="wordModalTitle" tabindex="-1">
+    <div id="wordModalBody"></div>
+  </div>
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
 "use strict";
-const VERSION = "0.9-beta";
+const VERSION = "1.0-beta";
 
 /* ---------------- storage ---------------- */
 /* Grind-namespaced keys — deliberately isolated from the old Family Planner fork's `home.*`
    keys, which live at the same browser origin (GitHub Pages paths don't isolate localStorage).
    Never read from or write to `home.*` here — that data belongs to the other app. */
-const K_TASKS="grind.plan.v1", K_SHOP="grind.shopping.v1", K_PEOPLE="grind.profiles.v1", K_PLACES="grind.places.v1", K_DATES="grind.dates.v1", K_BILLS="grind.bills.v1", K_PREFS="grind.viewprefs.v1", K_NOTES="grind.notes.v1", K_SETTINGS="grind.settings.v1", K_BYL="grind.before-you-leave.v1", K_BYL_TITLE="grind.before-you-leave-title.v1", K_ACTIVE_PROFILES="grind.activeProfiles.v1", K_FOCUS_PRESETS="grind.focusPresets.v1";
+const K_TASKS="grind.plan.v1", K_SHOP="grind.shopping.v1", K_PEOPLE="grind.profiles.v1", K_PLACES="grind.places.v1", K_DATES="grind.dates.v1", K_BILLS="grind.bills.v1", K_PREFS="grind.viewprefs.v1", K_NOTES="grind.notes.v1", K_SETTINGS="grind.settings.v1", K_BYL="grind.before-you-leave.v1", K_BYL_TITLE="grind.before-you-leave-title.v1", K_ACTIVE_PROFILES="grind.activeProfiles.v1", K_FOCUS_PRESETS="grind.focusPresets.v1", K_WORDS="grind.words.v1", K_VAULT="grind.vault.v1";
 function loadJSON(k){ try{ const r=localStorage.getItem(k); if(r) return JSON.parse(r); }catch(e){} return null; }
 function saveTasks(){ try{ localStorage.setItem(K_TASKS, JSON.stringify(tasks)); }catch(e){} pushCloud(); return true; }
 function saveShop(){ try{ localStorage.setItem(K_SHOP, JSON.stringify(shop)); }catch(e){} pushCloud(); }
@@ -678,6 +774,11 @@ function saveBills(){ try{ localStorage.setItem(K_BILLS, JSON.stringify(bills));
 function saveNotes(){ try{ localStorage.setItem(K_NOTES, JSON.stringify(notes)); }catch(e){} pushCloud(); }
 function saveBYL(){ try{ localStorage.setItem(K_BYL, JSON.stringify(beforeYouLeave)); }catch(e){} pushCloud(); }
 function saveBYLTitle(){ try{ localStorage.setItem(K_BYL_TITLE, JSON.stringify(bylTitle)); }catch(e){} pushCloud(); }
+/* Word Lab: only custom words and per-word progress (status/userSentence) are stored — the
+   built-in catalog's own content (word/pronunciation/definition/example) is never duplicated
+   into storage or synced, per "do not synchronize the built-in vocabulary catalog unnecessarily". */
+function saveWords(){ try{ localStorage.setItem(K_WORDS, JSON.stringify(words)); }catch(e){} pushCloud(); }
+function saveVault(){ try{ localStorage.setItem(K_VAULT, JSON.stringify(vault)); }catch(e){} pushCloud(); }
 /* Which profiles are currently "in focus" — a device-local display preference (like view prefs),
    never synced through Firebase and never included in import/export. A missing or malformed
    value defaults to every real profile enabled; a saved empty array is a deliberate "none". */
@@ -746,7 +847,9 @@ function initSync(){
       if(Array.isArray(v.notes)) notes=v.notes.map(migrateNote).filter(n=>n.text!=="");       // same rule → older clients never erase this
       if(Array.isArray(v.beforeYouLeave)) beforeYouLeave=v.beforeYouLeave.map(migrateBYLItem).filter(b=>b.item!=="");  // same rule → older clients never erase this
       if(typeof v.beforeYouLeaveTitle==="string" && v.beforeYouLeaveTitle.trim()!=="") bylTitle=normalizeBYLTitle(v.beforeYouLeaveTitle);  // malformed/blank remote titles must never overwrite the local title
-      try{ localStorage.setItem(K_PEOPLE,JSON.stringify(people)); localStorage.setItem(K_TASKS,JSON.stringify(tasks)); localStorage.setItem(K_SHOP,JSON.stringify(shop)); localStorage.setItem(K_PLACES,JSON.stringify(places)); localStorage.setItem(K_DATES,JSON.stringify(importantDates)); localStorage.setItem(K_BILLS,JSON.stringify(bills)); localStorage.setItem(K_NOTES,JSON.stringify(notes)); localStorage.setItem(K_BYL,JSON.stringify(beforeYouLeave)); localStorage.setItem(K_BYL_TITLE,JSON.stringify(bylTitle)); }catch(e){}
+      if(Array.isArray(v.words)) words=v.words.map(migrateWordEntry).filter(Boolean); // same rule → an older payload with no words field never erases local Word Lab data
+      if(Array.isArray(v.vault)) vault=v.vault.map(migrateVaultEntry).filter(Boolean); // same rule → an older payload with no vault field never erases local Vault data
+      try{ localStorage.setItem(K_PEOPLE,JSON.stringify(people)); localStorage.setItem(K_TASKS,JSON.stringify(tasks)); localStorage.setItem(K_SHOP,JSON.stringify(shop)); localStorage.setItem(K_PLACES,JSON.stringify(places)); localStorage.setItem(K_DATES,JSON.stringify(importantDates)); localStorage.setItem(K_BILLS,JSON.stringify(bills)); localStorage.setItem(K_NOTES,JSON.stringify(notes)); localStorage.setItem(K_BYL,JSON.stringify(beforeYouLeave)); localStorage.setItem(K_BYL_TITLE,JSON.stringify(bylTitle)); localStorage.setItem(K_WORDS,JSON.stringify(words)); localStorage.setItem(K_VAULT,JSON.stringify(vault)); }catch(e){}
       remoteApplying=false;
       // Repair push happens strictly after remoteApplying is reset, so it goes through the normal
       // guard exactly like any other local change — never bypassing it, never firing while a remote
@@ -767,7 +870,7 @@ function pushCloud(force){
      Since a stale v1.4 tab's set() has no importantDates key, its set() would still erase importantDates
      (update() only protects against writers that also use update() with a partial payload); this change
      protects future fields added the same way, but v1.4 tabs must still be closed/refreshed — see report. */
-  pushTimer=setTimeout(()=>{ try{ db.update({people,tasks,shop,places,importantDates,bills,notes,beforeYouLeave,beforeYouLeaveTitle:bylTitle,updated:Date.now()}); }catch(e){} }, 250);
+  pushTimer=setTimeout(()=>{ try{ db.update({people,tasks,shop,places,importantDates,bills,notes,beforeYouLeave,beforeYouLeaveTitle:bylTitle,words,vault,updated:Date.now()}); }catch(e){} }, 250);
 }
 function updateSyncBadge(on){
   const el=document.getElementById("syncBadge"); if(!el) return;
@@ -970,6 +1073,147 @@ function normalizeBYLTitle(raw){
   return t===""?DEFAULT_BYL_TITLE:t;
 }
 
+/* =====================================================================
+   WORD LAB — a daily-featured built-in vocabulary catalog (never synced;
+   see WORD_CATALOG below) plus user data: custom words (full entries,
+   custom:true) and per-word progress on catalog words (status/userSentence
+   only, custom:false, id matches the catalog word's own stable id — the
+   catalog's own text is never duplicated into storage). Original,
+   concise definitions — not copied from any dictionary.
+   ===================================================================== */
+const WORD_CATALOG = [
+  {id:"w01",word:"ubiquitous",pronunciation:"yoo-BIK-wih-tus",partOfSpeech:"adjective",definition:"Present or seeming to be present everywhere at once.",example:"Smartphones have become ubiquitous in modern life."},
+  {id:"w02",word:"meticulous",pronunciation:"muh-TIK-yuh-lus",partOfSpeech:"adjective",definition:"Showing great attention to detail; very careful and precise.",example:"She proofread the report with meticulous care."},
+  {id:"w03",word:"ambiguous",pronunciation:"am-BIG-yoo-us",partOfSpeech:"adjective",definition:"Open to more than one interpretation; not clearly defined.",example:"His answer was ambiguous, so we asked him to clarify."},
+  {id:"w04",word:"candid",pronunciation:"KAN-did",partOfSpeech:"adjective",definition:"Truthful and straightforward; not hiding one's real opinion.",example:"I appreciate your candid feedback on my proposal."},
+  {id:"w05",word:"resilient",pronunciation:"rih-ZIL-yent",partOfSpeech:"adjective",definition:"Able to recover quickly from difficulties.",example:"Children are often remarkably resilient after setbacks."},
+  {id:"w06",word:"pragmatic",pronunciation:"prag-MAT-ik",partOfSpeech:"adjective",definition:"Dealing with things sensibly and realistically.",example:"We need a pragmatic solution, not an idealistic one."},
+  {id:"w07",word:"articulate",pronunciation:"ar-TIK-yuh-lit",partOfSpeech:"adjective",definition:"Able to express ideas clearly and effectively.",example:"The new hire was articulate during her interview."},
+  {id:"w08",word:"concise",pronunciation:"kun-SYSE",partOfSpeech:"adjective",definition:"Giving information clearly, in as few words as possible.",example:"Please keep your email concise and to the point."},
+  {id:"w09",word:"tenacious",pronunciation:"tuh-NAY-shus",partOfSpeech:"adjective",definition:"Persistent in holding to a course of action.",example:"His tenacious effort finally paid off."},
+  {id:"w10",word:"eloquent",pronunciation:"EL-uh-kwent",partOfSpeech:"adjective",definition:"Fluent and persuasive in speaking or writing.",example:"She gave an eloquent speech at the ceremony."},
+  {id:"w11",word:"skeptical",pronunciation:"SKEP-tih-kul",partOfSpeech:"adjective",definition:"Not easily convinced; having doubts about a claim.",example:"I'm skeptical of claims that sound too good to be true."},
+  {id:"w12",word:"versatile",pronunciation:"VER-suh-tul",partOfSpeech:"adjective",definition:"Able to adapt to many different functions or situations.",example:"This tool is versatile enough for several tasks."},
+  {id:"w13",word:"redundant",pronunciation:"rih-DUN-dunt",partOfSpeech:"adjective",definition:"No longer needed; unnecessarily repetitive.",example:"That sentence is redundant, so let's cut it."},
+  {id:"w14",word:"cohesive",pronunciation:"koh-HEE-siv",partOfSpeech:"adjective",definition:"Sticking together as a unified, consistent whole.",example:"The team worked as a cohesive unit."},
+  {id:"w15",word:"inevitable",pronunciation:"in-EV-ih-tuh-bul",partOfSpeech:"adjective",definition:"Certain to happen; unable to be avoided.",example:"Change is inevitable in any growing company."},
+  {id:"w16",word:"plausible",pronunciation:"PLAW-zuh-bul",partOfSpeech:"adjective",definition:"Seeming reasonable or probably true.",example:"That's a plausible explanation for the delay."},
+  {id:"w17",word:"arbitrary",pronunciation:"AR-bih-trair-ee",partOfSpeech:"adjective",definition:"Based on random choice rather than reason or system.",example:"The deadline felt arbitrary and unnecessary."},
+  {id:"w18",word:"diligent",pronunciation:"DIL-ih-junt",partOfSpeech:"adjective",definition:"Showing careful and persistent effort in work.",example:"She was diligent about checking her work twice."},
+  {id:"w19",word:"subtle",pronunciation:"SUT-tul",partOfSpeech:"adjective",definition:"Not obvious; delicate or precise enough to be easily missed.",example:"There was a subtle change in his tone."},
+  {id:"w20",word:"viable",pronunciation:"VY-uh-bul",partOfSpeech:"adjective",definition:"Capable of working successfully; feasible.",example:"Is this plan financially viable long-term?"},
+  {id:"w21",word:"coherent",pronunciation:"koh-HEER-unt",partOfSpeech:"adjective",definition:"Logical and consistent; easy to follow.",example:"Write a coherent argument, not scattered notes."},
+  {id:"w22",word:"mundane",pronunciation:"mun-DAYN",partOfSpeech:"adjective",definition:"Lacking interest or excitement; very ordinary.",example:"Most of the job involves mundane paperwork."},
+  {id:"w23",word:"austere",pronunciation:"aw-STEER",partOfSpeech:"adjective",definition:"Severe or strict in manner; without comfort or luxury.",example:"The monastery had an austere, simple design."},
+  {id:"w24",word:"profound",pronunciation:"pruh-FOWND",partOfSpeech:"adjective",definition:"Very great or intense; showing deep insight.",example:"The book had a profound effect on how I think."},
+  {id:"w25",word:"candor",pronunciation:"KAN-der",partOfSpeech:"noun",definition:"The quality of being open, honest, and direct.",example:"I respect the candor of her response."},
+  {id:"w26",word:"dilemma",pronunciation:"dih-LEM-uh",partOfSpeech:"noun",definition:"A situation requiring a choice between difficult options.",example:"He faced a dilemma: stay loyal or speak the truth."},
+  {id:"w27",word:"consensus",pronunciation:"kun-SEN-sus",partOfSpeech:"noun",definition:"General agreement reached among a group.",example:"We reached a consensus after a long discussion."},
+  {id:"w28",word:"paradox",pronunciation:"PAIR-uh-doks",partOfSpeech:"noun",definition:"A statement that seems contradictory but may still be true.",example:"It's a paradox that working less can boost productivity."},
+  {id:"w29",word:"nuance",pronunciation:"NOO-ahns",partOfSpeech:"noun",definition:"A subtle difference in meaning, tone, or expression.",example:"Translation often loses the nuance of the original."},
+  {id:"w30",word:"rapport",pronunciation:"ra-POR",partOfSpeech:"noun",definition:"A close and harmonious relationship with someone.",example:"The interviewer quickly built rapport with the candidate."},
+  {id:"w31",word:"legacy",pronunciation:"LEG-uh-see",partOfSpeech:"noun",definition:"Something handed down or left behind from the past.",example:"Her research left a lasting legacy in the field."},
+  {id:"w32",word:"incentive",pronunciation:"in-SEN-tiv",partOfSpeech:"noun",definition:"Something that motivates or encourages a person to act.",example:"A bonus is a strong incentive to finish early."},
+  {id:"w33",word:"discrepancy",pronunciation:"dis-KREP-un-see",partOfSpeech:"noun",definition:"A difference between things that are expected to match.",example:"There's a discrepancy between the two reports."},
+  {id:"w34",word:"threshold",pronunciation:"THRESH-ohld",partOfSpeech:"noun",definition:"The point at which something begins, ends, or changes.",example:"We've crossed the threshold into a new market."},
+  {id:"w35",word:"facet",pronunciation:"FASS-it",partOfSpeech:"noun",definition:"One part or aspect of something more complex.",example:"Cost is only one facet of the decision."},
+  {id:"w36",word:"catalyst",pronunciation:"KAT-uh-list",partOfSpeech:"noun",definition:"Something that triggers or speeds up a significant change.",example:"The scandal was a catalyst for reform."},
+  {id:"w37",word:"mitigate",pronunciation:"MIT-ih-gayt",partOfSpeech:"verb",definition:"To make something less severe, harmful, or serious.",example:"We added a buffer to mitigate the risk of delays."},
+  {id:"w38",word:"reconcile",pronunciation:"REK-un-syle",partOfSpeech:"verb",definition:"To make two things compatible, or to resolve a conflict.",example:"It's hard to reconcile these two accounts of events."},
+  {id:"w39",word:"leverage",pronunciation:"LEV-er-ij",partOfSpeech:"verb",definition:"To use something to maximum advantage.",example:"We can leverage our existing network to grow faster."},
+  {id:"w40",word:"delegate",pronunciation:"DEL-ih-gayt",partOfSpeech:"verb",definition:"To assign a task or responsibility to someone else.",example:"A good manager knows when to delegate."},
+  {id:"w41",word:"streamline",pronunciation:"STREEM-lyne",partOfSpeech:"verb",definition:"To make a process simpler, faster, or more efficient.",example:"We streamlined the approval process to save time."},
+  {id:"w42",word:"corroborate",pronunciation:"kuh-ROB-uh-rayt",partOfSpeech:"verb",definition:"To confirm or support a claim with evidence.",example:"Two witnesses corroborated her account."},
+  {id:"w43",word:"undermine",pronunciation:"un-der-MYNE",partOfSpeech:"verb",definition:"To weaken or damage something gradually, often quietly.",example:"Constant criticism can undermine someone's confidence."},
+  {id:"w44",word:"cultivate",pronunciation:"KUL-tih-vayt",partOfSpeech:"verb",definition:"To develop or improve something through deliberate effort.",example:"Great teams cultivate trust over time."},
+  {id:"w45",word:"procrastinate",pronunciation:"proh-KRAS-tih-nayt",partOfSpeech:"verb",definition:"To delay doing something that should be done sooner.",example:"I tend to procrastinate on tasks I dislike."},
+  {id:"w46",word:"alleviate",pronunciation:"uh-LEE-vee-ayt",partOfSpeech:"verb",definition:"To make pain, difficulty, or a problem less severe.",example:"The medicine helped alleviate her headache."},
+  {id:"w47",word:"scrutinize",pronunciation:"SKROO-tih-nyze",partOfSpeech:"verb",definition:"To examine something closely and carefully.",example:"Auditors scrutinize every line of the budget."},
+  {id:"w48",word:"advocate",pronunciation:"AD-vuh-kayt",partOfSpeech:"verb",definition:"To publicly support or recommend a cause or position.",example:"She advocates for better public transit."},
+  {id:"w49",word:"deviate",pronunciation:"DEE-vee-ayt",partOfSpeech:"verb",definition:"To depart from an established course, plan, or standard.",example:"Please don't deviate from the agreed plan."},
+  {id:"w50",word:"discern",pronunciation:"dih-SURN",partOfSpeech:"verb",definition:"To perceive or recognize something clearly, often with effort.",example:"It's hard to discern fact from rumor online."},
+  {id:"w51",word:"galvanize",pronunciation:"GAL-vuh-nyze",partOfSpeech:"verb",definition:"To shock or excite someone into taking action.",example:"The coach's speech galvanized the team."},
+  {id:"w52",word:"optimize",pronunciation:"OP-tih-myze",partOfSpeech:"verb",definition:"To make something as effective or useful as possible.",example:"We optimized the schedule to reduce downtime."},
+  {id:"w53",word:"reiterate",pronunciation:"ree-IT-uh-rayt",partOfSpeech:"verb",definition:"To say something again for emphasis or clarity.",example:"Let me reiterate the main point before we close."},
+  {id:"w54",word:"substantiate",pronunciation:"sub-STAN-shee-ayt",partOfSpeech:"verb",definition:"To provide evidence that supports a claim.",example:"You'll need data to substantiate that conclusion."},
+  {id:"w55",word:"digress",pronunciation:"dy-GRESS",partOfSpeech:"verb",definition:"To temporarily depart from the main topic while speaking or writing.",example:"Sorry to digress, but this reminds me of something."},
+  {id:"w56",word:"empathy",pronunciation:"EM-puh-thee",partOfSpeech:"noun",definition:"The ability to understand and share someone else's feelings.",example:"Good leaders show empathy toward their teams."},
+  {id:"w57",word:"autonomy",pronunciation:"aw-TON-uh-mee",partOfSpeech:"noun",definition:"The ability to act independently and make one's own decisions.",example:"The team was given autonomy over its own schedule."},
+  {id:"w58",word:"resourceful",pronunciation:"rih-SORS-ful",partOfSpeech:"adjective",definition:"Skilled at finding quick, clever solutions to problems.",example:"She was resourceful when the original plan fell through."},
+];
+function blankCustomWord(){ return { id:uid("w"), word:"", pronunciation:"", partOfSpeech:"", definition:"", example:"", userSentence:"", status:"learning", custom:true, created:Date.now(), updated:Date.now() }; }
+/* Non-object → null. Custom entries need a nonblank word+definition or they're discarded as
+   malformed (never crash). Non-custom entries are progress records for a catalog word — no
+   word/definition required, since that content always comes from WORD_CATALOG by id lookup. */
+function migrateWordEntry(raw){
+  if(!raw || typeof raw!=="object") return null;
+  const custom=!!raw.custom;
+  const word=(raw.word==null?"":raw.word).toString().trim();
+  const definition=(raw.definition==null?"":raw.definition).toString().trim();
+  if(custom && (!word || !definition)) return null;
+  const id=(typeof raw.id==="string" && raw.id.trim()!=="") ? raw.id.trim() : uid("w");
+  const status=raw.status==="learned" ? "learned" : "learning";
+  const created=Number.isFinite(raw.created) ? raw.created : Date.now();
+  const updated=Number.isFinite(raw.updated) ? raw.updated : created;
+  return {
+    id, word,
+    pronunciation:(raw.pronunciation==null?"":raw.pronunciation).toString().trim(),
+    partOfSpeech:(raw.partOfSpeech==null?"":raw.partOfSpeech).toString().trim(),
+    definition,
+    example:(raw.example==null?"":raw.example).toString().trim(),
+    userSentence:(raw.userSentence==null?"":raw.userSentence).toString().trim(),
+    status, custom, created, updated,
+  };
+}
+function loadWords(){ const raw=loadJSON(K_WORDS); if(!Array.isArray(raw)) return []; return raw.map(migrateWordEntry).filter(Boolean); }
+/* Local-calendar-date epoch day (not UTC) — the same word must show all day regardless of timezone
+   quirks, and a new local calendar day always features a new word. No network request, ever. */
+function localEpochDay(){ const d=new Date(); return Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()/86400000); }
+function todaysCatalogWord(){ const idx=((localEpochDay()%WORD_CATALOG.length)+WORD_CATALOG.length)%WORD_CATALOG.length; return WORD_CATALOG[idx]; }
+function getWordProgress(id){ return words.find(w=>w.id===id && !w.custom) || null; }
+function ensureWordProgress(id){
+  let w=getWordProgress(id);
+  if(!w){ w={ id, word:"", pronunciation:"", partOfSpeech:"", definition:"", example:"", userSentence:"", status:"learning", custom:false, created:Date.now(), updated:Date.now() }; words.push(w); }
+  return w;
+}
+/* Merges a catalog word's content with any saved progress (status/userSentence) into one
+   displayable entry — the catalog itself is never mutated. */
+function displayWordFor(catalogWord){
+  const progress=getWordProgress(catalogWord.id);
+  return Object.assign({}, catalogWord, { status:progress?progress.status:"learning", userSentence:progress?progress.userSentence:"", custom:false });
+}
+let wordLabBrowseId=null; // in-memory only ("Another word") — never persisted, never affects the date-based featured word
+let lastWordLabDay=localEpochDay(); // lets tick() notice a local-calendar-day rollover and re-feature automatically
+function currentFeaturedEntry(){
+  if(wordLabBrowseId){
+    const customMatch=words.find(w=>w.id===wordLabBrowseId && w.custom);
+    if(customMatch) return customMatch;
+    const catalogMatch=WORD_CATALOG.find(w=>w.id===wordLabBrowseId);
+    if(catalogMatch) return displayWordFor(catalogMatch);
+    wordLabBrowseId=null; // stale id — fall through to today's word
+  }
+  return displayWordFor(todaysCatalogWord());
+}
+
+/* =====================================================================
+   THE VAULT — bars, quotes, and ideas. More structure/permanence than
+   Quick Notes: a type, an optional source, favoriting, search and filters.
+   ===================================================================== */
+const VAULT_TYPES=["bar","quote","idea"];
+function blankVaultEntry(text, type){ return { id:uid("v"), text:text||"", type:VAULT_TYPES.includes(type)?type:"idea", source:"", favorite:false, created:Date.now(), updated:Date.now() }; }
+/* Non-object → null. Blank text (after trim) → null (removed, never stored). Invalid type → "idea". */
+function migrateVaultEntry(raw){
+  if(!raw || typeof raw!=="object") return null;
+  const text=(raw.text==null?"":raw.text).toString().trim();
+  if(!text) return null;
+  const type=VAULT_TYPES.includes(raw.type) ? raw.type : "idea";
+  const id=(typeof raw.id==="string" && raw.id.trim()!=="") ? raw.id.trim() : uid("v");
+  const created=Number.isFinite(raw.created) ? raw.created : Date.now();
+  const updated=Number.isFinite(raw.updated) ? raw.updated : created;
+  return { id, text, type, source:(raw.source==null?"":raw.source).toString().trim(), favorite:!!raw.favorite, created, updated };
+}
+function loadVault(){ const raw=loadJSON(K_VAULT); if(!Array.isArray(raw)) return []; return raw.map(migrateVaultEntry).filter(Boolean); }
+
 /* ---------------- important dates ---------------- */
 /* Stored separately from tasks — never appear in the task list, never affect progress/overdue/Up Next.
    Structure is deliberately calendar-shaped (startDate/endDate/startTime/endTime) so a future full
@@ -1009,6 +1253,8 @@ let notes = (Array.isArray(notesRaw) ? notesRaw : []).map(migrateNote).filter(n=
 const bylRaw = loadJSON(K_BYL);
 let beforeYouLeave = (Array.isArray(bylRaw) ? bylRaw : []).map(migrateBYLItem).filter(b=>b.item!=="");
 let bylTitle = normalizeBYLTitle(loadJSON(K_BYL_TITLE));
+let words = loadWords();
+let vault = loadVault();
 let settings = Object.assign({ soundEnabled:true }, loadJSON(K_SETTINGS)||{});
 
 /* ---------------- state ---------------- */
@@ -1039,7 +1285,7 @@ function isEditingEntity(type,id){ return isEditingField(type,id,null); }
    Enter commits (never inserts a newline). Blur commits. Escape restores + cancels.
    Blank required values restore the previous value. Saves once, not per keystroke. */
 function startInlineText(opts){
-  const {type,id,field,container,value,placeholder,ariaLabel,required=true,multiline=false,getEntity,onCommit,onDone}=opts;
+  const {type,id,field,container,value,placeholder,ariaLabel,required=true,multiline=false,shiftEnterNewline=false,getEntity,onCommit,onDone}=opts;
   closeActiveEdit(true);
   let finished=false;
   const original=value||"";
@@ -1062,7 +1308,10 @@ function startInlineText(opts){
   }
   input.addEventListener("blur",()=>finish(true));
   input.addEventListener("keydown",e=>{
-    if(e.key==="Enter"){ e.preventDefault(); input.blur(); }
+    if(e.key==="Enter"){
+      if(shiftEnterNewline && e.shiftKey) return; // let the textarea insert a newline normally
+      e.preventDefault(); input.blur();
+    }
     else if(e.key==="Escape"){ e.preventDefault(); finish(false); }
   });
   activeEdit={type,id,field,close:finish};
@@ -1382,6 +1631,8 @@ function render(){
   renderShop();
   renderPlaces();
   renderBills();
+  renderWordLab();
+  renderVault();
   renderBYL();
   renderDatesSection();
   const linkedAll=daddyLinkedVisible() ? daddyLinkedTasks() : [];
@@ -1419,9 +1670,9 @@ function render(){
   delCompletedBtn.disabled=done===0;
   delCompletedBtn.classList.toggle("hidden", done===0);
   const focusedDone=focusedTasks.filter(isDone).length, focusedOver=focusedTasks.filter(isOverdue).length;
-  const focusedPlaces=places.filter(p=>focusMatch(p.people)&&!p.visited).length;
-  const focusedBills=bills.filter(b=>focusMatch(b.people)&&!b.paid).length;
-  document.getElementById("hint").textContent=`${focusedTasks.length} items • ${focusedDone} done • ${focusedOver} overdue • ${laterCount} later • ${focusedPlaces} places • ${shop.filter(s=>!s.got).length} to buy • ${focusedBills} bills due • The Grind v${VERSION}`;
+  // v1.0: Places/Bills counts removed from the footer along with their now-hidden panels (legacy
+  // data/counts still exist in memory — places.filter(...)/bills.filter(...) — just no longer surfaced here).
+  document.getElementById("hint").textContent=`${focusedTasks.length} items • ${focusedDone} done • ${focusedOver} overdue • ${laterCount} later • ${shop.filter(s=>!s.got).length} to buy • The Grind v${VERSION}`;
 }
 
 function renderProgress(){
@@ -1945,9 +2196,12 @@ function renderBills(){
 }
 
 /* ---------------- before you leave ---------------- */
-/* Sorted by created ascending and never re-sorted on check/uncheck — checking an item must never
-   make it jump position, unlike Shopping's "got" sort. */
-function sortedBYL(){ return [...beforeYouLeave].sort((a,b)=>(a.created||0)-(b.created||0)); }
+/* v1.0: a conventional checklist — unchecked items first, checked items move to the bottom.
+   Within each group, stable created-ascending order (never re-derived from timestamps, so
+   checking/unchecking never reorders anything beyond moving between the two groups). */
+function sortedBYL(){
+  return [...beforeYouLeave].sort((a,b)=> ((a.done?1:0)-(b.done?1:0)) || ((a.created||0)-(b.created||0)));
+}
 function renderBYLTitle(){
   const el=document.getElementById("bylTitleText");
   if(isEditingField("bylTitle","single","title")) return; // don't clobber an active title edit
@@ -2004,6 +2258,227 @@ document.getElementById("bylTitleReset").addEventListener("click",()=>{
   if(bylTitle===DEFAULT_BYL_TITLE) return;
   bylTitle=DEFAULT_BYL_TITLE; saveBYLTitle(); renderBYLTitle();
 });
+
+/* =====================================================================
+   WORD LAB
+   Today's featured word is derived (never cached) from the local calendar
+   date; "Another word" only changes an in-memory browse override, never
+   the date-based mapping itself. Only status/userSentence/custom words are
+   ever saved — see saveWords()/migrateWordEntry() above.
+   ===================================================================== */
+function setWordStatus(entry, status){
+  if(entry.custom){ const w=words.find(x=>x.id===entry.id && x.custom); if(w){ w.status=status; w.updated=Date.now(); saveWords(); } }
+  else { const w=ensureWordProgress(entry.id); w.status=status; w.updated=Date.now(); saveWords(); }
+  renderWordLab();
+}
+function pickAnotherWord(){
+  const pool=WORD_CATALOG.map(w=>w.id).concat(words.filter(w=>w.custom).map(w=>w.id));
+  const current=currentFeaturedEntry().id;
+  const candidates=pool.filter(id=>id!==current);
+  if(!candidates.length) return;
+  wordLabBrowseId=candidates[Math.floor(Math.random()*candidates.length)];
+  renderWordLab();
+}
+function wireInlineWordSentenceText(node, entry){
+  node.classList.add("editable"); node.tabIndex=0; node.setAttribute("role","button"); node.setAttribute("aria-label","Edit your sentence");
+  function open(){
+    if(isEditingField("wordSentence",entry.id,"userSentence")) return;
+    startInlineText({ type:"wordSentence", id:entry.id, field:"userSentence", container:node, value:entry.userSentence, required:false, multiline:true, shiftEnterNewline:true, ariaLabel:"Your sentence",
+      getEntity:()=>{
+        if(entry.custom) return words.find(x=>x.id===entry.id && x.custom) || null;
+        const catalogWord=WORD_CATALOG.find(w=>w.id===entry.id);
+        return catalogWord ? displayWordFor(catalogWord) : null;
+      },
+      onCommit:(en,v)=>{
+        if(entry.custom){ const w=words.find(x=>x.id===entry.id && x.custom); if(w){ w.userSentence=v; w.updated=Date.now(); saveWords(); } }
+        else { const w=ensureWordProgress(entry.id); w.userSentence=v; w.updated=Date.now(); saveWords(); }
+      }, onDone:renderWordLab });
+  }
+  node.addEventListener("click",open);
+  node.addEventListener("keydown",e=>{ if(e.target!==node) return; if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
+}
+function renderWordLab(){
+  const el=document.getElementById("wlCard"); if(!el) return;
+  const entry=currentFeaturedEntry();
+  const statusLabel=entry.status==="learned" ? "Learned" : "Learning";
+  el.innerHTML=`
+    <div class="wl-word-row"><span class="wl-word">${esc(entry.word)}</span>${entry.partOfSpeech?`<span class="wl-pos">${esc(entry.partOfSpeech)}</span>`:""}<span class="wl-status ${entry.status}">${statusLabel}</span></div>
+    ${entry.pronunciation?`<div class="wl-pron">${esc(entry.pronunciation)}</div>`:""}
+    <div class="wl-def">${esc(entry.definition)}</div>
+    ${entry.example?`<div class="wl-example">“${esc(entry.example)}”</div>`:""}
+    <div class="wl-sentence-wrap"><span class="wl-sentence-label">Your sentence</span><div class="wl-sentence editable" id="wlSentence" tabindex="0" role="button" aria-label="Edit your sentence">${entry.userSentence?esc(entry.userSentence):'<span class="wl-sentence-empty">Add your own sentence…</span>'}</div></div>
+    <div class="wl-actions">
+      <button class="btn sm" id="wlLearning" ${entry.status==="learning"?"disabled":""}>Mark Learning</button>
+      <button class="btn sm" id="wlLearned" ${entry.status==="learned"?"disabled":""}>Mark Learned</button>
+      <button class="btn sm" id="wlAnother">Another word</button>
+      <button class="btn sm" id="wlAddCustom">+ Add your own word</button>
+      ${entry.custom?`<button class="btn sm" id="wlEditCustom">Edit</button><button class="btn sm" id="wlDeleteCustom">Delete</button>`:""}
+    </div>`;
+  wireInlineWordSentenceText(document.getElementById("wlSentence"), entry);
+  document.getElementById("wlLearning").addEventListener("click",()=>setWordStatus(entry,"learning"));
+  document.getElementById("wlLearned").addEventListener("click",()=>setWordStatus(entry,"learned"));
+  document.getElementById("wlAnother").addEventListener("click",pickAnotherWord);
+  document.getElementById("wlAddCustom").addEventListener("click",()=>openWordModal(null));
+  if(entry.custom){
+    document.getElementById("wlEditCustom").addEventListener("click",()=>openWordModal(words.find(x=>x.id===entry.id && x.custom)));
+    document.getElementById("wlDeleteCustom").addEventListener("click",()=>{
+      if(!confirm(`Delete "${entry.word}" from Word Lab?`)) return;
+      words=words.filter(x=>x.id!==entry.id);
+      if(wordLabBrowseId===entry.id) wordLabBrowseId=null;
+      saveWords(); renderWordLab();
+    });
+  }
+}
+
+let wordModalPrevFocus=null, wordEditId=null, wordDraft=null, wordDraftDirty=false;
+function openWordModal(existingWord){
+  closeActiveEdit(false);
+  wordModalPrevFocus=document.activeElement;
+  wordEditId=existingWord ? existingWord.id : null;
+  wordDraft=existingWord
+    ? { word:existingWord.word, pronunciation:existingWord.pronunciation, partOfSpeech:existingWord.partOfSpeech, definition:existingWord.definition, example:existingWord.example, userSentence:existingWord.userSentence }
+    : { word:"", pronunciation:"", partOfSpeech:"", definition:"", example:"", userSentence:"" };
+  wordDraftDirty=false;
+  renderWordModal();
+  document.getElementById("wordModalBackdrop").classList.remove("hidden");
+  document.addEventListener("keydown", wordModalKeyHandler, true);
+  document.getElementById("wordModal").focus();
+}
+function closeWordModal(){
+  document.getElementById("wordModalBackdrop").classList.add("hidden");
+  document.removeEventListener("keydown", wordModalKeyHandler, true);
+  wordEditId=null; wordDraft=null; wordDraftDirty=false;
+  if(wordModalPrevFocus && typeof wordModalPrevFocus.focus==="function") wordModalPrevFocus.focus();
+  wordModalPrevFocus=null;
+}
+function requestCloseWordModal(){
+  if(wordDraftDirty && !confirm("Discard unsaved changes to this word?")) return;
+  closeWordModal();
+}
+function wordModalKeyHandler(e){
+  if(e.key==="Escape"){ e.preventDefault(); requestCloseWordModal(); return; }
+  if(e.key!=="Tab") return;
+  const modal=document.getElementById("wordModal");
+  const focusables=[...modal.querySelectorAll('button,input,select,textarea,[tabindex]:not([tabindex="-1"])')].filter(el=>!el.disabled && el.offsetParent!==null);
+  if(!focusables.length) return;
+  const first=focusables[0], last=focusables[focusables.length-1];
+  if(document.activeElement===modal || !modal.contains(document.activeElement)){ e.preventDefault(); (e.shiftKey?last:first).focus(); }
+  else if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
+  else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
+}
+document.getElementById("wordModalBackdrop").addEventListener("mousedown",e=>{ if(e.target.id==="wordModalBackdrop"){ e.preventDefault(); requestCloseWordModal(); } });
+function renderWordModal(){
+  const body=document.getElementById("wordModalBody");
+  const d=wordDraft;
+  body.innerHTML=`<h2 id="wordModalTitle">${wordEditId?"Edit word":"Add your own word"}</h2>
+    <div class="field"><label for="wmWord">Word</label><input type="text" id="wmWord" value="${esc(d.word)}"></div>
+    <div class="field"><label for="wmPron">Pronunciation (optional)</label><input type="text" id="wmPron" value="${esc(d.pronunciation)}"></div>
+    <div class="field"><label for="wmPos">Part of speech (optional)</label><input type="text" id="wmPos" value="${esc(d.partOfSpeech)}"></div>
+    <div class="field"><label for="wmDef">Definition</label><textarea id="wmDef">${esc(d.definition)}</textarea></div>
+    <div class="field"><label for="wmEx">Example (optional)</label><textarea id="wmEx">${esc(d.example)}</textarea></div>
+    <div class="field"><label for="wmSent">Your sentence (optional)</label><textarea id="wmSent">${esc(d.userSentence)}</textarea></div>
+    <div class="pm-actions"><button class="btn" id="wmCancel">Cancel</button><button class="btn add" id="wmSave">Save</button></div>`;
+  ["wmWord","wmPron","wmPos","wmDef","wmEx","wmSent"].forEach(id=>{ document.getElementById(id).addEventListener("input",()=>{ wordDraftDirty=true; }); });
+  document.getElementById("wmCancel").addEventListener("click",requestCloseWordModal);
+  document.getElementById("wmSave").addEventListener("click",saveWordModal);
+}
+function saveWordModal(){
+  const word=document.getElementById("wmWord").value.trim();
+  const definition=document.getElementById("wmDef").value.trim();
+  if(!word || !definition){ alert("Word and definition are required."); return; }
+  const pronunciation=document.getElementById("wmPron").value.trim();
+  const partOfSpeech=document.getElementById("wmPos").value.trim();
+  const example=document.getElementById("wmEx").value.trim();
+  const userSentence=document.getElementById("wmSent").value.trim();
+  if(wordEditId){
+    const w=words.find(x=>x.id===wordEditId && x.custom);
+    if(w){ Object.assign(w,{word,pronunciation,partOfSpeech,definition,example,userSentence}); w.updated=Date.now(); }
+  } else {
+    const now=Date.now();
+    const w={ id:uid("w"), word,pronunciation,partOfSpeech,definition,example,userSentence, status:"learning", custom:true, created:now, updated:now };
+    words.push(w);
+    wordLabBrowseId=w.id;
+  }
+  saveWords();
+  wordDraftDirty=false;
+  closeWordModal();
+  renderWordLab();
+}
+
+/* =====================================================================
+   THE VAULT
+   Inline text editing reuses the shared startInlineText() system, so it's
+   already covered by editingActive() via activeEdit — no separate tracking
+   needed (same reasoning already applies to Word Lab's sentence field).
+   ===================================================================== */
+function sortedFilteredVault(){
+  const q=document.getElementById("vaultSearch").value.trim().toLowerCase();
+  const filter=document.getElementById("vaultFilter").value;
+  let list=[...vault];
+  if(filter==="favorites") list=list.filter(v=>v.favorite);
+  else if(VAULT_TYPES.includes(filter)) list=list.filter(v=>v.type===filter);
+  if(q) list=list.filter(v=>[v.text,v.source,v.type].join(" ").toLowerCase().includes(q));
+  list.sort((a,b)=> ((b.favorite?1:0)-(a.favorite?1:0)) || ((b.updated||0)-(a.updated||0)));
+  return list;
+}
+function renderVault(){
+  const el=document.getElementById("vaultList"); if(!el) return;
+  const list=sortedFilteredVault();
+  if(!vault.length) el.innerHTML=`<div class="empty-state" style="padding:24px 12px"><div class="big">The Vault is empty.</div>Save a bar, quote, or idea above.</div>`;
+  else if(!list.length) el.innerHTML=`<div class="empty-state" style="padding:24px 12px"><div class="big">Nothing here.</div>Try another filter or search.</div>`;
+  else el.innerHTML="";
+  list.forEach(v=>el.appendChild(renderVaultRow(v)));
+  document.getElementById("vaultCount").textContent = vault.length ? String(vault.length) : "";
+}
+function wireInlineVaultText(node, vaultId){
+  node.classList.add("editable"); node.tabIndex=0; node.setAttribute("role","button"); node.setAttribute("aria-label","Edit entry");
+  function open(){
+    if(isEditingField("vault",vaultId,"text")) return;
+    const v=vault.find(x=>x.id===vaultId); if(!v) return;
+    startInlineText({ type:"vault", id:vaultId, field:"text", container:node, value:v.text, required:true, multiline:true, shiftEnterNewline:true, ariaLabel:"Entry text",
+      getEntity:()=>vault.find(x=>x.id===vaultId), onCommit:(entity,val)=>{ entity.text=val; entity.updated=Date.now(); saveVault(); }, onDone:renderVault });
+  }
+  node.addEventListener("click",open);
+  node.addEventListener("keydown",e=>{ if(e.target!==node) return; if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
+}
+function renderVaultRow(v){
+  const row=document.createElement("div"); row.className="vault-row"+(v.favorite?" favorite":""); row.dataset.id=v.id;
+  row.innerHTML=`
+    <div class="vault-row-head">
+      <span class="vault-type-badge ${v.type}">${esc(v.type)}</span>
+      ${v.source?`<span class="vault-source">${esc(v.source)}</span>`:""}
+      <span class="vault-date">${esc(fmtWhen(v.updated||v.created||Date.now()))}</span>
+    </div>
+    <div class="vault-text editable" id="vr-text" tabindex="0" role="button" aria-label="Edit entry">${esc(v.text)}</div>
+    <div class="vault-row-actions">
+      <button class="vault-fav${v.favorite?" on":""}" title="${v.favorite?"Unfavorite":"Favorite"}">★</button>
+      <button class="vault-copy" title="Copy">⧉</button>
+      <button class="vault-del" title="Delete">✕</button>
+    </div>`;
+  wireInlineVaultText(row.querySelector("#vr-text"), v.id);
+  row.querySelector(".vault-fav").addEventListener("click",()=>{ const cur=vault.find(x=>x.id===v.id); if(!cur) return; cur.favorite=!cur.favorite; cur.updated=Date.now(); saveVault(); renderVault(); });
+  row.querySelector(".vault-copy").addEventListener("click",()=>{ try{ const p=navigator.clipboard&&navigator.clipboard.writeText(v.text); if(p&&p.catch) p.catch(()=>{}); }catch(e){} });
+  row.querySelector(".vault-del").addEventListener("click",()=>{ if(confirm("Delete this Vault entry?")){ vault=vault.filter(x=>x.id!==v.id); saveVault(); renderVault(); } });
+  return row;
+}
+function addVaultEntry(){
+  const input=document.getElementById("vaultInput");
+  const text=input.value.trim();
+  if(!text) return;
+  const type=document.getElementById("vaultType").value;
+  const source=document.getElementById("vaultSource").value.trim();
+  const v=blankVaultEntry(text, type);
+  v.source=source;
+  vault.unshift(v);
+  input.value=""; document.getElementById("vaultSource").value="";
+  saveVault(); renderVault();
+}
+document.getElementById("vaultInput").addEventListener("keydown",e=>{
+  if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); addVaultEntry(); }
+});
+document.getElementById("vaultAddBtn").addEventListener("click",addVaultEntry);
+document.getElementById("vaultSearch").addEventListener("input",renderVault);
+document.getElementById("vaultFilter").addEventListener("input",renderVault);
 
 /* =====================================================================
    NAMED FOCUS PRESETS
@@ -2599,7 +3074,7 @@ document.getElementById("printBtn").addEventListener("pointerdown",e=>{
 });
 document.getElementById("printBtn").addEventListener("click",openPrintCenter);
 document.getElementById("exportBtn").addEventListener("click",()=>{
-  const bundle={version:VERSION,people,tasks,shop,places,importantDates,bills,notes,beforeYouLeave,beforeYouLeaveTitle:bylTitle};
+  const bundle={version:VERSION,people,tasks,shop,places,importantDates,bills,notes,beforeYouLeave,beforeYouLeaveTitle:bylTitle,words,vault};
   const blob=new Blob([JSON.stringify(bundle,null,2)],{type:"application/json"});
   const url=URL.createObjectURL(blob); const a=document.createElement("a");
   a.href=url; a.download=`the-grind-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(url);
@@ -2627,8 +3102,10 @@ document.getElementById("importFile").addEventListener("change",e=>{
       if(Array.isArray(d.notes)) notes=d.notes.map(migrateNote).filter(n=>n.text!=="");
       if(Array.isArray(d.beforeYouLeave)) beforeYouLeave=d.beforeYouLeave.map(migrateBYLItem).filter(b=>b.item!=="");
       if(typeof d.beforeYouLeaveTitle==="string" && d.beforeYouLeaveTitle.trim()!=="") bylTitle=normalizeBYLTitle(d.beforeYouLeaveTitle);
+      if(Array.isArray(d.words)) words=d.words.map(migrateWordEntry).filter(Boolean);
+      if(Array.isArray(d.vault)) vault=d.vault.map(migrateVaultEntry).filter(Boolean);
     }
-    editingId=null; placeEditingId=null; dateEditingId=null; billEditingId=null; savePeople(); saveTasks(); saveShop(); savePlaces(); saveDates(); saveBills(); saveNotes(); saveBYL(); saveBYLTitle(); render();
+    editingId=null; placeEditingId=null; dateEditingId=null; billEditingId=null; savePeople(); saveTasks(); saveShop(); savePlaces(); saveDates(); saveBills(); saveNotes(); saveBYL(); saveBYLTitle(); saveWords(); saveVault(); render();
   }catch(err){ alert("Couldn't read that file — expected a The Grind export (.json)."); } };
   r.readAsText(f); e.target.value="";
 });
@@ -2680,8 +3157,8 @@ function readPrintOptions(){
       tasks: document.getElementById("pmSecTasks").checked,
       dates: document.getElementById("pmSecDates").checked,
       notes: document.getElementById("pmSecNotes").checked,
-      places: document.getElementById("pmSecPlaces").checked,
-      bills: document.getElementById("pmSecBills").checked,
+      wordlab: document.getElementById("pmSecWordLab").checked,
+      vault: document.getElementById("pmSecVault").checked,
       byl: document.getElementById("pmSecBYL").checked,
       shop: document.getElementById("pmSecShop").checked,
     },
@@ -2739,12 +3216,10 @@ function printFilterDates(opts){
   return list;
 }
 function printFilterNotes(opts){ return sortedNotes(); } // profile-independent by design
-function printFilterPlaces(opts){
-  return sortedPlaces().filter(p=>printProfileMatch(p.people, opts.profile) && !(opts.hideCompleted && p.visited));
-}
-function printFilterBills(opts){
-  return sortedBills().filter(b=>printProfileMatch(b.people, opts.profile) && !(opts.hideCompleted && b.paid));
-}
+/* v1.0: Places/Bills print support removed along with their dashboard panels — legacy data still
+   loads/syncs/imports/exports, it just never appears in new print output (see spec section 1/8). */
+function printFilterWordLab(opts){ return [currentFeaturedEntry()]; } // profile-independent — always today's (or currently-browsed) word
+function printFilterVault(opts){ return [...vault].sort((a,b)=>((b.favorite?1:0)-(a.favorite?1:0))||((b.updated||0)-(a.updated||0))); } // profile-independent
 function printFilterShop(opts){
   return [...shop].sort((a,b)=>(a.got?1:0)-(b.got?1:0)).filter(s=>!(opts.hideCompleted && s.got));
 }
@@ -2782,28 +3257,26 @@ function printDateRow(d){
 function printNoteRow(n){
   return `<div class="print-note${n.pinned?" pinned":""}">${n.pinned?'<span class="pn-pin">Pinned</span>':""}<div class="pn-text">${esc(n.text)}</div></div>`;
 }
-function printPlaceRow(p){
-  const checked=p.visited;
+function printWordLabRow(w){
   const bits=[];
-  if(p.date) bits.push(esc(fmtDate(p.date)));
-  if(p.address) bits.push(esc(p.address));
-  const profNames=printProfileNames(p.people); if(profNames) bits.push(esc(profNames));
-  return `<div class="print-item${checked?" done":""}">${printCheckSpan(checked)}<div class="pi-body">
-    <div class="pi-title">${esc(p.name)||"(unnamed)"}</div>
+  if(w.pronunciation) bits.push(esc(w.pronunciation));
+  if(w.partOfSpeech) bits.push(esc(w.partOfSpeech));
+  bits.push(w.status==="learned" ? "Learned" : "Learning");
+  return `<div class="print-item"><div class="pi-body">
+    <div class="pi-title">${esc(w.word)||"(word)"}</div>
     ${bits.length?`<div class="pi-meta">${bits.join(" · ")}</div>`:""}
-    ${p.note?`<div class="pi-note">${esc(p.note)}</div>`:""}
+    <div class="pi-note">${esc(w.definition)}</div>
+    ${w.example?`<div class="pi-note">“${esc(w.example)}”</div>`:""}
+    ${w.userSentence?`<div class="pi-note">Your sentence: ${esc(w.userSentence)}</div>`:""}
   </div></div>`;
 }
-function printBillRow(b){
-  const checked=b.paid;
-  const bits=[];
-  if(b.amount!==""&&b.amount!=null){ const m=fmtMoney(b.amount); if(m) bits.push(esc(m)); }
-  if(b.due) bits.push(`Due ${esc(fmtDate(b.due))}`);
-  const profNames=printProfileNames(b.people); if(profNames) bits.push(esc(profNames));
-  return `<div class="print-item${checked?" done":""}">${printCheckSpan(checked)}<div class="pi-body">
-    <div class="pi-title">${esc(b.name)||"(unnamed)"}</div>
-    ${bits.length?`<div class="pi-meta">${bits.join(" · ")}</div>`:""}
-    ${b.note?`<div class="pi-note">${esc(b.note)}</div>`:""}
+function printVaultRow(v){
+  const bits=[esc(v.type)];
+  if(v.source) bits.push(esc(v.source));
+  if(v.favorite) bits.push("Favorite");
+  return `<div class="print-item"><div class="pi-body">
+    <div class="pi-meta">${bits.join(" · ")}</div>
+    <div class="pi-title" style="white-space:pre-wrap">${esc(v.text)}</div>
   </div></div>`;
 }
 function printShopRow(s){
@@ -2822,8 +3295,8 @@ function buildPrintBody(data, opts){
   html+=`</div>`;
   const lower=[];
   if(opts.sections.notes && data.notes.length) lower.push(printSectionHtml("Quick Notes", data.notes.length, data.notes.map(printNoteRow).join("")));
-  if(opts.sections.places && data.places.length) lower.push(printSectionHtml("Places to Go", data.places.length, data.places.map(printPlaceRow).join("")));
-  if(opts.sections.bills && data.bills.length) lower.push(printSectionHtml("Bills", data.bills.length, data.bills.map(printBillRow).join("")));
+  if(opts.sections.wordlab && data.wordlab.length) lower.push(printSectionHtml("Word Lab", data.wordlab.length, data.wordlab.map(printWordLabRow).join("")));
+  if(opts.sections.vault && data.vault.length) lower.push(printSectionHtml("The Vault", data.vault.length, data.vault.map(printVaultRow).join("")));
   if(opts.sections.byl && data.byl.length) lower.push(printSectionHtml(bylTitle, data.byl.length, data.byl.map(printBYLRow).join("")));
   if(opts.sections.shop && data.shop.length) lower.push(printSectionHtml("Shopping List", data.shop.length, data.shop.map(printShopRow).join("")));
   if(lower.length) html+=`<div class="print-grid">${lower.join("")}</div>`;
@@ -2839,8 +3312,8 @@ function buildPrintSheet(opts){
     tasks: opts.sections.tasks ? printFilterTasks(opts) : [],
     dates: opts.sections.dates ? printFilterDates(opts) : [],
     notes: opts.sections.notes ? printFilterNotes(opts) : [],
-    places: opts.sections.places ? printFilterPlaces(opts) : [],
-    bills: opts.sections.bills ? printFilterBills(opts) : [],
+    wordlab: opts.sections.wordlab ? printFilterWordLab(opts) : [],
+    vault: opts.sections.vault ? printFilterVault(opts) : [],
     byl: opts.sections.byl ? printFilterBYL(opts) : [],
     shop: opts.sections.shop ? printFilterShop(opts) : [],
   };
@@ -2908,7 +3381,7 @@ function generateAndPrint(opts){
 window.addEventListener("beforeprint", ()=>{
   if(document.querySelector(".print-sheet")) return; // Print Center already built one for this print
   const sheet=buildPrintSheet({ format:"fridge", profile:"all",
-    sections:{tasks:true,dates:true,notes:true,places:true,bills:true,shop:true},
+    sections:{tasks:true,dates:true,notes:true,wordlab:true,vault:true,byl:true,shop:true},
     hideCompleted:true, includeLater:false, dateRange:"next7" });
   sheet.classList.add("print-sheet-fallback");
   document.body.appendChild(sheet);
@@ -2924,6 +3397,8 @@ function tick(){ const d=new Date(); document.getElementById("clock").innerHTML=
      nothing the 1s tick does may ever rebuild DOM out from under an open editor. */
   if(!editingActive()){
     if(pendingRemoteRender){ pendingRemoteRender=false; render(); return; }
+    const curWordLabDay=localEpochDay();
+    if(curWordLabDay!==lastWordLabDay){ lastWordLabDay=curWordLabDay; wordLabBrowseId=null; renderWordLab(); }
     if(normalizeLater()){ render(); return; }
     const no=new Set(tasks.filter(isOverdue).map(t=>t.id)); let ch=no.size!==overdueSet.size; if(!ch) for(const i of no) if(!overdueSet.has(i)){ ch=true; break; }
     if(ch){ render(); return; }
