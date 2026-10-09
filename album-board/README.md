@@ -20,6 +20,10 @@ The song list is a generated file, `songs.js`. After new songs land in SBGLP, ru
 
 It reads `SBGLP/02 Album Project/Writing Sessions` (the `2026-10-08-Reset` and `2026-10-09-Lyric-Mine` folders) using the same relative path on the Mac mini and the PC. Pass a different Writing Sessions path as the first argument if needed. To add a future session folder, add it to `SESSIONS` at the top of the script.
 
+## Rating and your own versions
+
+Each version of a song has its own score, Shortlist/Maybe/Cut and notes. The song list shows the best score across a song's versions. **Copy & edit** makes your own copy of the version you are viewing, with editable name, title, style, exclude and lyrics that save as you type. The Copy buttons use your edited text. Your versions appear as extra chips on the song, are never touched by `build_songs.py`, and can be deleted. The **My versions** filter lists songs that have one.
+
 ## Where your scores live
 
 In the browser, under the localStorage key `grind.album.v1` (the same `grind.` prefix The Grind uses). It is device-local for now: it is **not** synced through The Grind's Firebase node yet. Use **Export scores** and **Import scores** at the bottom of the page to move them between devices.
