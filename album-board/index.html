@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0C0812">
+<title>Album Board</title>
+<link rel="icon" href="../favicon-32.png">
+<style>
+  :root {
+    color-scheme: dark;
+    --paper:#0C0812; --card:#17111F; --surface-2:#221934; --input-bg:#120B1A; --track:#372950;
+    --ink:#EDE7F6; --muted:#A599BF; --muted-2:#786A93; --line:#372950;
+    --signal:#A855F7; --signal-dim:#C9A6FF; --star:#F2C14E; --alarm:#F0575C; --ok:#4ADE80;
+    --radius:12px; --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; }
+  body { font-family:var(--sans); background:var(--paper); color:var(--ink); -webkit-font-smoothing:antialiased; line-height:1.4; }
+  button, input, textarea, select { font:inherit; color:inherit; }
+  .wrap { max-width:1160px; margin:0 auto; padding:16px 16px 80px; }
+  .eyebrow { font-family:var(--mono); font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted-2); }
+  header.top { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+  header.top h1 { margin:2px 0 0; font-size:26px; letter-spacing:-.02em; }
+  header.top a { color:var(--signal-dim); text-decoration:none; font-size:14px; }
+  .tabs { display:flex; gap:6px; margin:6px 0 14px; }
+  .tab { background:var(--card); border:1px solid var(--line); border-radius:999px; padding:8px 14px; cursor:pointer; font-weight:700; font-size:14px; }
+  .tab[aria-selected="true"] { background:var(--signal); border-color:var(--signal); color:#fff; }
+  .tools { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+  .tools input[type=search] { flex:1 1 220px; min-width:0; background:var(--input-bg); border:1px solid var(--line); border-radius:10px; padding:9px 12px; }
+  select { background:var(--input-bg); border:1px solid var(--line); border-radius:10px; padding:9px 10px; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+  .chip { background:transparent; border:1px solid var(--line); border-radius:999px; padding:5px 11px; font-size:13px; color:var(--muted); cursor:pointer; }
+  .chip[aria-pressed="true"] { border-color:var(--signal); color:var(--ink); background:var(--surface-2); }
+  .grid { display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1.25fr); gap:14px; align-items:start; }
+  @media (max-width:820px) { .grid { grid-template-columns:minmax(0,1fr); } .detail.empty { display:none; } }
+  .list { display:flex; flex-direction:column; gap:6px; }
+  .row { display:flex; align-items:center; gap:10px; background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; cursor:pointer; }
+  .row:hover { border-color:var(--track); background:#1b1424; }
+  .row.active { border-color:var(--signal); }
+  .row .t { flex:1 1 auto; min-width:0; }
+  .row .t b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .row .t small { color:var(--muted-2); font-family:var(--mono); font-size:11px; }
+  .score { font-family:var(--mono); font-weight:800; min-width:42px; text-align:center; border-radius:8px; padding:4px 6px; background:var(--surface-2); color:var(--muted); font-size:14px; }
+  .score.hi { color:#0C0812; background:var(--star); } .score.mid { color:var(--ink); background:var(--track); }
+  .badge { font-family:var(--mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; border:1px solid var(--line); border-radius:6px; padding:2px 6px; color:var(--muted); white-space:nowrap; }
+  .badge.short { border-color:var(--ok); color:var(--ok); } .badge.maybe { border-color:var(--star); color:var(--star); } .badge.cut { border-color:var(--alarm); color:var(--alarm); }
+  .badge.ep { border-color:var(--signal-dim); color:var(--signal-dim); }
+  .in-album { color:var(--signal-dim); font-size:16px; }
+  .detail { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:16px; position:sticky; top:12px; max-height:calc(100vh - 24px); overflow:auto; box-shadow:var(--shadow); }
+  @media (max-width:820px) { .detail { position:static; max-height:none; } }
+  .detail.empty { color:var(--muted); text-align:center; padding:40px 16px; }
+  .detail h2 { margin:2px 0 4px; font-size:22px; }
+  .meta { color:var(--muted); font-size:13px; margin-bottom:12px; }
+  .versions { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+  .scorebox { display:flex; align-items:center; gap:12px; margin:8px 0 12px; }
+  .scorebox input[type=range] { flex:1; accent-color:var(--signal); }
+  .scorebox input[type=number] { width:72px; background:var(--input-bg); border:1px solid var(--line); border-radius:8px; padding:6px 8px; font-family:var(--mono); font-weight:800; font-size:18px; text-align:center; }
+  .status { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+  .btn { background:var(--surface-2); border:1px solid var(--line); border-radius:10px; padding:8px 12px; cursor:pointer; font-size:14px; font-weight:600; }
+  .btn:hover { border-color:var(--signal); }
+  .btn.primary { background:var(--signal); border-color:var(--signal); color:#fff; }
+  .btn.small { padding:5px 9px; font-size:12px; }
+  .btn[aria-pressed="true"].s-short { background:var(--ok); color:#0C0812; border-color:var(--ok); }
+  .btn[aria-pressed="true"].s-maybe { background:var(--star); color:#0C0812; border-color:var(--star); }
+  .btn[aria-pressed="true"].s-cut { background:var(--alarm); color:#fff; border-color:var(--alarm); }
+  textarea { width:100%; min-height:64px; background:var(--input-bg); border:1px solid var(--line); border-radius:10px; padding:9px 11px; resize:vertical; }
+  .suno { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:6px; margin:12px 0; }
+  @media (max-width:480px) { .suno { grid-template-columns:repeat(2, minmax(0,1fr)); } }
+  .suno .btn { display:flex; flex-direction:column; align-items:flex-start; gap:2px; text-align:left; }
+  .suno .btn small { font-family:var(--mono); font-size:10px; color:var(--muted); font-weight:400; }
+  .suno .btn.copied { border-color:var(--ok); }
+  details.style { margin:6px 0 12px; } details.style summary { cursor:pointer; color:var(--muted); font-size:13px; }
+  details.style p { font-size:13px; color:var(--muted); margin:6px 0; }
+  pre.lyrics { white-space:pre-wrap; word-wrap:break-word; font-family:var(--sans); font-size:14.5px; line-height:1.55; background:var(--input-bg); border:1px solid var(--line); border-radius:10px; padding:14px; margin:0; }
+  pre.lyrics .tag { color:var(--signal-dim); font-family:var(--mono); font-size:12px; }
+  .track { display:flex; align-items:center; gap:10px; background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; margin-bottom:6px; }
+  .track .n { font-family:var(--mono); font-weight:800; color:var(--signal-dim); width:28px; text-align:right; }
+  .track .t { flex:1; min-width:0; } .track .t b { display:block; }
+  .track .t small { color:var(--muted-2); font-size:12px; }
+  .track .ctl { display:flex; gap:4px; }
+  .empty-note { color:var(--muted); padding:20px 4px; }
+  .foot { margin-top:26px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; color:var(--muted-2); font-size:12px; }
+  .toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:var(--surface-2); border:1px solid var(--signal); border-radius:999px; padding:8px 16px; font-size:14px; opacity:0; pointer-events:none; transition:opacity .2s; }
+  .toast.on { opacity:1; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">The Grind · Album</div>
+      <h1>Album Board</h1>
+      <div class="meta" id="summary"></div>
+    </div>
+    <a href="../">← The Grind</a>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tabSongs" aria-selected="true">Songs</button>
+    <button class="tab" role="tab" id="tabAlbum" aria-selected="false">Tracklist <span id="albumCount"></span></button>
+  </div>
+
+  <section id="viewSongs">
+    <div class="tools">
+      <input type="search" id="q" placeholder="Search titles and lyrics" autocomplete="off">
+      <select id="sort" aria-label="Sort">
+        <option value="session">Sort: session</option>
+        <option value="score">Sort: score</option>
+        <option value="title">Sort: title</option>
+      </select>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div class="grid">
+      <div class="list" id="list"></div>
+      <div class="detail empty" id="detail">Pick a song to read it, score it, and copy its Suno fields.</div>
+    </div>
+  </section>
+
+  <section id="viewAlbum" class="hidden">
+    <div class="tools">
+      <button class="btn" id="copyTracklist">Copy tracklist</button>
+      <button class="btn" id="clearAlbum">Clear tracklist</button>
+    </div>
+    <div id="tracks"></div>
+  </section>
+
+  <div class="foot">
+    <span id="built"></span>
+    <button class="btn small" id="exportBtn">Export scores</button>
+    <button class="btn small" id="importBtn">Import scores</button>
+    <input type="file" id="importFile" accept="application/json" class="hidden">
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="songs.js"></script>
+<script>
+"use strict";
+// Album Board for The Grind. Device-local for now: state lives in localStorage under grind.album.v1
+// (same grind.* prefix as The Grind). Not synced to Firebase yet; Export/Import moves it between devices.
+const KEY = "grind.album.v1";
+const SONGS = (window.ALBUM_SONGS || []);
+const BY = Object.fromEntries(SONGS.map(s => [s.slug, s]));
+const STATUSES = [["short","Shortlist"],["maybe","Maybe"],["cut","Cut"]];
+const FILTERS = [["all","All"],["Oct 8 Reset","Oct 8"],["Oct 9 Lyric Mine","Oct 9"],["unrated","Unrated"],["short","Shortlist"],["maybe","Maybe"],["cut","Cut"],["album","On album"],["ep","EP"]];
+
+function load() {
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && typeof s === "object") return { ratings:{}, tracklist:[], pick:{}, ...s }; } catch (e) {}
+  return { ratings:{}, tracklist:[], pick:{} };
+}
+let state = load();
+function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+let ui = { view:"songs", filter:"all", q:"", sort:"session", open:null };
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function rating(slug) { return state.ratings[slug] || {}; }
+function setRating(slug, patch) { state.ratings[slug] = { ...rating(slug), ...patch, at: Date.now() }; save(); }
+function version(s) { const st = state.pick[s.slug]; return s.versions.find(v => v.stem === st) || s.versions[s.versions.length - 1]; }
+function inAlbum(slug) { return state.tracklist.includes(slug); }
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("on"), 1400); }
+function scoreClass(n) { return n == null ? "" : n >= 80 ? "hi" : n >= 50 ? "mid" : ""; }
+
+function matches(s) {
+  const r = rating(s.slug), f = ui.filter;
+  if (f === "unrated" && r.score != null) return false;
+  if (["short","maybe","cut"].includes(f) && r.status !== f) return false;
+  if (f === "album" && !inAlbum(s.slug)) return false;
+  if (f === "ep" && !s.ep) return false;
+  if (f.startsWith("Oct") && s.session !== f) return false;
+  if (ui.q) {
+    const q = ui.q.toLowerCase();
+    if (!s.title.toLowerCase().includes(q) && !version(s).lyrics.toLowerCase().includes(q)) return false;
+  }
+  return true;
+}
+function sorted(arr) {
+  const a = arr.slice();
+  if (ui.sort === "title") a.sort((x,y) => x.title.localeCompare(y.title));
+  else if (ui.sort === "score") a.sort((x,y) => (rating(y.slug).score ?? -1) - (rating(x.slug).score ?? -1) || x.title.localeCompare(y.title));
+  return a;
+}
+
+function renderSummary() {
+  const rated = SONGS.filter(s => rating(s.slug).score != null).length;
+  $("summary").textContent = `${SONGS.length} songs · ${rated} scored · ${state.tracklist.length} on the album`;
+  $("albumCount").textContent = state.tracklist.length ? `(${state.tracklist.length})` : "";
+  $("built").textContent = window.ALBUM_BUILT ? `Songs loaded ${window.ALBUM_BUILT}` : "No songs.js found";
+}
+function renderChips() {
+  $("chips").innerHTML = FILTERS.map(([k,l]) => `<button class="chip" data-f="${esc(k)}" aria-pressed="${ui.filter===k}">${esc(l)}</button>`).join("");
+}
+function renderList() {
+  const rows = sorted(SONGS.filter(matches));
+  if (!rows.length) { $("list").innerHTML = `<div class="empty-note">Nothing matches.</div>`; return; }
+  $("list").innerHTML = rows.map(s => {
+    const r = rating(s.slug), v = version(s);
+    const st = STATUSES.find(x => x[0] === r.status);
+    return `<div class="row${ui.open===s.slug?" active":""}" data-slug="${esc(s.slug)}">
+      <div class="score ${scoreClass(r.score)}">${r.score ?? "–"}</div>
+      <div class="t"><b>${esc(s.title)}</b><small>${esc(s.session)} · v${String(v.version).padStart(2,"0")} ${esc(v.writer)}${s.versions.length>1?` · ${s.versions.length} versions`:""}</small></div>
+      ${s.ep ? `<span class="badge ep">EP</span>` : ""}
+      ${st ? `<span class="badge ${st[0]}">${st[1]}</span>` : ""}
+      ${inAlbum(s.slug) ? `<span class="in-album" title="On the album">●</span>` : ""}
+    </div>`;
+  }).join("");
+}
+function lyricHtml(text) {
+  return esc(text).replace(/^(\[[^\]\n]+\])/gm, '<span class="tag">$1</span>');
+}
+function renderDetail() {
+  const d = $("detail"), s = BY[ui.open];
+  if (!s) { d.className = "detail empty"; d.textContent = "Pick a song to read it, score it, and copy its Suno fields."; return; }
+  const r = rating(s.slug), v = version(s), su = v.suno;
+  const fields = [["title","Title",su.title],["style","Style",su.style],["lyrics","Lyrics",su.lyrics ?? v.lyrics],["exclude","Exclude",su.exclude]];
+  d.className = "detail";
+  d.innerHTML = `
+    <div class="eyebrow">${esc(s.session)}${s.ep ? " · EP" : ""}</div>
+    <h2>${esc(s.title)}</h2>
+    <div class="meta">${esc(v.header || "")}</div>
+    ${s.versions.length > 1 ? `<div class="versions">${s.versions.map(x => `<button class="btn small" data-ver="${esc(x.stem)}" aria-pressed="${x.stem===v.stem}" style="${x.stem===v.stem?"border-color:var(--signal)":""}">v${String(x.version).padStart(2,"0")} ${esc(x.writer)}</button>`).join("")}</div>` : ""}
+    <div class="eyebrow">Score (0 to 100)</div>
+    <div class="scorebox">
+      <input type="range" min="0" max="100" step="1" id="scoreRange" value="${r.score ?? 50}">
+      <input type="number" min="0" max="100" id="scoreNum" value="${r.score ?? ""}" placeholder="–">
+    </div>
+    <div class="status">
+      ${STATUSES.map(([k,l]) => `<button class="btn s-${k}" data-status="${k}" aria-pressed="${r.status===k}">${l}</button>`).join("")}
+      <button class="btn ${inAlbum(s.slug) ? "" : "primary"}" id="albumToggle">${inAlbum(s.slug) ? "Remove from album" : "+ Add to album"}</button>
+    </div>
+    <textarea id="note" placeholder="Notes for this song: timestamps, what hit, what to fix">${esc(r.note || "")}</textarea>
+    <div class="suno">${fields.map(([k,l,val]) => `<button class="btn" data-copy="${k}"><span>Copy ${l}</span><small>${val ? (val.length.toLocaleString() + " chars") : "missing"}</small></button>`).join("")}</div>
+    <details class="style"><summary>Style and exclude</summary><p><b>Style:</b> ${esc(su.style || "–")}</p><p><b>Exclude:</b> ${esc(su.exclude || "–")}</p></details>
+    <pre class="lyrics">${lyricHtml(v.lyrics)}</pre>`;
+  d._fields = Object.fromEntries(fields.map(([k,,val]) => [k, val || ""]));
+}
+function renderAlbum() {
+  const t = state.tracklist.filter(slug => BY[slug]);
+  if (!t.length) { $("tracks").innerHTML = `<div class="empty-note">No songs on the album yet. Open a song and tap “+ Add to album”.</div>`; return; }
+  $("tracks").innerHTML = t.map((slug, i) => {
+    const s = BY[slug], r = rating(slug);
+    return `<div class="track" data-slug="${esc(slug)}">
+      <div class="n">${i+1}</div>
+      <div class="score ${scoreClass(r.score)}">${r.score ?? "–"}</div>
+      <div class="t"><b>${esc(s.title)}</b><small>${esc(s.session)}${r.note ? " · " + esc(r.note.slice(0,80)) : ""}</small></div>
+      <div class="ctl">
+        <button class="btn small" data-move="-1" aria-label="Move up" ${i===0?"disabled":""}>↑</button>
+        <button class="btn small" data-move="1" aria-label="Move down" ${i===t.length-1?"disabled":""}>↓</button>
+        <button class="btn small" data-remove aria-label="Remove">✕</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+function render() {
+  renderSummary();
+  $("viewSongs").classList.toggle("hidden", ui.view !== "songs");
+  $("viewAlbum").classList.toggle("hidden", ui.view !== "album");
+  $("tabSongs").setAttribute("aria-selected", ui.view === "songs");
+  $("tabAlbum").setAttribute("aria-selected", ui.view === "album");
+  if (ui.view === "songs") { renderChips(); renderList(); renderDetail(); } else renderAlbum();
+}
+function rerenderKeepDetail() { renderSummary(); renderList(); }
+
+// Events
+$("tabSongs").onclick = () => { ui.view = "songs"; render(); };
+$("tabAlbum").onclick = () => { ui.view = "album"; render(); };
+$("q").oninput = e => { ui.q = e.target.value.trim(); renderList(); };
+$("sort").onchange = e => { ui.sort = e.target.value; renderList(); };
+$("chips").onclick = e => { const b = e.target.closest("[data-f]"); if (!b) return; ui.filter = b.dataset.f; renderChips(); renderList(); };
+$("list").onclick = e => {
+  const row = e.target.closest(".row"); if (!row) return;
+  ui.open = row.dataset.slug; renderList(); renderDetail();
+  if (window.innerWidth <= 820) $("detail").scrollIntoView({ behavior:"smooth", block:"start" });
+};
+$("detail").addEventListener("click", async e => {
+  const s = BY[ui.open]; if (!s) return;
+  const ver = e.target.closest("[data-ver]");
+  if (ver) { state.pick[s.slug] = ver.dataset.ver; save(); renderDetail(); renderList(); return; }
+  const st = e.target.closest("[data-status]");
+  if (st) { const k = st.dataset.status; setRating(s.slug, { status: rating(s.slug).status === k ? null : k }); renderDetail(); rerenderKeepDetail(); return; }
+  if (e.target.closest("#albumToggle")) {
+    if (inAlbum(s.slug)) state.tracklist = state.tracklist.filter(x => x !== s.slug); else state.tracklist.push(s.slug);
+    save(); renderDetail(); rerenderKeepDetail(); toast(inAlbum(s.slug) ? "Added to the album" : "Removed from the album"); return;
+  }
+  const cp = e.target.closest("[data-copy]");
+  if (cp) {
+    const text = $("detail")._fields[cp.dataset.copy] || "";
+    try { await navigator.clipboard.writeText(text); cp.classList.add("copied"); toast("Copied " + cp.dataset.copy); }
+    catch (err) { const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); toast("Copied " + cp.dataset.copy); }
+  }
+});
+$("detail").addEventListener("input", e => {
+  const s = BY[ui.open]; if (!s) return;
+  if (e.target.id === "scoreRange" || e.target.id === "scoreNum") {
+    let n = parseInt(e.target.value, 10);
+    if (e.target.id === "scoreNum" && e.target.value === "") { setRating(s.slug, { score: null }); rerenderKeepDetail(); return; }
+    if (isNaN(n)) return; n = Math.max(0, Math.min(100, n));
+    setRating(s.slug, { score: n });
+    if (e.target.id === "scoreRange") $("scoreNum").value = n; else $("scoreRange").value = n;
+    rerenderKeepDetail();
+  }
+  if (e.target.id === "note") { setRating(s.slug, { note: e.target.value }); }
+});
+$("tracks").onclick = e => {
+  const tr = e.target.closest(".track"); if (!tr) return;
+  const i = state.tracklist.indexOf(tr.dataset.slug);
+  const mv = e.target.closest("[data-move]");
+  if (mv) { const j = i + Number(mv.dataset.move); if (j < 0 || j >= state.tracklist.length) return; [state.tracklist[i], state.tracklist[j]] = [state.tracklist[j], state.tracklist[i]]; save(); render(); return; }
+  if (e.target.closest("[data-remove]")) { state.tracklist.splice(i, 1); save(); render(); return; }
+  ui.open = tr.dataset.slug; ui.view = "songs"; render();
+};
+$("copyTracklist").onclick = async () => {
+  const text = state.tracklist.filter(s => BY[s]).map((s, i) => `${i+1}. ${BY[s].title}`).join("\n");
+  try { await navigator.clipboard.writeText(text); toast("Tracklist copied"); } catch (e) { toast("Copy failed"); }
+};
+$("clearAlbum").onclick = () => { if (state.tracklist.length && confirm("Clear the whole tracklist? Scores and notes stay.")) { state.tracklist = []; save(); render(); } };
+$("exportBtn").onclick = () => {
+  const blob = new Blob([JSON.stringify({ app:"album-board", exported:new Date().toISOString(), ...state }, null, 2)], { type:"application/json" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "album-board-" + new Date().toISOString().slice(0,10) + ".json"; a.click(); URL.revokeObjectURL(a.href);
+};
+$("importBtn").onclick = () => $("importFile").click();
+$("importFile").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const d = JSON.parse(await f.text());
+    if (!d || d.app !== "album-board") throw new Error("not an Album Board export");
+    state = { ratings: d.ratings || {}, tracklist: Array.isArray(d.tracklist) ? d.tracklist : [], pick: d.pick || {} };
+    save(); render(); toast("Imported");
+  } catch (err) { toast("Import failed: " + err.message); }
+  e.target.value = "";
+};
+render();
+</script>
+</body>
+</html>
