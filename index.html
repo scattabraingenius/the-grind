@@ -4778,7 +4778,8 @@ function renderAppNav(){
   const fp=(id,label,icon,hash)=>({id, label, icon, href:MM_HOME_URL+hash});
   const dot=ogActive ? (ogDecisionDue() ? {cls:"due", title:"The Grind: time reached"} : {cls:"", title:"The Grind is tracking"}) : null;
   const items=[fp("home","Home","home",""), fp("calendar","Calendar","calendar","#calendar"), fp("agenda","Agenda","agenda","#agenda"),
-               {id:"time", label:"Time", icon:"time", href:"#time", current:sbView==="time", dot}];
+               {id:"time", label:"Time", icon:"time", href:"#time", current:sbView==="time", dot},
+               {id:"album", label:"Album", icon:"agenda", href:"./album-board/"}];
   const group={label:"Life", items:[fp("ehah","EHAH","ehah","#ehah"), fp("clothing","Clothing","clothing","#clothing"),
                fp("funds","Chores","chores","#funds"), fp("bank","Bank","bank","#bank")]};
   const sig=JSON.stringify([items,group]);
