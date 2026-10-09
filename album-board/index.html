@@ -85,6 +85,11 @@
   .foot { margin-top:26px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; color:var(--muted-2); font-size:12px; }
   .toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:var(--surface-2); border:1px solid var(--signal); border-radius:999px; padding:8px 16px; font-size:14px; opacity:0; pointer-events:none; transition:opacity .2s; }
   .toast.on { opacity:1; }
+  .editor { display:flex; flex-direction:column; gap:10px; margin-top:12px; }
+  .editor label { display:flex; flex-direction:column; gap:4px; font-family:var(--mono); font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted-2); }
+  .editor input, .editor textarea { background:var(--input-bg); border:1px solid var(--line); border-radius:10px; padding:9px 11px; font-family:var(--sans); font-size:14.5px; letter-spacing:0; text-transform:none; color:var(--ink); }
+  .editor textarea.ly { min-height:340px; line-height:1.55; }
+  .versions .btn small { font-family:var(--mono); opacity:.8; }
   .hidden { display:none !important; }
 </style>
 </head>
@@ -146,11 +151,26 @@ const KEY = "grind.album.v1";
 const SONGS = (window.ALBUM_SONGS || []);
 const BY = Object.fromEntries(SONGS.map(s => [s.slug, s]));
 const STATUSES = [["short","Shortlist"],["maybe","Maybe"],["cut","Cut"]];
-const FILTERS = [["all","All"],["Oct 8 Reset","Oct 8"],["Oct 9 Lyric Mine","Oct 9"],["unrated","Unrated"],["short","Shortlist"],["maybe","Maybe"],["cut","Cut"],["album","On album"],["ep","EP"]];
+const FILTERS = [["all","All"],["Oct 8 Reset","Oct 8"],["Oct 9 Lyric Mine","Oct 9"],["unrated","Unrated"],["short","Shortlist"],["maybe","Maybe"],["cut","Cut"],["album","On album"],["ep","EP"],["mine","My versions"]];
 
+// v2: ratings are keyed by version stem (one score, status and note per version). Version 1 data was keyed
+// by song slug, so it moves onto whichever version of that song was showing.
+function migrate(st) {
+  st = { ratings:{}, tracklist:[], pick:{}, custom:{}, ...st };
+  if (st.v !== 2) {
+    for (const slug of Object.keys(st.ratings)) {
+      const s = BY[slug]; if (!s) continue;
+      const stem = st.pick[slug] || s.versions[s.versions.length - 1].stem;
+      st.ratings[stem] = { ...st.ratings[slug], ...(st.ratings[stem] || {}) };
+      delete st.ratings[slug];
+    }
+    st.v = 2;
+  }
+  return st;
+}
 function load() {
-  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && typeof s === "object") return { ratings:{}, tracklist:[], pick:{}, ...s }; } catch (e) {}
-  return { ratings:{}, tracklist:[], pick:{} };
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && typeof s === "object") return migrate(s); } catch (e) {}
+  return migrate({});
 }
 let state = load();
 function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
@@ -158,17 +178,21 @@ let ui = { view:"songs", filter:"all", q:"", sort:"session", open:null };
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-function rating(slug) { return state.ratings[slug] || {}; }
-function setRating(slug, patch) { state.ratings[slug] = { ...rating(slug), ...patch, at: Date.now() }; save(); }
-function version(s) { const st = state.pick[s.slug]; return s.versions.find(v => v.stem === st) || s.versions[s.versions.length - 1]; }
+function rating(stem) { return state.ratings[stem] || {}; }
+function setRating(stem, patch) { state.ratings[stem] = { ...rating(stem), ...patch, at: Date.now() }; save(); }
+function versionsOf(s) { return s.versions.concat(state.custom[s.slug] || []); }
+function version(s) { const st = state.pick[s.slug]; return versionsOf(s).find(v => v.stem === st) || s.versions[s.versions.length - 1]; }
+function best(s) { const n = versionsOf(s).map(v => rating(v.stem).score).filter(x => x != null); return n.length ? Math.max(...n) : null; }
+function verLabel(v) { return v.custom ? (v.label || "My copy") : `v${String(v.version).padStart(2,"0")} ${v.writer}`; }
 function inAlbum(slug) { return state.tracklist.includes(slug); }
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("on"), 1400); }
 function scoreClass(n) { return n == null ? "" : n >= 80 ? "hi" : n >= 50 ? "mid" : ""; }
 
 function matches(s) {
-  const r = rating(s.slug), f = ui.filter;
-  if (f === "unrated" && r.score != null) return false;
-  if (["short","maybe","cut"].includes(f) && r.status !== f) return false;
+  const rs = versionsOf(s).map(v => rating(v.stem)), f = ui.filter;
+  if (f === "unrated" && rs.some(r => r.score != null)) return false;
+  if (["short","maybe","cut"].includes(f) && !rs.some(r => r.status === f)) return false;
+  if (f === "mine" && !(state.custom[s.slug] || []).length) return false;
   if (f === "album" && !inAlbum(s.slug)) return false;
   if (f === "ep" && !s.ep) return false;
   if (f.startsWith("Oct") && s.session !== f) return false;
@@ -181,12 +205,12 @@ function matches(s) {
 function sorted(arr) {
   const a = arr.slice();
   if (ui.sort === "title") a.sort((x,y) => x.title.localeCompare(y.title));
-  else if (ui.sort === "score") a.sort((x,y) => (rating(y.slug).score ?? -1) - (rating(x.slug).score ?? -1) || x.title.localeCompare(y.title));
+  else if (ui.sort === "score") a.sort((x,y) => (best(y) ?? -1) - (best(x) ?? -1) || x.title.localeCompare(y.title));
   return a;
 }
 
 function renderSummary() {
-  const rated = SONGS.filter(s => rating(s.slug).score != null).length;
+  const rated = SONGS.filter(s => best(s) != null).length;
   $("summary").textContent = `${SONGS.length} songs · ${rated} scored · ${state.tracklist.length} on the album`;
   $("albumCount").textContent = state.tracklist.length ? `(${state.tracklist.length})` : "";
   $("built").textContent = window.ALBUM_BUILT ? `Songs loaded ${window.ALBUM_BUILT}` : "No songs.js found";
@@ -198,11 +222,11 @@ function renderList() {
   const rows = sorted(SONGS.filter(matches));
   if (!rows.length) { $("list").innerHTML = `<div class="empty-note">Nothing matches.</div>`; return; }
   $("list").innerHTML = rows.map(s => {
-    const r = rating(s.slug), v = version(s);
+    const v = version(s), r = rating(v.stem), bs = best(s), n = versionsOf(s).length;
     const st = STATUSES.find(x => x[0] === r.status);
     return `<div class="row${ui.open===s.slug?" active":""}" data-slug="${esc(s.slug)}">
-      <div class="score ${scoreClass(r.score)}">${r.score ?? "–"}</div>
-      <div class="t"><b>${esc(s.title)}</b><small>${esc(s.session)} · v${String(v.version).padStart(2,"0")} ${esc(v.writer)}${s.versions.length>1?` · ${s.versions.length} versions`:""}</small></div>
+      <div class="score ${scoreClass(bs)}" title="Best score across versions">${bs ?? "–"}</div>
+      <div class="t"><b>${esc(s.title)}</b><small>${esc(s.session)} · ${esc(verLabel(v))}${n>1?` · ${n} versions`:""}</small></div>
       ${s.ep ? `<span class="badge ep">EP</span>` : ""}
       ${st ? `<span class="badge ${st[0]}">${st[1]}</span>` : ""}
       ${inAlbum(s.slug) ? `<span class="in-album" title="On the album">●</span>` : ""}
@@ -212,18 +236,35 @@ function renderList() {
 function lyricHtml(text) {
   return esc(text).replace(/^(\[[^\]\n]+\])/gm, '<span class="tag">$1</span>');
 }
+function fieldsOf(v) { const su = v.suno || {}; return [["title","Title",su.title],["style","Style",su.style],["lyrics","Lyrics",su.lyrics ?? v.lyrics],["exclude","Exclude",su.exclude]]; }
+function countText(val) { return val ? (val.length.toLocaleString() + " chars") : "missing"; }
+function chipHtml(s, x, cur) {
+  const sc = rating(x.stem).score;
+  return `<button class="btn small" data-ver="${esc(x.stem)}" aria-pressed="${x.stem===cur.stem}" style="${x.stem===cur.stem?"border-color:var(--signal)":""}"><span>${esc(verLabel(x))}</span>${sc != null ? ` <small>· ${sc}</small>` : ""}</button>`;
+}
 function renderDetail() {
   const d = $("detail"), s = BY[ui.open];
   if (!s) { d.className = "detail empty"; d.textContent = "Pick a song to read it, score it, and copy its Suno fields."; return; }
-  const r = rating(s.slug), v = version(s), su = v.suno;
-  const fields = [["title","Title",su.title],["style","Style",su.style],["lyrics","Lyrics",su.lyrics ?? v.lyrics],["exclude","Exclude",su.exclude]];
+  const v = version(s), r = rating(v.stem), su = v.suno || {}, fields = fieldsOf(v);
+  const vs = versionsOf(s), src = v.custom ? vs.find(x => x.stem === v.copiedFrom) : null;
   d.className = "detail";
+  const body = v.custom ? `
+    <div class="editor">
+      <label>Name<input id="edLabel" value="${esc(v.label || "")}" autocomplete="off"></label>
+      <label>Title<input id="edTitle" value="${esc(su.title || "")}" autocomplete="off"></label>
+      <label>Style<textarea id="edStyle" rows="4">${esc(su.style || "")}</textarea></label>
+      <label>Exclude<textarea id="edExclude" rows="2">${esc(su.exclude || "")}</textarea></label>
+      <label>Lyrics<textarea id="edLyrics" class="ly">${esc(su.lyrics ?? v.lyrics)}</textarea></label>
+      <div><button class="btn" id="delMine">Delete my version</button></div>
+    </div>` : `
+    <details class="style"><summary>Style and exclude</summary><p><b>Style:</b> ${esc(su.style || "–")}</p><p><b>Exclude:</b> ${esc(su.exclude || "–")}</p></details>
+    <pre class="lyrics">${lyricHtml(v.lyrics)}</pre>`;
   d.innerHTML = `
     <div class="eyebrow">${esc(s.session)}${s.ep ? " · EP" : ""}</div>
     <h2>${esc(s.title)}</h2>
-    <div class="meta">${esc(v.header || "")}</div>
-    ${s.versions.length > 1 ? `<div class="versions">${s.versions.map(x => `<button class="btn small" data-ver="${esc(x.stem)}" aria-pressed="${x.stem===v.stem}" style="${x.stem===v.stem?"border-color:var(--signal)":""}">v${String(x.version).padStart(2,"0")} ${esc(x.writer)}</button>`).join("")}</div>` : ""}
-    <div class="eyebrow">Score (0 to 100)</div>
+    <div class="meta">${v.custom ? `Your version${src ? ", copied from " + esc(verLabel(src)) : ""}. Edits save as you type.` : esc(v.header || "")}</div>
+    <div class="versions">${vs.map(x => chipHtml(s, x, v)).join("")}</div>
+    <div class="eyebrow">Score for ${esc(verLabel(v))} (0 to 100)</div>
     <div class="scorebox">
       <input type="range" min="0" max="100" step="1" id="scoreRange" value="${r.score ?? 50}">
       <input type="number" min="0" max="100" id="scoreNum" value="${r.score ?? ""}" placeholder="–">
@@ -231,22 +272,27 @@ function renderDetail() {
     <div class="status">
       ${STATUSES.map(([k,l]) => `<button class="btn s-${k}" data-status="${k}" aria-pressed="${r.status===k}">${l}</button>`).join("")}
       <button class="btn ${inAlbum(s.slug) ? "" : "primary"}" id="albumToggle">${inAlbum(s.slug) ? "Remove from album" : "+ Add to album"}</button>
+      <button class="btn" id="copyEdit">Copy &amp; edit</button>
     </div>
-    <textarea id="note" placeholder="Notes for this song: timestamps, what hit, what to fix">${esc(r.note || "")}</textarea>
-    <div class="suno">${fields.map(([k,l,val]) => `<button class="btn" data-copy="${k}"><span>Copy ${l}</span><small>${val ? (val.length.toLocaleString() + " chars") : "missing"}</small></button>`).join("")}</div>
-    <details class="style"><summary>Style and exclude</summary><p><b>Style:</b> ${esc(su.style || "–")}</p><p><b>Exclude:</b> ${esc(su.exclude || "–")}</p></details>
-    <pre class="lyrics">${lyricHtml(v.lyrics)}</pre>`;
+    <textarea id="note" placeholder="Notes for this version: timestamps, what hit, what to fix">${esc(r.note || "")}</textarea>
+    <div class="suno">${fields.map(([k,l,val]) => `<button class="btn" data-copy="${k}"><span>Copy ${l}</span><small>${countText(val)}</small></button>`).join("")}</div>
+    ${body}`;
   d._fields = Object.fromEntries(fields.map(([k,,val]) => [k, val || ""]));
+}
+function refreshCopyButtons(v) {
+  const d = $("detail"), fields = fieldsOf(v);
+  d._fields = Object.fromEntries(fields.map(([k,,val]) => [k, val || ""]));
+  for (const [k,,val] of fields) { const sm = d.querySelector(`[data-copy="${k}"] small`); if (sm) sm.textContent = countText(val); }
 }
 function renderAlbum() {
   const t = state.tracklist.filter(slug => BY[slug]);
   if (!t.length) { $("tracks").innerHTML = `<div class="empty-note">No songs on the album yet. Open a song and tap “+ Add to album”.</div>`; return; }
   $("tracks").innerHTML = t.map((slug, i) => {
-    const s = BY[slug], r = rating(slug);
+    const s = BY[slug], v = version(s), r = rating(v.stem);
     return `<div class="track" data-slug="${esc(slug)}">
       <div class="n">${i+1}</div>
       <div class="score ${scoreClass(r.score)}">${r.score ?? "–"}</div>
-      <div class="t"><b>${esc(s.title)}</b><small>${esc(s.session)}${r.note ? " · " + esc(r.note.slice(0,80)) : ""}</small></div>
+      <div class="t"><b>${esc(s.title)}</b><small>${esc(s.session)} · ${esc(verLabel(v))}${r.note ? " · " + esc(r.note.slice(0,80)) : ""}</small></div>
       <div class="ctl">
         <button class="btn small" data-move="-1" aria-label="Move up" ${i===0?"disabled":""}>↑</button>
         <button class="btn small" data-move="1" aria-label="Move down" ${i===t.length-1?"disabled":""}>↓</button>
@@ -278,13 +324,27 @@ $("list").onclick = e => {
 };
 $("detail").addEventListener("click", async e => {
   const s = BY[ui.open]; if (!s) return;
+  const cur = version(s);
   const ver = e.target.closest("[data-ver]");
   if (ver) { state.pick[s.slug] = ver.dataset.ver; save(); renderDetail(); renderList(); return; }
   const st = e.target.closest("[data-status]");
-  if (st) { const k = st.dataset.status; setRating(s.slug, { status: rating(s.slug).status === k ? null : k }); renderDetail(); rerenderKeepDetail(); return; }
+  if (st) { const k = st.dataset.status; setRating(cur.stem, { status: rating(cur.stem).status === k ? null : k }); renderDetail(); rerenderKeepDetail(); return; }
   if (e.target.closest("#albumToggle")) {
     if (inAlbum(s.slug)) state.tracklist = state.tracklist.filter(x => x !== s.slug); else state.tracklist.push(s.slug);
     save(); renderDetail(); rerenderKeepDetail(); toast(inAlbum(s.slug) ? "Added to the album" : "Removed from the album"); return;
+  }
+  if (e.target.closest("#copyEdit")) {
+    const su = cur.suno || {}, lyr = su.lyrics ?? cur.lyrics, list = state.custom[s.slug] || (state.custom[s.slug] = []);
+    const nv = { stem: `mine-${s.slug}-${Date.now().toString(36)}`, custom:true, version:0, label:`My copy ${list.length + 1}`, writer:"Me", session:s.session,
+      copiedFrom:cur.stem, title:su.title || s.title, lyrics:lyr, header:"", suno:{ title:su.title || s.title, lyrics:lyr, style:su.style || "", exclude:su.exclude || "" }, created:Date.now() };
+    list.push(nv); state.pick[s.slug] = nv.stem; save(); renderDetail(); renderList(); toast("Copied. Edit it below.");
+    $("edLyrics") && $("edLyrics").focus(); return;
+  }
+  if (e.target.closest("#delMine")) {
+    if (!confirm(`Delete "${cur.label || "this version"}"? Its score and notes go with it.`)) return;
+    state.custom[s.slug] = (state.custom[s.slug] || []).filter(x => x.stem !== cur.stem);
+    delete state.ratings[cur.stem]; delete state.pick[s.slug];
+    save(); renderDetail(); renderList(); renderSummary(); toast("Deleted"); return;
   }
   const cp = e.target.closest("[data-copy]");
   if (cp) {
@@ -295,16 +355,31 @@ $("detail").addEventListener("click", async e => {
 });
 $("detail").addEventListener("input", e => {
   const s = BY[ui.open]; if (!s) return;
-  if (e.target.id === "scoreRange" || e.target.id === "scoreNum") {
+  const v = version(s), id = e.target.id;
+  if (id === "scoreRange" || id === "scoreNum") {
     let n = parseInt(e.target.value, 10);
-    if (e.target.id === "scoreNum" && e.target.value === "") { setRating(s.slug, { score: null }); rerenderKeepDetail(); return; }
+    if (id === "scoreNum" && e.target.value === "") { setRating(v.stem, { score: null }); rerenderKeepDetail(); updateChip(s, v); return; }
     if (isNaN(n)) return; n = Math.max(0, Math.min(100, n));
-    setRating(s.slug, { score: n });
-    if (e.target.id === "scoreRange") $("scoreNum").value = n; else $("scoreRange").value = n;
-    rerenderKeepDetail();
+    setRating(v.stem, { score: n });
+    if (id === "scoreRange") $("scoreNum").value = n; else $("scoreRange").value = n;
+    rerenderKeepDetail(); updateChip(s, v);
   }
-  if (e.target.id === "note") { setRating(s.slug, { note: e.target.value }); }
+  if (id === "note") { setRating(v.stem, { note: e.target.value }); return; }
+  if (v.custom && ["edLabel","edTitle","edStyle","edExclude","edLyrics"].includes(id)) {
+    const val = e.target.value; v.suno = v.suno || {};
+    if (id === "edLabel") v.label = val;
+    if (id === "edTitle") v.suno.title = v.title = val;
+    if (id === "edStyle") v.suno.style = val;
+    if (id === "edExclude") v.suno.exclude = val;
+    if (id === "edLyrics") v.suno.lyrics = v.lyrics = val;
+    save(); refreshCopyButtons(v);
+    if (id === "edLabel") { updateChip(s, v); renderList(); }
+  }
 });
+function updateChip(s, v) {
+  const chip = $("detail").querySelector(`[data-ver="${CSS.escape(v.stem)}"]`);
+  if (chip) chip.outerHTML = chipHtml(s, v, v);
+}
 $("tracks").onclick = e => {
   const tr = e.target.closest(".track"); if (!tr) return;
   const i = state.tracklist.indexOf(tr.dataset.slug);
@@ -328,7 +403,7 @@ $("importFile").onchange = async e => {
   try {
     const d = JSON.parse(await f.text());
     if (!d || d.app !== "album-board") throw new Error("not an Album Board export");
-    state = { ratings: d.ratings || {}, tracklist: Array.isArray(d.tracklist) ? d.tracklist : [], pick: d.pick || {} };
+    state = migrate({ ratings: d.ratings || {}, tracklist: Array.isArray(d.tracklist) ? d.tracklist : [], pick: d.pick || {}, custom: d.custom || {}, v: d.v });
     save(); render(); toast("Imported");
   } catch (err) { toast("Import failed: " + err.message); }
   e.target.value = "";
