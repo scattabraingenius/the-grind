@@ -1,4 +1,4 @@
-# Album Board status - 2026-10-10
+# Album Board status - 2026-10-11
 
 Prepared locally from published main commit `90cd159ae033ceb417a213cec2c6b4c38ad28ee6`. Jason approved publication on October 10 with 'push when done'. The newly included writing drafts are included in that authorized public release.
 
@@ -10,4 +10,6 @@ Verification: three importer regression tests and twelve headless browser check 
 
 The normal Chrome/in-app browser control runtime cannot launch because its sandbox fails while enumerating unrelated I:/J: volumes. Local headless browser verification succeeded. The canonical ILS directory is unavailable on this PC; the synced source checkout and its broken copied worktree registrations were preserved. This implementation lives in the isolated `album-board-improvements` checkout in the current chat workspace.
 
-Multi-device score sync remains a separate improvement; Album Board currently saves in each browser locally and supports export/import.
+October 11: account sync now covers ratings, status, notes, editable versions and tracklist. It uses The Grind's existing Google sign-in and a private per-account child of its existing Firebase node. Existing local data receives a separate backup before initial sync, field revisions merge concurrent rating changes, and pending edits survive offline reload. Empty devices cannot erase existing ratings. Deletions keep tombstones; account switching preserves separate queues. The page distinguishes synced, saving, offline and failures, and offers retry. No planner or database-rule changes were made.
+
+Eight merge checks and eleven two-browser sync checks passed, in addition to the twelve existing board checks. The two-browser tests use a synthetic transactional backend and fresh browser contexts. The real Firebase 9.23.0 SDK initializes successfully while signed out, with zero protected-database requests. A live unauthenticated read of the account path returns HTTP 401. Actual signed-in phone-to-PC access remains a user check because the browser-control runtime still fails at startup. Refresh the phone's board first, use the same Google account on each device, and confirm the sync badge reads **Synced across devices**. Test evidence is in the sibling `album-sync-verification` folder.

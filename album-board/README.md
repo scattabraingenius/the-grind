@@ -34,19 +34,29 @@ Title, style prompt, excluded styles and lyrics have separate visible boxes, eac
 
 ## Where your scores live
 
-In the browser, under the localStorage key `grind.album.v1` (the same `grind.` prefix The Grind uses). It is device-local for now: it is **not** synced through The Grind's Firebase node yet. Use **Export scores** and **Import scores** at the bottom of the page to move them between devices.
+Refresh Album Board on the phone that holds your existing ratings, then on your PCs. Use the same Google account on each device. The page restores The Grind's existing sign-in on the same browser origin; if it is signed out, use **Sign in with Google**. Wait for **Synced across devices** before closing the page. Ratings, Shortlist/Maybe/Cut, notes, editable copies and tracklist sync automatically. The selected version and search/filter choices remain local to each browser.
+
+The existing localStorage key `grind.album.v1` stays in use. The first sync keeps a separate `grind.album.v1.before-cloud-sync` backup. Offline edits and their pending revisions are saved locally and merge when you reconnect. Signing out keeps your local data; switching accounts uses separate caches and does not upload the previous account's data. **Export scores** and **Import scores** remain available for separate backups. Import replaces this account's current board content and syncs that change.
+
+Cloud data lives only at `planners/the-grind-scattabrain-2026/album/accounts/<Google UID>` in the existing Firebase Realtime Database. No database listener attaches while signed out. Existing planner access rules apply; this release does not change those rules. A denied read is an error, never an empty board. An empty PC cannot clear phone ratings. Each rating field has its own revision, so a concurrent score edit and note edit both survive. Concurrent edits to the same field resolve to the later revision; clock ties resolve consistently. Custom copies resolve per version. Deleted copies and removed tracks keep tombstones so stale devices cannot silently restore them. Firebase transactions merge the account's record map without touching planner tasks, family data or any other account.
+
+The sync badge reports saving, synced, offline, and failures separately. Failed writes retain the local queue and offer **Retry sync**. Remote updates do not replace a focused editor. If local storage fails, export a backup before closing. Firebase's [authentication persistence](https://firebase.google.com/docs/auth/web/auth-state-persistence), [transaction semantics](https://firebase.google.com/docs/database/web/read-and-write) and [inherited access rules](https://firebase.google.com/docs/database/security/core-syntax) inform this implementation.
 
 ## Verification
 
     python -B tests/album-board-import.test.py
     APP_BASE_URL=http://127.0.0.1:8765 node tests/album-board.test.cjs
+    node tests/album-sync.test.cjs
+    APP_BASE_URL=http://127.0.0.1:8765 node tests/album-sync-browser.test.cjs
 
 The browser runner uses the existing external Playwright installation via `NODE_PATH` and accepts `BROWSER_EXECUTABLE` and `ARTIFACT_DIR`. It creates a fresh browser context, uses synthetic scores, substitutes a fake clipboard, and blocks all non-local requests. No real account or existing browser profile is touched.
+
+Sync checks use two independent browser contexts and an isolated transactional backend that replaces Firebase SDK requests. They cover migration, concurrent changes, offline reload, deletion, denied reads/writes, retry, account switching and redirect fallback. A separate fresh-browser smoke check initializes the real Firebase SDK while signed out and verifies that no protected database request occurs. The live account path rejects an unauthenticated read (HTTP 401). Positive access with Jason's actual signed-in account could not be checked because the normal browser-control runtime cannot launch; confirm **Synced across devices** on the phone and PCs after release.
 
 ## Current scope
 
 - The shared app bar already links to Album Board, and the service worker precaches its page and catalogue.
-- **Firebase sync.** Would add an `album` key to `planners/the-grind-scattabrain-2026` using `db.update()`. The readiness check says sync changes need comparing against the deployed rules and an isolated test first.
+- Account sync is confined to Album Board's child node; The Grind's existing partial planner updates preserve it. The service worker also precaches `sync.js`, and catalogue/planner release scripts include it in the cache hash.
 - This page contains writing packets and local ratings. It does not download audio or consume Suno downloads.
 
 The October 10 refresh includes 69 songs and 98 versions from six sessions: October 4 (4 versions), October 4 Cold Pass (12), October 8 Reset (39), October 9 Lyric Mine (29), October 10 Cue Battle 01 (7), and October 10 Misc Battle 01 (7). Source packets remain drafts unless Scatta approves them; catalogue inclusion is not listening approval.

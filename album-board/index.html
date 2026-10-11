@@ -83,6 +83,10 @@
   .prompt-field .field-empty { color:var(--muted); font-family:var(--sans); }
   .save-status { flex-basis:100%; color:var(--muted); }
   .save-status.failed { color:var(--alarm); }
+  .account-bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:14px; color:var(--muted); font-size:12px; }
+  .account-bar #syncStatus { flex:1 1 240px; }
+  #syncStatus.failed { color:var(--alarm); }
+  #accountWho { overflow-wrap:anywhere; }
   details.style { margin:6px 0 12px; } details.style summary { cursor:pointer; color:var(--muted); font-size:13px; }
   details.style p { font-size:13px; color:var(--muted); margin:6px 0; }
   pre.lyrics { white-space:pre-wrap; word-wrap:break-word; font-family:var(--sans); font-size:14.5px; line-height:1.55; background:var(--input-bg); border:1px solid var(--line); border-radius:10px; padding:14px; margin:0; }
@@ -115,6 +119,14 @@
     <a href="../">← The Grind</a>
   </header>
 
+  <div class="account-bar">
+    <span id="syncStatus" role="status" aria-live="polite">Checking sign-in… Your scores are saved on this device.</span>
+    <span id="accountWho"></span>
+    <button class="btn small" id="signInBtn" hidden>Sign in with Google</button>
+    <button class="btn small" id="signOutBtn" hidden>Sign out</button>
+    <button class="btn small" id="retrySyncBtn" hidden>Retry sync</button>
+  </div>
+
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" id="tabSongs" aria-selected="true">Songs</button>
     <button class="tab" role="tab" id="tabAlbum" aria-selected="false">Tracklist <span id="albumCount"></span></button>
@@ -146,7 +158,7 @@
 
   <div class="foot">
     <span id="built"></span>
-    <span class="save-status" id="saveStatus" role="status">Saved in this browser. Export a backup to use your scores and edits on another device.</span>
+    <span class="save-status" id="saveStatus" role="status">Saved on this device. Export scores keeps a separate backup.</span>
     <button class="btn small" id="exportBtn">Export scores</button>
     <button class="btn small" id="importBtn">Import scores</button>
     <input type="file" id="importFile" accept="application/json" class="hidden">
@@ -155,10 +167,13 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="songs.js"></script>
+<script src="sync.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
 "use strict";
-// Album Board for The Grind. Device-local for now: state lives in localStorage under grind.album.v1
-// (same grind.* prefix as The Grind). Not synced to Firebase yet; Export/Import moves it between devices.
+// Keep the existing local key. Account sync merges private records in a child of The Grind's node.
 const KEY = "grind.album.v1";
 const SONGS = (window.ALBUM_SONGS || []);
 const BY = Object.fromEntries(SONGS.map(s => [s.slug, s]));
@@ -185,13 +200,19 @@ function load() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && typeof s === "object") return migrate(s); } catch (e) {}
   return migrate({});
 }
-let state = load();
-function save() {
+let state = AlbumSync.prepare(load());
+let previousState = JSON.parse(JSON.stringify(state)), cloud = null, pendingRemoteDetail = false;
+const deviceKey = KEY + ".device";
+let deviceId;
+try { deviceId = localStorage.getItem(deviceKey); } catch (err) {}
+if (!deviceId) { deviceId = crypto.randomUUID(); try { localStorage.setItem(deviceKey, deviceId); } catch (err) {} }
+function persist() {
   const status = $("saveStatus");
   try {
+    if (state._sync.owner) localStorage.setItem(KEY + ".account." + state._sync.owner, JSON.stringify(state));
     localStorage.setItem(KEY, JSON.stringify(state));
     status.classList.remove("failed");
-    status.textContent = "Saved in this browser. Export a backup to use your scores and edits on another device.";
+    status.textContent = "Saved on this device. Export scores keeps a separate backup.";
     return true;
   } catch (e) {
     status.classList.add("failed");
@@ -199,6 +220,13 @@ function save() {
     toast("Changes aren't saved. Export a backup before closing.");
     return false;
   }
+}
+function save() {
+  state = AlbumSync.capture(previousState, state, deviceId);
+  previousState = JSON.parse(JSON.stringify(state));
+  const saved = persist();
+  if (cloud) cloud.changed();
+  return saved;
 }
 let ui = { view:"songs", filter:"all", q:"", sort:"session", open:null };
 
@@ -410,7 +438,7 @@ $("detail").addEventListener("click", async e => {
   }
   if (e.target.closest("#copyEdit")) {
     const su = cur.suno || {}, lyr = su.lyrics ?? cur.lyrics, list = state.custom[s.slug] || (state.custom[s.slug] = []);
-    const nv = { stem: `mine-${s.slug}-${Date.now().toString(36)}`, custom:true, version:0, label:`My copy ${list.length + 1}`, writer:"Me", session:cur.session,
+    const nv = { stem: `mine-${s.slug}-${Date.now().toString(36)}-${crypto.randomUUID().slice(0,8)}`, custom:true, version:0, label:`My copy ${list.length + 1}`, writer:"Me", session:cur.session,
       copiedFrom:cur.stem, title:su.title || s.title, lyrics:lyr, header:"", suno:{ title:su.title || s.title, lyrics:lyr, style:su.style || "", exclude:su.exclude || "", ...(su.instrumental ? {instrumental:su.instrumental} : {}) }, created:Date.now() };
     list.push(nv); state.pick[s.slug] = nv.stem; save(); renderDetail(); renderList(); toast("Copied. Edit it below.");
     $("edLyrics") && $("edLyrics").focus(); return;
@@ -482,12 +510,63 @@ $("importFile").onchange = async e => {
   try {
     const d = JSON.parse(await f.text());
     if (!d || d.app !== "album-board") throw new Error("not an Album Board export");
-    state = migrate({ ratings: d.ratings || {}, tracklist: Array.isArray(d.tracklist) ? d.tracklist : [], pick: d.pick || {}, custom: d.custom || {}, v: d.v });
+    state = migrate({ ratings: d.ratings || {}, tracklist: Array.isArray(d.tracklist) ? d.tracklist : [], pick: d.pick || {}, custom: d.custom || {}, v: d.v, _sync:state._sync });
     save(); render(); toast("Imported");
   } catch (err) { toast("Import failed: " + err.message); }
   e.target.value = "";
 };
+function editingDetail() { return $("detail").contains(document.activeElement) && document.activeElement.matches("input,textarea,select"); }
+function replaceSyncedState(next) {
+  state = next; previousState = JSON.parse(JSON.stringify(state)); persist();
+  renderList(); renderSummary(); renderAlbum();
+  if (editingDetail()) pendingRemoteDetail = true; else { renderDetail(); pendingRemoteDetail = false; }
+}
+$("detail").addEventListener("focusout", () => setTimeout(() => { if (pendingRemoteDetail && !editingDetail()) { pendingRemoteDetail = false; renderDetail(); } }, 0));
+function selectSyncAccount(uid) {
+  if (!state._sync.owner) {
+    try {
+      if (!localStorage.getItem(KEY + ".before-cloud-sync")) localStorage.setItem(KEY + ".before-cloud-sync", JSON.stringify(state));
+    } catch (err) { throw Error("Local backup could not be saved. Export scores before enabling sync, then retry."); }
+  }
+  if (state._sync.owner && state._sync.owner !== uid) {
+    // Keep this account's offline queue before showing another account's separate cache.
+    if (!persist()) throw Error("Export a backup before switching accounts: local saving failed.");
+    let cached = null;
+    try { cached = JSON.parse(localStorage.getItem(KEY + ".account." + uid)); } catch (err) {}
+    replaceSyncedState(AlbumSync.prepare(migrate(cached && cached._sync?.owner === uid ? cached : {})));
+    ui.open = null; render();
+  }
+}
+function syncStatus(text, failed = false) {
+  $("syncStatus").textContent = text; $("syncStatus").classList.toggle("failed", failed);
+  $("retrySyncBtn").hidden = !failed || !cloud;
+}
+function initAlbumSync() {
+  if (typeof firebase === "undefined" || !firebase.auth || !firebase.database) {
+    syncStatus("Saved on this device. Connect to the internet and reload to enable Google sign-in."); return;
+  }
+  try {
+    const config = {
+      apiKey:"AIzaSyDTcQiFsjhSzlsEl7uPJvTtsxp798XOqIQ",
+      authDomain:"family-planner-ccafc.firebaseapp.com",
+      databaseURL:"https://family-planner-ccafc-default-rtdb.firebaseio.com",
+      projectId:"family-planner-ccafc"
+    };
+    if (!firebase.apps.length) firebase.initializeApp(config);
+    cloud = AlbumSync.create({firebase, config, read:() => state, replace:replaceSyncedState, selectAccount:selectSyncAccount, status:syncStatus,
+      account:(user, busy) => {
+        $("accountWho").textContent = user ? (user.email || user.displayName || "Google account") : "";
+        $("signInBtn").hidden = !!user; $("signInBtn").disabled = busy; $("signInBtn").textContent = busy ? "Signing in…" : "Sign in with Google";
+        $("signOutBtn").hidden = !user;
+      }
+    });
+    $("signInBtn").onclick = () => cloud.signIn();
+    $("signOutBtn").onclick = () => cloud.signOut();
+    $("retrySyncBtn").onclick = () => cloud.retry();
+  } catch (err) { syncStatus("Sync could not start. Your local scores are safe. Reload to retry.", true); }
+}
 render();
+initAlbumSync();
 </script>
 </body>
 </html>
