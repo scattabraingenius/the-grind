@@ -43,8 +43,28 @@
   .row .t { flex:1 1 auto; min-width:0; }
   .row .t b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .row .t small { color:var(--muted-2); font-family:var(--mono); font-size:11px; }
+  .row { flex-wrap:wrap; }
+  .row .version-scores { flex-basis:100%; display:flex; flex-wrap:wrap; gap:6px; }
+  .version-score { display:flex; align-items:center; gap:7px; max-width:100%; min-height:36px; text-align:left; background:var(--input-bg); border:1px solid var(--line); border-radius:8px; padding:5px 7px; cursor:pointer; }
+  .version-score span { font:10px/1.4 var(--mono); overflow-wrap:anywhere; min-width:0; }
+  .version-score strong { font:700 13px var(--mono); color:var(--signal-dim); flex-shrink:0; }
+  .version-score .version-status { display:block; font:10px var(--sans); margin-top:2px; color:var(--muted); }
+  .version-score[aria-pressed=true] { border-color:var(--signal); }
+  .scope-tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:6px 0; }
+  .scope-note { font-size:12px; color:var(--muted); margin:8px 0 12px; }
+  dialog { color:var(--ink); background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px; width:min(660px,calc(100% - 24px)); max-height:90vh; }
+  dialog::backdrop { background:rgba(0,0,0,.75); }
+  dialog h2 { margin:0 0 10px; }
+  dialog input[type=text], dialog input[type=search] { display:block; width:100%; min-width:0; background:var(--input-bg); border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin:6px 0 12px; }
+  .session-options { max-height:42vh; overflow:auto; margin:12px 0; }
+  .session-song { border-bottom:1px solid var(--line); padding:8px 0; }
+  .session-song b { font-size:13px; }
+  .session-option { display:flex; gap:8px; align-items:center; padding:6px 0; font-size:12px; }
+  .session-option input { flex-shrink:0; accent-color:var(--signal); }
+  .session-option span { overflow-wrap:anywhere; }
   .score { font-family:var(--mono); font-weight:800; min-width:42px; text-align:center; border-radius:8px; padding:4px 6px; background:var(--surface-2); color:var(--muted); font-size:14px; }
   .score.hi { color:#0C0812; background:var(--star); } .score.mid { color:var(--ink); background:var(--track); }
+  .best-score::before { content:"BEST"; display:block; font-size:8px; letter-spacing:.06em; opacity:.8; }
   .badge { font-family:var(--mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; border:1px solid var(--line); border-radius:6px; padding:2px 6px; color:var(--muted); white-space:nowrap; }
   .badge.short { border-color:var(--ok); color:var(--ok); } .badge.maybe { border-color:var(--star); color:var(--star); } .badge.cut { border-color:var(--alarm); color:var(--alarm); }
   .badge.ep { border-color:var(--signal-dim); color:var(--signal-dim); }
@@ -137,11 +157,14 @@
       <input type="search" id="q" aria-label="Search songs and prompts" placeholder="Search titles, lyrics and prompts" autocomplete="off">
       <select id="sort" aria-label="Sort">
         <option value="session">Sort: session</option>
-        <option value="score">Sort: score</option>
+        <option value="score">Sort: best score</option>
         <option value="title">Sort: title</option>
       </select>
     </div>
-    <div class="chips" id="chips"></div>
+    <div class="scope-tools"><span class="eyebrow">Working session</span><button class="btn small" id="newSession">+ New session</button><button class="btn small hidden" id="manageSession">Manage session</button></div>
+    <div class="chips" id="sessionChips" aria-label="Working sessions"></div>
+    <div class="chips" id="chips" aria-label="Filter within this session"></div>
+    <div class="scope-note" id="scopeNote" role="status"></div>
     <div class="grid">
       <div class="list" id="list"></div>
       <div class="detail empty" id="detail">Pick a song to read it, score it, and copy its Suno fields.</div>
@@ -165,6 +188,16 @@
   </div>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<dialog id="sessionDialog" aria-labelledby="sessionDialogTitle">
+  <form id="sessionForm">
+    <h2 id="sessionDialogTitle">New custom session</h2>
+    <label for="sessionName">Session name</label><input type="text" id="sessionName" maxlength="100" required placeholder="Album finalists">
+    <div class="scope-tools"><button class="btn small" type="button" id="seedCurrent">Use current session</button><button class="btn small" type="button" id="seedTracklist">Use tracklist</button><span id="sessionCount"></span></div>
+    <input type="search" id="sessionSearch" aria-label="Find versions to include" placeholder="Find a song or version">
+    <div class="session-options" id="sessionVersionOptions"></div>
+    <div class="scope-tools"><button class="btn primary" type="submit">Save session</button><button class="btn" type="button" id="sessionCancel">Cancel</button><button class="btn hidden" type="button" id="deleteSession">Delete session</button></div>
+  </form>
+</dialog>
 
 <script src="songs.js"></script>
 <script src="sync.js"></script>
@@ -179,12 +212,12 @@ const SONGS = (window.ALBUM_SONGS || []);
 const BY = Object.fromEntries(SONGS.map(s => [s.slug, s]));
 const STATUSES = [["short","Shortlist"],["maybe","Maybe"],["cut","Cut"]];
 const SESSIONS = window.ALBUM_SESSIONS || [...new Set(SONGS.flatMap(s => s.versions.map(v => v.session)))].map(label => ({label}));
-const FILTERS = [["all","All"],...SESSIONS.map(s => ["session:" + s.label,s.label]),["unrated","Unrated"],["short","Shortlist"],["maybe","Maybe"],["cut","Cut"],["album","On album"],["ep","EP"],["mine","My versions"]];
+const FILTERS = [["all","Any rating"],["unrated","Unrated"],["short","Shortlist"],["maybe","Maybe"],["cut","Cut"],["album","On album"],["ep","EP"],["mine","My versions"]];
 
 // v2: ratings are keyed by version stem (one score, status and note per version). Version 1 data was keyed
 // by song slug, so it moves onto whichever version of that song was showing.
 function migrate(st) {
-  st = { ratings:{}, tracklist:[], pick:{}, custom:{}, ...st };
+  st = { ratings:{}, tracklist:[], pick:{}, custom:{}, collections:{}, ...st };
   if (st.v !== 2) {
     for (const slug of Object.keys(st.ratings)) {
       const s = BY[slug]; if (!s) continue;
@@ -228,36 +261,43 @@ function save() {
   if (cloud) cloud.changed();
   return saved;
 }
-let ui = { view:"songs", filter:"all", q:"", sort:"session", open:null };
+let viewPrefs = {};
+try { viewPrefs = JSON.parse(localStorage.getItem(KEY + ".view")) || {}; } catch (err) {}
+let ui = { view:"songs", scope:viewPrefs.scope || "all", filter:FILTERS.some(([key]) => key === viewPrefs.filter) ? viewPrefs.filter : "all", q:"", sort:["session","score","title"].includes(viewPrefs.sort) ? viewPrefs.sort : "session", open:null };
+function saveView() { try { localStorage.setItem(KEY + ".view", JSON.stringify({scope:ui.scope,filter:ui.filter,sort:ui.sort})); } catch (err) {} }
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function rating(stem) { return state.ratings[stem] || {}; }
 function setRating(stem, patch) { state.ratings[stem] = { ...rating(stem), ...patch, at: Date.now() }; save(); }
 function versionsOf(s) { return s.versions.concat(state.custom[s.slug] || []); }
-function version(s) {
-  const picked = versionsOf(s).find(v => v.stem === state.pick[s.slug]);
-  if (picked && (!ui.filter.startsWith("session:") || picked.session === ui.filter.slice(8))) return picked;
-  const matching = ui.filter.startsWith("session:") ? s.versions.filter(v => v.session === ui.filter.slice(8)) : s.versions;
-  return matching[matching.length - 1] || s.versions[s.versions.length - 1];
+function scopedVersions(s) {
+  const versions = versionsOf(s);
+  if (ui.scope.startsWith("session:")) return versions.filter(v => v.session === ui.scope.slice(8));
+  if (ui.scope.startsWith("collection:")) { const members = new Set(state.collections[ui.scope.slice(11)]?.members || []); return versions.filter(v => members.has(v.stem)); }
+  return versions;
 }
-function best(s) { const n = versionsOf(s).map(v => rating(v.stem).score).filter(x => x != null); return n.length ? Math.max(...n) : null; }
+function version(s) {
+  const matching = scopedVersions(s), picked = matching.find(v => v.stem === state.pick[s.slug]);
+  return picked || matching[matching.length - 1] || s.versions[s.versions.length - 1];
+}
+function best(s, versions = scopedVersions(s)) { const n = versions.map(v => rating(v.stem).score).filter(x => x != null); return n.length ? Math.max(...n) : null; }
 function verLabel(v) { return v.custom ? (v.label || "My copy") : `v${String(v.version).padStart(2,"0")} ${v.writer} · ${v.session}`; }
 function inAlbum(slug) { return state.tracklist.includes(slug); }
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("on"), 1400); }
 function scoreClass(n) { return n == null ? "" : n >= 80 ? "hi" : n >= 50 ? "mid" : ""; }
 
 function matches(s) {
-  const rs = versionsOf(s).map(v => rating(v.stem)), f = ui.filter;
+  const versions = scopedVersions(s); if (!versions.length) return false;
+  const rs = versions.map(v => rating(v.stem)), f = ui.filter;
   if (f === "unrated" && rs.some(r => r.score != null)) return false;
   if (["short","maybe","cut"].includes(f) && !rs.some(r => r.status === f)) return false;
-  if (f === "mine" && !(state.custom[s.slug] || []).length) return false;
+  if (f === "mine" && !versions.some(v => v.custom)) return false;
   if (f === "album" && !inAlbum(s.slug)) return false;
   if (f === "ep" && !s.ep) return false;
-  if (f.startsWith("session:") && !s.versions.some(v => v.session === f.slice(8))) return false;
   if (ui.q) {
     const q = ui.q.toLowerCase();
-    if (!s.title.toLowerCase().includes(q) && !versionsOf(s).some(v =>
+    if (!s.title.toLowerCase().includes(q) && !versions.some(v =>
       [v.title,v.lyrics,...fieldsOf(v).map(f => f[2])].some(text => String(text || "").toLowerCase().includes(q)))) return false;
   }
   return true;
@@ -270,28 +310,40 @@ function sorted(arr) {
 }
 
 function renderSummary() {
-  const rated = SONGS.filter(s => best(s) != null).length;
+  const rated = SONGS.filter(s => best(s, versionsOf(s)) != null).length;
   $("summary").textContent = `${SONGS.length} songs · ${rated} scored · ${state.tracklist.length} on the album`;
   $("albumCount").textContent = state.tracklist.length ? `(${state.tracklist.length})` : "";
   $("built").textContent = window.ALBUM_BUILT ? `Songs loaded ${window.ALBUM_BUILT}` : "No songs.js found";
 }
 function renderChips() {
   $("chips").innerHTML = FILTERS.map(([k,l]) => `<button class="chip" data-f="${esc(k)}" aria-pressed="${ui.filter===k}">${esc(l)}</button>`).join("");
+  const scopes = [["all","All"],...SESSIONS.map(s => ["session:"+s.label,s.label]),...Object.entries(state.collections).map(([id,s]) => ["collection:"+id,s.name])];
+  $("sessionChips").innerHTML = scopes.map(([key,name]) => `<button class="chip" data-scope="${esc(key)}" aria-pressed="${ui.scope===key}">${esc(name)}</button>`).join("");
+  $("manageSession").classList.toggle("hidden", !ui.scope.startsWith("collection:") || !state.collections[ui.scope.slice(11)]);
 }
 function renderList() {
   const rows = sorted(SONGS.filter(matches));
+  const count = SONGS.filter(s => scopedVersions(s).length).length;
+  const name = ui.scope.startsWith("session:") ? ui.scope.slice(8) : ui.scope.startsWith("collection:") ? (state.collections[ui.scope.slice(11)]?.name || "Custom session") : "All sessions";
+  $("scopeNote").textContent = `${name} · ${rows.length} of ${count} songs · ${SONGS.reduce((n,s) => n + scopedVersions(s).length,0)} versions. Scores and sorting use this session only.`;
   if (!rows.length) { $("list").innerHTML = `<div class="empty-note">Nothing matches.</div>`; return; }
   $("list").innerHTML = rows.map(s => {
-    const v = version(s), r = rating(v.stem), bs = best(s), n = versionsOf(s).length;
+    const v = version(s), r = rating(v.stem), bs = best(s), versions = scopedVersions(s), n = versions.length;
     const st = STATUSES.find(x => x[0] === r.status);
-    return `<div class="row${ui.open===s.slug?" active":""}" data-slug="${esc(s.slug)}" role="button" tabindex="0" aria-label="Open ${esc(s.title)}">
-      <div class="score ${scoreClass(bs)}" title="Best score across versions">${bs ?? "–"}</div>
-      <div class="t"><b>${esc(s.title)}</b><small>${esc(verLabel(v))}${n>1?` · ${n} versions`:""}</small></div>
+    const listed = ui.sort === "score" ? versions.slice().sort((a,b) => (rating(b.stem).score ?? -1) - (rating(a.stem).score ?? -1)) : versions;
+    return `<div class="row${ui.open===s.slug?" active":""}" data-slug="${esc(s.slug)}" role="group" tabindex="0" aria-label="Open ${esc(s.title)}">
+      <div class="score ${scoreClass(bs)}${n>1?' best-score':''}" title="Best score in this session">${bs ?? "–"}</div>
+      <div class="t"><b>${esc(s.title)}</b><small>${n>1 ? `${n} versions in this session` : esc(verLabel(v))}</small></div>
       ${s.ep ? `<span class="badge ep">EP</span>` : ""}
-      ${st ? `<span class="badge ${st[0]}">${st[1]}</span>` : ""}
+      ${st && n===1 ? `<span class="badge ${st[0]}">${st[1]}</span>` : ""}
       ${inAlbum(s.slug) ? `<span class="in-album" title="On the album">●</span>` : ""}
+      <div class="version-scores">${listed.map(x => versionScoreHtml(s,x,v)).join("")}</div>
     </div>`;
   }).join("");
+}
+function versionScoreHtml(s, x, current) {
+  const r = rating(x.stem), status = STATUSES.find(([key]) => key === r.status);
+  return `<button class="version-score" data-open-ver="${esc(x.stem)}" aria-pressed="${ui.open===s.slug && x.stem===current.stem}" title="${esc(verLabel(x))}" aria-label="Open ${esc(verLabel(x))}, score ${r.score ?? 'unrated'}${status ? ', '+status[1] : ''}"><span>${esc(verLabel(x))}${status ? `<small class="version-status">${status[1]}</small>` : ''}</span><strong>${r.score ?? '–'}</strong></button>`;
 }
 function lyricHtml(text) {
   return esc(text).replace(/^(\[[^\]\n]+\])/gm, '<span class="tag">$1</span>');
@@ -330,9 +382,9 @@ function chipHtml(s, x, cur) {
 }
 function renderDetail() {
   const d = $("detail"), s = BY[ui.open];
-  if (!s) { d.className = "detail empty"; d.textContent = "Pick a song to read it, score it, and copy its Suno fields."; return; }
+  if (!s || !scopedVersions(s).length) { d.className = "detail empty"; d.textContent = "Pick a song in this session to read it, score it, and copy its Suno fields."; return; }
   const v = version(s), r = rating(v.stem), su = v.suno || {}, fields = fieldsOf(v);
-  const vs = versionsOf(s), src = v.custom ? vs.find(x => x.stem === v.copiedFrom) : null;
+  const vs = scopedVersions(s), src = v.custom ? versionsOf(s).find(x => x.stem === v.copiedFrom) : null;
   d.className = "detail";
   const body = `<div class="${v.custom ? "editor" : "fields"}">
     ${v.custom ? `<label>Version name<input id="edLabel" value="${esc(v.label || "")}" autocomplete="off"></label>` : ""}
@@ -353,6 +405,7 @@ function renderDetail() {
       <input type="range" aria-label="Version score" min="0" max="100" step="1" id="scoreRange" value="${r.score ?? 50}">
       <input type="number" aria-label="Version score from 0 to 100" min="0" max="100" id="scoreNum" value="${r.score ?? ""}" placeholder="–">
     </div>
+    <div class="scope-tools"><select id="addSession" aria-label="Add this version to a custom session"><option value="">Add version to a custom session…</option>${Object.entries(state.collections).map(([id,c]) => `<option value="${esc(id)}" ${(c.members || []).includes(v.stem) ? 'disabled' : ''}>${esc(c.name)}${(c.members || []).includes(v.stem) ? ' (included)' : ''}</option>`).join("")}<option value="new">+ New custom session…</option></select>${ui.scope.startsWith('collection:') ? '<button class="btn small" id="removeSessionVersion">Remove from session</button>' : ''}</div>
     <div class="status">
       ${STATUSES.map(([k,l]) => `<button class="btn s-${k}" data-status="${k}" aria-pressed="${r.status===k}">${l}</button>`).join("")}
       <button class="btn ${inAlbum(s.slug) ? "" : "primary"}" id="albumToggle">${inAlbum(s.slug) ? "Remove from album" : "+ Add to album"}</button>
@@ -404,14 +457,20 @@ function rerenderKeepDetail() { renderSummary(); renderList(); }
 $("tabSongs").onclick = () => { ui.view = "songs"; render(); };
 $("tabAlbum").onclick = () => { ui.view = "album"; render(); };
 $("q").oninput = e => { ui.q = e.target.value.trim(); renderList(); };
-$("sort").onchange = e => { ui.sort = e.target.value; renderList(); };
-$("chips").onclick = e => { const b = e.target.closest("[data-f]"); if (!b) return; ui.filter = b.dataset.f; renderChips(); renderList(); if (BY[ui.open] && matches(BY[ui.open])) renderDetail(); };
+$("sort").value = ui.sort;
+$("sort").onchange = e => { ui.sort = e.target.value; saveView(); renderList(); };
+$("chips").onclick = e => { const b = e.target.closest("[data-f]"); if (!b) return; ui.filter = b.dataset.f; saveView(); renderChips(); renderList(); if (BY[ui.open] && scopedVersions(BY[ui.open]).length) renderDetail(); };
+function chooseScope(key) { ui.scope = key; saveView(); renderChips(); renderList(); renderDetail(); }
+$("sessionChips").onclick = e => { const button = e.target.closest("[data-scope]"); if (button) chooseScope(button.dataset.scope); };
 $("list").onclick = e => {
   const row = e.target.closest(".row"); if (!row) return;
+  const chip = e.target.closest("[data-open-ver]");
+  if (chip && scopedVersions(BY[row.dataset.slug]).some(v => v.stem === chip.dataset.openVer)) { state.pick[row.dataset.slug] = chip.dataset.openVer; save(); }
   ui.open = row.dataset.slug; renderList(); renderDetail();
   if (window.innerWidth <= 820) $("detail").scrollIntoView({ behavior:"smooth", block:"start" });
 };
 $("list").addEventListener("keydown",e => {
+  if (e.target.closest("button")) return;
   if (e.key === "Enter" || e.key === " ") { const row = e.target.closest(".row"); if (row) { e.preventDefault(); row.click(); } }
 });
 $("detail").addEventListener("click", async e => {
@@ -425,10 +484,14 @@ $("detail").addEventListener("click", async e => {
   const cur = version(s);
   const ver = e.target.closest("[data-ver]");
   if (ver) {
+    if (!scopedVersions(s).some(v => v.stem === ver.dataset.ver)) return;
     state.pick[s.slug] = ver.dataset.ver;
-    const chosen = versionsOf(s).find(v => v.stem === ver.dataset.ver);
-    if (ui.filter.startsWith("session:") && chosen && chosen.session !== ui.filter.slice(8)) { ui.filter = "all"; renderChips(); }
     save(); renderDetail(); renderList(); return;
+  }
+  if (e.target.closest("#removeSessionVersion")) {
+    const session = state.collections[ui.scope.slice(11)]; if (!session) return;
+    session.members = session.members.filter(stem => stem !== cur.stem);
+    save(); render(); toast("Removed from this session. The version and its score are kept."); return;
   }
   const st = e.target.closest("[data-status]");
   if (st) { const k = st.dataset.status; setRating(cur.stem, { status: rating(cur.stem).status === k ? null : k }); renderDetail(); rerenderKeepDetail(); return; }
@@ -440,13 +503,16 @@ $("detail").addEventListener("click", async e => {
     const su = cur.suno || {}, lyr = su.lyrics ?? cur.lyrics, list = state.custom[s.slug] || (state.custom[s.slug] = []);
     const nv = { stem: `mine-${s.slug}-${Date.now().toString(36)}-${crypto.randomUUID().slice(0,8)}`, custom:true, version:0, label:`My copy ${list.length + 1}`, writer:"Me", session:cur.session,
       copiedFrom:cur.stem, title:su.title || s.title, lyrics:lyr, header:"", suno:{ title:su.title || s.title, lyrics:lyr, style:su.style || "", exclude:su.exclude || "", ...(su.instrumental ? {instrumental:su.instrumental} : {}) }, created:Date.now() };
-    list.push(nv); state.pick[s.slug] = nv.stem; save(); renderDetail(); renderList(); toast("Copied. Edit it below.");
+    list.push(nv); state.pick[s.slug] = nv.stem;
+    if (ui.scope.startsWith("collection:")) state.collections[ui.scope.slice(11)].members.push(nv.stem);
+    save(); renderDetail(); renderList(); toast("Copied. Edit it below.");
     $("edLyrics") && $("edLyrics").focus(); return;
   }
   if (e.target.closest("#delMine")) {
     if (!confirm(`Delete "${cur.label || "this version"}"? Its score and notes go with it.`)) return;
     state.custom[s.slug] = (state.custom[s.slug] || []).filter(x => x.stem !== cur.stem);
     delete state.ratings[cur.stem]; delete state.pick[s.slug];
+    for (const session of Object.values(state.collections)) session.members = session.members.filter(stem => stem !== cur.stem);
     save(); renderDetail(); renderList(); renderSummary(); toast("Deleted"); return;
   }
   const cp = e.target.closest("[data-copy]");
@@ -458,6 +524,15 @@ $("detail").addEventListener("click", async e => {
       setTimeout(() => { if(cp.isConnected) { cp.classList.remove("copied"); cp.textContent = "Copy"; } },1400);
     } else toast("Copy failed. Select the text and copy it manually.");
   }
+});
+$("detail").addEventListener("change", e => {
+  if (e.target.id !== "addSession") return;
+  const s = BY[ui.open]; if (!s) return;
+  const stem = version(s).stem, id = e.target.value;
+  if (id === "new") { openSessionDialog(null, [stem]); return; }
+  const session = state.collections[id]; if (!session) return;
+  if (!session.members.includes(stem)) session.members.push(stem);
+  save(); renderDetail(); toast("Added this version to " + session.name);
 });
 $("detail").addEventListener("input", e => {
   const s = BY[ui.open]; if (!s) return;
@@ -493,7 +568,9 @@ $("tracks").onclick = e => {
   const mv = e.target.closest("[data-move]");
   if (mv) { const j = i + Number(mv.dataset.move); if (j < 0 || j >= state.tracklist.length) return; [state.tracklist[i], state.tracklist[j]] = [state.tracklist[j], state.tracklist[i]]; save(); render(); return; }
   if (e.target.closest("[data-remove]")) { state.tracklist.splice(i, 1); save(); render(); return; }
-  ui.open = tr.dataset.slug; ui.view = "songs"; render();
+  ui.open = tr.dataset.slug; ui.view = "songs";
+  if (!scopedVersions(BY[ui.open]).length) { ui.scope = "all"; saveView(); }
+  render();
 };
 $("copyTracklist").onclick = async () => {
   const text = state.tracklist.filter(s => BY[s]).map((s, i) => `${i+1}. ${BY[s].title}`).join("\n");
@@ -510,7 +587,7 @@ $("importFile").onchange = async e => {
   try {
     const d = JSON.parse(await f.text());
     if (!d || d.app !== "album-board") throw new Error("not an Album Board export");
-    state = migrate({ ratings: d.ratings || {}, tracklist: Array.isArray(d.tracklist) ? d.tracklist : [], pick: d.pick || {}, custom: d.custom || {}, v: d.v, _sync:state._sync });
+    state = migrate({ ratings: d.ratings || {}, tracklist: Array.isArray(d.tracklist) ? d.tracklist : [], pick: d.pick || {}, custom: d.custom || {}, collections:d.collections || {}, v: d.v, _sync:state._sync });
     save(); render(); toast("Imported");
   } catch (err) { toast("Import failed: " + err.message); }
   e.target.value = "";
@@ -518,7 +595,8 @@ $("importFile").onchange = async e => {
 function editingDetail() { return $("detail").contains(document.activeElement) && document.activeElement.matches("input,textarea,select"); }
 function replaceSyncedState(next) {
   state = next; previousState = JSON.parse(JSON.stringify(state)); persist();
-  renderList(); renderSummary(); renderAlbum();
+  if (ui.scope.startsWith("collection:") && !state.collections[ui.scope.slice(11)]) { ui.scope = "all"; saveView(); }
+  renderChips(); renderList(); renderSummary(); renderAlbum();
   if (editingDetail()) pendingRemoteDetail = true; else { renderDetail(); pendingRemoteDetail = false; }
 }
 $("detail").addEventListener("focusout", () => setTimeout(() => { if (pendingRemoteDetail && !editingDetail()) { pendingRemoteDetail = false; renderDetail(); } }, 0));
@@ -541,6 +619,68 @@ function syncStatus(text, failed = false) {
   $("syncStatus").textContent = text; $("syncStatus").classList.toggle("failed", failed);
   $("retrySyncBtn").hidden = !failed || !cloud;
 }
+let sessionDraft = null;
+function currentScopeMembers() { return SONGS.flatMap(s => scopedVersions(s).map(v => v.stem)); }
+function renderSessionOptions() {
+  const q = $("sessionSearch").value.trim().toLowerCase();
+  $("sessionCount").textContent = sessionDraft.members.size + " versions selected";
+  $("sessionVersionOptions").innerHTML = SONGS.map(s => {
+    const versions = versionsOf(s).filter(v => !q || (s.title + " " + verLabel(v)).toLowerCase().includes(q));
+    if (!versions.length) return "";
+    return `<div class="session-song"><b>${esc(s.title)}</b>${versions.map(v => `<label class="session-option"><input type="checkbox" data-member="${esc(v.stem)}" ${sessionDraft.members.has(v.stem) ? 'checked' : ''}><span>${esc(verLabel(v))} · ${rating(v.stem).score ?? 'unrated'}</span></label>`).join("")}</div>`;
+  }).join("");
+}
+function openSessionDialog(id = null, initial = null) {
+  const session = id && state.collections[id];
+  const members = session ? session.members : initial || (ui.scope !== "all" ? currentScopeMembers() : []);
+  sessionDraft = {id:id || crypto.randomUUID(), editing:!!session, name:session?.name || "", base:new Set(members), members:new Set(members)};
+  $("sessionDialogTitle").textContent = session ? "Manage custom session" : "New custom session";
+  $("sessionName").value = session?.name || ""; $("sessionName").setCustomValidity(""); $("sessionSearch").value = "";
+  $("deleteSession").classList.toggle("hidden", !session);
+  $("seedCurrent").disabled = ui.scope === "all";
+  $("seedTracklist").disabled = !state.tracklist.length;
+  renderSessionOptions(); $("sessionDialog").showModal(); $("sessionName").focus();
+}
+$("newSession").onclick = () => openSessionDialog();
+$("manageSession").onclick = () => openSessionDialog(ui.scope.slice(11));
+$("sessionCancel").onclick = () => $("sessionDialog").close();
+$("sessionSearch").oninput = renderSessionOptions;
+$("sessionVersionOptions").onchange = e => {
+  const stem = e.target.dataset.member; if (!stem) return;
+  if (e.target.checked) sessionDraft.members.add(stem); else sessionDraft.members.delete(stem);
+  $("sessionCount").textContent = sessionDraft.members.size + " versions selected";
+};
+$("seedCurrent").onclick = () => { currentScopeMembers().forEach(stem => sessionDraft.members.add(stem)); renderSessionOptions(); };
+$("seedTracklist").onclick = () => {
+  for (const slug of state.tracklist) {
+    const s = BY[slug]; if (!s) continue;
+    const picked = versionsOf(s).find(v => v.stem === state.pick[slug]);
+    const bestVersion = versionsOf(s).slice().sort((a,b) => (rating(b.stem).score ?? -1) - (rating(a.stem).score ?? -1))[0];
+    sessionDraft.members.add((picked || bestVersion).stem);
+  }
+  renderSessionOptions();
+};
+$("sessionForm").onsubmit = e => {
+  e.preventDefault(); const name = $("sessionName").value.trim();
+  if (!name) { $("sessionName").setCustomValidity("Give the session a name."); $("sessionName").reportValidity(); return; }
+  const existing = state.collections[sessionDraft.id];
+  if (sessionDraft.editing && !existing) { toast("This session was deleted on another device. Create a new session."); $("sessionDialog").close(); return; }
+  const members = new Set(existing?.members || []);
+  if (!sessionDraft.editing) sessionDraft.members.forEach(stem => members.add(stem));
+  else {
+    // Apply only the changes made in this dialog, preserving concurrent additions on another device.
+    for (const stem of sessionDraft.base) if (!sessionDraft.members.has(stem)) members.delete(stem);
+    for (const stem of sessionDraft.members) if (!sessionDraft.base.has(stem)) members.add(stem);
+  }
+  state.collections[sessionDraft.id] = {name:name === sessionDraft.name && existing ? existing.name : name, created:existing?.created || Date.now(), members:[...members].sort()};
+  save(); $("sessionDialog").close(); ui.filter = "all"; ui.q = ""; $("q").value = ""; chooseScope("collection:" + sessionDraft.id); toast("Session saved");
+};
+$("sessionName").oninput = () => $("sessionName").setCustomValidity("");
+$("deleteSession").onclick = () => {
+  const session = state.collections[sessionDraft.id]; if (!session) return;
+  if (!confirm(`Delete the custom session "${session.name}"? Songs, versions, scores and notes are kept.`)) return;
+  delete state.collections[sessionDraft.id]; save(); $("sessionDialog").close(); chooseScope("all"); toast("Session deleted. Songs and scores are kept.");
+};
 function initAlbumSync() {
   if (typeof firebase === "undefined" || !firebase.auth || !firebase.database) {
     syncStatus("Saved on this device. Connect to the internet and reload to enable Google sign-in."); return;

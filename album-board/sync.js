@@ -22,19 +22,25 @@
       for (const version of versions) records[keyOf("custom", version.stem)] = {kind:"custom", id:version.stem, slug, data:JSON.stringify(version)};
     }
     (state.tracklist || []).forEach((id, index) => { records[keyOf("track", id)] = {kind:"track", id, data:JSON.stringify(index)}; });
+    for (const [id, session] of Object.entries(state.collections || {})) {
+      records[keyOf("collection", id)] = {kind:"collection", id, data:JSON.stringify({name:session.name, created:session.created})};
+      for (const stem of new Set(session.members || [])) records[keyOf("member", stem, id)] = {kind:"member", id:stem, field:id, data:"true"};
+    }
     return records;
   }
   function validRecord(key, record) {
     let value;
     try { if (!record?.deleted) { if (typeof record?.data !== "string") return false; value = JSON.parse(record.data); } } catch (err) { return false; }
     return record && typeof record.id === "string" && record.id.length < 4096 &&
-      ["rating", "custom", "track"].includes(record.kind) &&
+      ["rating", "custom", "track", "collection", "member"].includes(record.kind) &&
       key === keyOf(record.kind, record.id, record.field || "") &&
       Array.isArray(record.rev) && Number.isFinite(record.rev[0]) && typeof record.rev[1] === "string" &&
       (record.deleted === true || (
         (record.kind !== "rating" || fields.includes(record.field)) &&
         (record.kind !== "custom" || (typeof record.slug === "string" && value?.stem === record.id && value.custom === true)) &&
-        (record.kind !== "track" || Number.isFinite(value))));
+        (record.kind !== "track" || Number.isFinite(value)) &&
+        (record.kind !== "collection" || (typeof value?.name === "string" && Number.isFinite(value.created))) &&
+        (record.kind !== "member" || (typeof record.field === "string" && value === true))));
   }
   function recordsOf(envelope) {
     if (envelope == null) return {};
@@ -75,8 +81,8 @@
     return result;
   }
   function project(state, records, owner) {
-    const result = {...state, ratings:{}, custom:{}, tracklist:[], _sync:{v:1, owner, records:copy(records)}};
-    const ratings = new Map(), customs = new Map(), tracks = [];
+    const result = {...state, ratings:{}, custom:{}, tracklist:[], collections:{}, _sync:{v:1, owner, records:copy(records)}};
+    const ratings = new Map(), customs = new Map(), tracks = [], collections = new Map(), members = new Map();
     for (const record of Object.values(records)) {
       if (record.deleted) continue;
       const value = JSON.parse(record.data);
@@ -85,11 +91,14 @@
         rating[record.field] = value; rating.at = Math.max(rating.at || 0, record.rev[0]); ratings.set(record.id, rating);
       } else if (record.kind === "custom") {
         const list = customs.get(record.slug) || []; list.push(value); customs.set(record.slug, list);
-      } else tracks.push({...record, value});
+      } else if (record.kind === "track") tracks.push({...record, value});
+      else if (record.kind === "collection") collections.set(record.id, value);
+      else if (record.kind === "member") { const list = members.get(record.field) || []; list.push(record.id); members.set(record.field, list); }
     }
     result.ratings = Object.fromEntries(ratings);
     result.custom = Object.fromEntries([...customs].map(([slug, list]) => [slug, list.sort((a,b) => (a.created || 0) - (b.created || 0) || a.stem.localeCompare(b.stem))]));
     result.tracklist = tracks.sort((a,b) => a.value - b.value || a.id.localeCompare(b.id)).map(record => record.id);
+    result.collections = Object.fromEntries([...collections].map(([id, session]) => [id, {...session, members:(members.get(id) || []).sort()}]));
     const customIds = new Set(Object.values(result.custom).flat().map(version => version.stem));
     result.pick = Object.fromEntries(Object.entries(state.pick || {}).filter(([, stem]) => !stem.startsWith("mine-") || customIds.has(stem)));
     return result;

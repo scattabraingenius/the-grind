@@ -30,6 +30,16 @@ The October 8 and October 9 version IDs stay unchanged so existing scores, notes
 
 Each version of a song has its own score, Shortlist/Maybe/Cut and notes. The song list shows the best score across a song's versions. **Copy & edit** makes your own copy of the version you are viewing, with editable name, title, style, exclude and lyrics that save as you type. The Copy buttons use your edited text. Your versions appear as extra chips on the song, are never touched by `build_songs.py`, and can be deleted. The **My versions** filter lists songs that have one.
 
+## Work in a session
+
+Click a session in **Working session** to see only its songs and versions. The session stays selected while rating, writing notes, changing status, editing copies and receiving cloud updates. Session scope is separate from the rating/status filters. Search, the visible version chips, the best-score badge and rating sort all use the selected session. The working session, filter and sort are remembered in this browser after reload. Choose **All** to compare across sessions.
+
+Every song remains one card. Its version chips show each version's label, score and status; tap one to open that exact version. For multiple versions, the large badge is labelled **BEST**. **Sort: best score** ranks cards by their highest score within the working session and orders the chips by score. Unrated versions show a dash; a score of zero is retained. Other sessions' scores do not influence the selected session's ranking.
+
+Use **+ New session** to create a named custom session such as Album finalists. Pick individual versions across any writing sessions. A new session can start with the current working session or with the existing tracklist. **Manage session** changes its name and membership or deletes just that session. A version can belong to several custom sessions. The detail panel's **Add version to a custom session** control adds the current version; **Remove from session** removes membership without deleting the version or rating. Copies made within a custom session automatically join it. Original writing packets are never moved, renamed or edited.
+
+Custom names and memberships sync through the existing private account record map. Membership uses independent records, so concurrent additions merge; a removed version is not restored by a stale device. Deleting a custom session keeps songs, scores, notes and copied versions. Export/import includes custom sessions. Refresh other devices after this release: older open tabs cannot interpret the added session records and will stop cloud sync with an explicit error until reloaded, while retaining local edits.
+
 Title, style prompt, excluded styles and lyrics have separate visible boxes, each with its own Copy button and character count. The displayed lyrics are exactly the Suno copy text. When the writing draft differs, it remains available under **Full writing draft**. Original packets are read-only; **Copy & edit** makes an editable version. Search covers prompts and every version, including your own. A **Back to songs** button returns phone users to the selected row. Copy and storage failures are reported explicitly.
 
 ## Where your scores live
@@ -38,7 +48,7 @@ Refresh Album Board on the phone that holds your existing ratings, then on your 
 
 The existing localStorage key `grind.album.v1` stays in use. The first sync keeps a separate `grind.album.v1.before-cloud-sync` backup. Offline edits and their pending revisions are saved locally and merge when you reconnect. Signing out keeps your local data; switching accounts uses separate caches and does not upload the previous account's data. **Export scores** and **Import scores** remain available for separate backups. Import replaces this account's current board content and syncs that change.
 
-Cloud data lives only at `planners/the-grind-scattabrain-2026/album/accounts/<Google UID>` in the existing Firebase Realtime Database. No database listener attaches while signed out. Existing planner access rules apply; this release does not change those rules. A denied read is an error, never an empty board. An empty PC cannot clear phone ratings. Each rating field has its own revision, so a concurrent score edit and note edit both survive. Concurrent edits to the same field resolve to the later revision; clock ties resolve consistently. Custom copies resolve per version. Deleted copies and removed tracks keep tombstones so stale devices cannot silently restore them. Firebase transactions merge the account's record map without touching planner tasks, family data or any other account.
+Cloud data lives only at `planners/the-grind-scattabrain-2026/album/accounts/<Google UID>` in the existing Firebase Realtime Database. No database listener attaches while signed out. Existing planner access rules apply; this release does not change those rules. A denied read is an error, never an empty board. An empty PC cannot clear phone ratings. Each rating field has its own revision, so a concurrent score edit and note edit both survive. Concurrent edits to the same field resolve to the later revision; clock ties resolve consistently. Custom copies resolve per version; session names resolve per session, membership per version. Deleted copies, custom sessions and removed tracks/memberships keep tombstones so stale devices cannot silently restore them. Firebase transactions merge the account's record map without touching planner tasks, family data or any other account.
 
 The sync badge reports saving, synced, offline, and failures separately. Failed writes retain the local queue and offer **Retry sync**. Remote updates do not replace a focused editor. If local storage fails, export a backup before closing. Firebase's [authentication persistence](https://firebase.google.com/docs/auth/web/auth-state-persistence), [transaction semantics](https://firebase.google.com/docs/database/web/read-and-write) and [inherited access rules](https://firebase.google.com/docs/database/security/core-syntax) inform this implementation.
 
@@ -48,6 +58,7 @@ The sync badge reports saving, synced, offline, and failures separately. Failed 
     APP_BASE_URL=http://127.0.0.1:8765 node tests/album-board.test.cjs
     node tests/album-sync.test.cjs
     APP_BASE_URL=http://127.0.0.1:8765 node tests/album-sync-browser.test.cjs
+    APP_BASE_URL=http://127.0.0.1:8765 node tests/album-sessions.test.cjs
 
 The browser runner uses the existing external Playwright installation via `NODE_PATH` and accepts `BROWSER_EXECUTABLE` and `ARTIFACT_DIR`. It creates a fresh browser context, uses synthetic scores, substitutes a fake clipboard, and blocks all non-local requests. No real account or existing browser profile is touched.
 

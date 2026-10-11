@@ -65,4 +65,17 @@ test('Unknown cloud formats and malformed records fail without reseeding over th
  assert.throws(()=>sync.recordsOf({v:99,records:{}}),/Unsupported/);
  assert.throws(()=>sync.recordsOf({v:1,records:{bad:{rev:[1,'phone'],data:'bad'}}}),/Invalid/);
 });
+test('Custom sessions merge independent membership changes and preserve scores when deleted',()=>{
+ const base=sync.prepare({...empty(),collections:{album:{name:'Finalists',created:1,members:['a']}}});
+ const phone=changed(base,s=>s.collections.album.members.push('b'),'phone',100);
+ const pc=changed(base,s=>s.collections.album.members.push('c'),'pc',100);
+ const joined=sync.project(base,sync.merge(phone._sync.records,pc._sync.records),'owner');
+ assert.deepEqual(joined.collections.album.members,['a','b','c']);
+ const removed=changed(joined,s=>{s.collections.album.members=s.collections.album.members.filter(stem=>stem!=='a');s.collections.album.name='Album picks';s.ratings.a={score:99};},'pc',101);
+ const projected=sync.project(base,sync.merge(base._sync.records,removed._sync.records),'owner');
+ assert.deepEqual(projected.collections.album.members,['b','c']);assert.equal(projected.collections.album.name,'Album picks');
+ const deleted=changed(projected,s=>delete s.collections.album,'phone',102);
+ const final=sync.project(base,sync.merge(base._sync.records,deleted._sync.records),'owner');
+ assert.deepEqual(final.collections,{});assert.equal(final.ratings.a.score,99);
+});
 console.log(`${checks} merge checks passed`);
