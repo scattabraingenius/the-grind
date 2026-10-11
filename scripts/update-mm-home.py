@@ -36,7 +36,9 @@ for icon in sorted((fp_root/'icons/nav').iterdir()):
     shutil.copyfile(icon,icons/icon.name)
 p=root/'service-worker.js'
 s=p.read_text(encoding='utf-8')
-version='scattabrain-unified-shell-v5-'+hashlib.sha256(source.encode()).hexdigest()[:12]
+# Album Board is part of the same offline shell and must invalidate it when updated.
+cache_source=source+'\n'+''.join((root/name).read_text(encoding='utf-8') for name in ('album-board/index.html','album-board/songs.js'))
+version='scattabrain-unified-shell-v5-'+hashlib.sha256(cache_source.encode()).hexdigest()[:12]
 s=re.sub(r'const CACHE_NAME = \"[^\"]+\";', 'const CACHE_NAME = \"'+version+'\";', s, count=1)
 p.write_text(s,encoding='utf-8',newline='\r\n')
 print('Updated embedded FP, nav icons and the app-shell version. Review and publish both repositories.')

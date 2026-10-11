@@ -53,6 +53,8 @@
   @media (max-width:820px) { .detail { position:static; max-height:none; } }
   .detail.empty { color:var(--muted); text-align:center; padding:40px 16px; }
   .detail h2 { margin:2px 0 4px; font-size:22px; }
+  .detail-back { display:none; margin-bottom:12px; }
+  @media (max-width:820px) { .detail-back { display:inline-block; } }
   .meta { color:var(--muted); font-size:13px; margin-bottom:12px; }
   .versions { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
   .scorebox { display:flex; align-items:center; gap:12px; margin:8px 0 12px; }
@@ -67,11 +69,20 @@
   .btn[aria-pressed="true"].s-maybe { background:var(--star); color:#0C0812; border-color:var(--star); }
   .btn[aria-pressed="true"].s-cut { background:var(--alarm); color:#fff; border-color:var(--alarm); }
   textarea { width:100%; min-height:64px; background:var(--input-bg); border:1px solid var(--line); border-radius:10px; padding:9px 11px; resize:vertical; }
-  .suno { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:6px; margin:12px 0; }
-  @media (max-width:480px) { .suno { grid-template-columns:repeat(2, minmax(0,1fr)); } }
-  .suno .btn { display:flex; flex-direction:column; align-items:flex-start; gap:2px; text-align:left; }
-  .suno .btn small { font-family:var(--mono); font-size:10px; color:var(--muted); font-weight:400; }
-  .suno .btn.copied { border-color:var(--ok); }
+  .prompt-field { margin:16px 0; min-width:0; }
+  .field-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
+  .field-head h3, .field-head label { margin:0; font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+  .field-tools { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+  .field-count { font-family:var(--mono); font-size:10px; color:var(--muted); }
+  .field-copy.copied { border-color:var(--ok); color:var(--ok); }
+  .btn:disabled { opacity:.5; cursor:default; }
+  :is(button,input,textarea,select,.row):focus-visible { outline:2px solid var(--signal-dim); outline-offset:3px; }
+  .field-text { white-space:pre-wrap; overflow-wrap:anywhere; background:var(--input-bg); border:1px solid var(--line); border-radius:10px; padding:12px; margin:0; font:14px/1.55 var(--mono); }
+  .prompt-field textarea { font:14px/1.55 var(--mono); }
+  .prompt-field input { width:100%; }
+  .prompt-field .field-empty { color:var(--muted); font-family:var(--sans); }
+  .save-status { flex-basis:100%; color:var(--muted); }
+  .save-status.failed { color:var(--alarm); }
   details.style { margin:6px 0 12px; } details.style summary { cursor:pointer; color:var(--muted); font-size:13px; }
   details.style p { font-size:13px; color:var(--muted); margin:6px 0; }
   pre.lyrics { white-space:pre-wrap; word-wrap:break-word; font-family:var(--sans); font-size:14.5px; line-height:1.55; background:var(--input-bg); border:1px solid var(--line); border-radius:10px; padding:14px; margin:0; }
@@ -111,7 +122,7 @@
 
   <section id="viewSongs">
     <div class="tools">
-      <input type="search" id="q" placeholder="Search titles and lyrics" autocomplete="off">
+      <input type="search" id="q" aria-label="Search songs and prompts" placeholder="Search titles, lyrics and prompts" autocomplete="off">
       <select id="sort" aria-label="Sort">
         <option value="session">Sort: session</option>
         <option value="score">Sort: score</option>
@@ -135,12 +146,13 @@
 
   <div class="foot">
     <span id="built"></span>
+    <span class="save-status" id="saveStatus" role="status">Saved in this browser. Export a backup to use your scores and edits on another device.</span>
     <button class="btn small" id="exportBtn">Export scores</button>
     <button class="btn small" id="importBtn">Import scores</button>
     <input type="file" id="importFile" accept="application/json" class="hidden">
   </div>
 </div>
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="songs.js"></script>
 <script>
@@ -151,7 +163,8 @@ const KEY = "grind.album.v1";
 const SONGS = (window.ALBUM_SONGS || []);
 const BY = Object.fromEntries(SONGS.map(s => [s.slug, s]));
 const STATUSES = [["short","Shortlist"],["maybe","Maybe"],["cut","Cut"]];
-const FILTERS = [["all","All"],["Oct 8 Reset","Oct 8"],["Oct 9 Lyric Mine","Oct 9"],["unrated","Unrated"],["short","Shortlist"],["maybe","Maybe"],["cut","Cut"],["album","On album"],["ep","EP"],["mine","My versions"]];
+const SESSIONS = window.ALBUM_SESSIONS || [...new Set(SONGS.flatMap(s => s.versions.map(v => v.session)))].map(label => ({label}));
+const FILTERS = [["all","All"],...SESSIONS.map(s => ["session:" + s.label,s.label]),["unrated","Unrated"],["short","Shortlist"],["maybe","Maybe"],["cut","Cut"],["album","On album"],["ep","EP"],["mine","My versions"]];
 
 // v2: ratings are keyed by version stem (one score, status and note per version). Version 1 data was keyed
 // by song slug, so it moves onto whichever version of that song was showing.
@@ -173,7 +186,20 @@ function load() {
   return migrate({});
 }
 let state = load();
-function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+function save() {
+  const status = $("saveStatus");
+  try {
+    localStorage.setItem(KEY, JSON.stringify(state));
+    status.classList.remove("failed");
+    status.textContent = "Saved in this browser. Export a backup to use your scores and edits on another device.";
+    return true;
+  } catch (e) {
+    status.classList.add("failed");
+    status.textContent = "Changes could not be saved. Export a backup before closing this page.";
+    toast("Changes aren't saved. Export a backup before closing.");
+    return false;
+  }
+}
 let ui = { view:"songs", filter:"all", q:"", sort:"session", open:null };
 
 const $ = id => document.getElementById(id);
@@ -181,9 +207,14 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 function rating(stem) { return state.ratings[stem] || {}; }
 function setRating(stem, patch) { state.ratings[stem] = { ...rating(stem), ...patch, at: Date.now() }; save(); }
 function versionsOf(s) { return s.versions.concat(state.custom[s.slug] || []); }
-function version(s) { const st = state.pick[s.slug]; return versionsOf(s).find(v => v.stem === st) || s.versions[s.versions.length - 1]; }
+function version(s) {
+  const picked = versionsOf(s).find(v => v.stem === state.pick[s.slug]);
+  if (picked && (!ui.filter.startsWith("session:") || picked.session === ui.filter.slice(8))) return picked;
+  const matching = ui.filter.startsWith("session:") ? s.versions.filter(v => v.session === ui.filter.slice(8)) : s.versions;
+  return matching[matching.length - 1] || s.versions[s.versions.length - 1];
+}
 function best(s) { const n = versionsOf(s).map(v => rating(v.stem).score).filter(x => x != null); return n.length ? Math.max(...n) : null; }
-function verLabel(v) { return v.custom ? (v.label || "My copy") : `v${String(v.version).padStart(2,"0")} ${v.writer}`; }
+function verLabel(v) { return v.custom ? (v.label || "My copy") : `v${String(v.version).padStart(2,"0")} ${v.writer} · ${v.session}`; }
 function inAlbum(slug) { return state.tracklist.includes(slug); }
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("on"), 1400); }
 function scoreClass(n) { return n == null ? "" : n >= 80 ? "hi" : n >= 50 ? "mid" : ""; }
@@ -195,10 +226,11 @@ function matches(s) {
   if (f === "mine" && !(state.custom[s.slug] || []).length) return false;
   if (f === "album" && !inAlbum(s.slug)) return false;
   if (f === "ep" && !s.ep) return false;
-  if (f.startsWith("Oct") && s.session !== f) return false;
+  if (f.startsWith("session:") && !s.versions.some(v => v.session === f.slice(8))) return false;
   if (ui.q) {
     const q = ui.q.toLowerCase();
-    if (!s.title.toLowerCase().includes(q) && !version(s).lyrics.toLowerCase().includes(q)) return false;
+    if (!s.title.toLowerCase().includes(q) && !versionsOf(s).some(v =>
+      [v.title,v.lyrics,...fieldsOf(v).map(f => f[2])].some(text => String(text || "").toLowerCase().includes(q)))) return false;
   }
   return true;
 }
@@ -224,9 +256,9 @@ function renderList() {
   $("list").innerHTML = rows.map(s => {
     const v = version(s), r = rating(v.stem), bs = best(s), n = versionsOf(s).length;
     const st = STATUSES.find(x => x[0] === r.status);
-    return `<div class="row${ui.open===s.slug?" active":""}" data-slug="${esc(s.slug)}">
+    return `<div class="row${ui.open===s.slug?" active":""}" data-slug="${esc(s.slug)}" role="button" tabindex="0" aria-label="Open ${esc(s.title)}">
       <div class="score ${scoreClass(bs)}" title="Best score across versions">${bs ?? "–"}</div>
-      <div class="t"><b>${esc(s.title)}</b><small>${esc(s.session)} · ${esc(verLabel(v))}${n>1?` · ${n} versions`:""}</small></div>
+      <div class="t"><b>${esc(s.title)}</b><small>${esc(verLabel(v))}${n>1?` · ${n} versions`:""}</small></div>
       ${s.ep ? `<span class="badge ep">EP</span>` : ""}
       ${st ? `<span class="badge ${st[0]}">${st[1]}</span>` : ""}
       ${inAlbum(s.slug) ? `<span class="in-album" title="On the album">●</span>` : ""}
@@ -236,8 +268,34 @@ function renderList() {
 function lyricHtml(text) {
   return esc(text).replace(/^(\[[^\]\n]+\])/gm, '<span class="tag">$1</span>');
 }
-function fieldsOf(v) { const su = v.suno || {}; return [["title","Title",su.title],["style","Style",su.style],["lyrics","Lyrics",su.lyrics ?? v.lyrics],["exclude","Exclude",su.exclude]]; }
+function fieldsOf(v) {
+  const su = v.suno || {};
+  const fields = [["title","Title",su.title ?? v.title],["style","Style prompt",su.style],["exclude","Excluded styles",su.exclude],["lyrics","Lyrics",su.lyrics ?? v.lyrics]];
+  if (su.instrumental) fields.splice(2,0,["instrumental","Instrumental style",su.instrumental]);
+  return fields;
+}
 function countText(val) { return val ? (val.length.toLocaleString() + " chars") : "missing"; }
+function fieldHtml(k, label, value, editable) {
+  const id = {title:"edTitle",style:"edStyle",exclude:"edExclude",lyrics:"edLyrics",instrumental:"edInstrumental"}[k];
+  const heading = editable ? `<label for="${id}">${label}</label>` : `<h3 id="field-${k}">${label}</h3>`;
+  const control = editable ? (k === "title" ? `<input id="${id}" value="${esc(value || "")}" autocomplete="off">` :
+    `<textarea id="${id}" ${k === "lyrics" ? 'class="ly" rows="16"' : `rows="${k === "exclude" ? 3 : 5}"`}>${esc(value || "")}</textarea>`) :
+    `<pre class="field-text ${k === "lyrics" ? "lyrics" : ""}${value ? "" : " field-empty"}" aria-labelledby="field-${k}">${value ? (k === "lyrics" ? lyricHtml(value) : esc(value)) : "No " + label.toLowerCase() + " provided."}</pre>`;
+  return `<section class="prompt-field" data-field="${k}"><div class="field-head">${heading}<div class="field-tools"><small class="field-count">${countText(value)}</small><button class="btn small field-copy" data-copy="${k}" aria-label="Copy ${label.toLowerCase()}" ${value ? "" : "disabled"}>Copy</button></div></div>${control}</section>`;
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
+  const active = document.activeElement, selection = window.getSelection();
+  const ranges = Array.from({length:selection.rangeCount},(_,i) => selection.getRangeAt(i).cloneRange());
+  const ta = document.createElement("textarea");
+  ta.value = text; ta.style.cssText = "position:fixed;left:-9999px;top:0";
+  document.body.appendChild(ta); ta.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (e) {}
+  ta.remove(); if (active && active.isConnected) active.focus({preventScroll:true});
+  selection.removeAllRanges(); ranges.forEach(range => selection.addRange(range));
+  return ok;
+}
 function chipHtml(s, x, cur) {
   const sc = rating(x.stem).score;
   return `<button class="btn small" data-ver="${esc(x.stem)}" aria-pressed="${x.stem===cur.stem}" style="${x.stem===cur.stem?"border-color:var(--signal)":""}"><span>${esc(verLabel(x))}</span>${sc != null ? ` <small>· ${sc}</small>` : ""}</button>`;
@@ -248,41 +306,44 @@ function renderDetail() {
   const v = version(s), r = rating(v.stem), su = v.suno || {}, fields = fieldsOf(v);
   const vs = versionsOf(s), src = v.custom ? vs.find(x => x.stem === v.copiedFrom) : null;
   d.className = "detail";
-  const body = v.custom ? `
-    <div class="editor">
-      <label>Name<input id="edLabel" value="${esc(v.label || "")}" autocomplete="off"></label>
-      <label>Title<input id="edTitle" value="${esc(su.title || "")}" autocomplete="off"></label>
-      <label>Style<textarea id="edStyle" rows="4">${esc(su.style || "")}</textarea></label>
-      <label>Exclude<textarea id="edExclude" rows="2">${esc(su.exclude || "")}</textarea></label>
-      <label>Lyrics<textarea id="edLyrics" class="ly">${esc(su.lyrics ?? v.lyrics)}</textarea></label>
-      <div><button class="btn" id="delMine">Delete my version</button></div>
-    </div>` : `
-    <details class="style"><summary>Style and exclude</summary><p><b>Style:</b> ${esc(su.style || "–")}</p><p><b>Exclude:</b> ${esc(su.exclude || "–")}</p></details>
-    <pre class="lyrics">${lyricHtml(v.lyrics)}</pre>`;
+  const body = `<div class="${v.custom ? "editor" : "fields"}">
+    ${v.custom ? `<label>Version name<input id="edLabel" value="${esc(v.label || "")}" autocomplete="off"></label>` : ""}
+    ${fields.map(([k,label,value]) => fieldHtml(k,label,value,v.custom)).join("")}
+    ${v.custom ? `<div><button class="btn" id="delMine">Delete my version</button></div>` : su.lyrics != null && su.lyrics !== v.lyrics ?
+      `<details class="style"><summary>Full writing draft</summary><p>The boxes above contain the exact Suno fields. This is the original writing draft.</p><pre class="lyrics">${lyricHtml(v.lyrics)}</pre></details>` : ""}
+    </div>`;
+  const changedVersion = d.dataset.stem !== v.stem;
+  d.dataset.stem = v.stem;
   d.innerHTML = `
-    <div class="eyebrow">${esc(s.session)}${s.ep ? " · EP" : ""}</div>
-    <h2>${esc(s.title)}</h2>
+    <button class="btn small detail-back" id="detailBack">← Back to songs</button>
+    <div class="eyebrow">${esc(v.session)}${s.ep ? " · EP" : ""}</div>
+    <h2>${esc(su.title || v.title || s.title)}</h2>
     <div class="meta">${v.custom ? `Your version${src ? ", copied from " + esc(verLabel(src)) : ""}. Edits save as you type.` : esc(v.header || "")}</div>
     <div class="versions">${vs.map(x => chipHtml(s, x, v)).join("")}</div>
     <div class="eyebrow">Score for ${esc(verLabel(v))} (0 to 100)</div>
     <div class="scorebox">
-      <input type="range" min="0" max="100" step="1" id="scoreRange" value="${r.score ?? 50}">
-      <input type="number" min="0" max="100" id="scoreNum" value="${r.score ?? ""}" placeholder="–">
+      <input type="range" aria-label="Version score" min="0" max="100" step="1" id="scoreRange" value="${r.score ?? 50}">
+      <input type="number" aria-label="Version score from 0 to 100" min="0" max="100" id="scoreNum" value="${r.score ?? ""}" placeholder="–">
     </div>
     <div class="status">
       ${STATUSES.map(([k,l]) => `<button class="btn s-${k}" data-status="${k}" aria-pressed="${r.status===k}">${l}</button>`).join("")}
       <button class="btn ${inAlbum(s.slug) ? "" : "primary"}" id="albumToggle">${inAlbum(s.slug) ? "Remove from album" : "+ Add to album"}</button>
       <button class="btn" id="copyEdit">Copy &amp; edit</button>
     </div>
-    <textarea id="note" placeholder="Notes for this version: timestamps, what hit, what to fix">${esc(r.note || "")}</textarea>
-    <div class="suno">${fields.map(([k,l,val]) => `<button class="btn" data-copy="${k}"><span>Copy ${l}</span><small>${countText(val)}</small></button>`).join("")}</div>
+    <textarea id="note" aria-label="Notes for this version" placeholder="Notes for this version: timestamps, what hit, what to fix">${esc(r.note || "")}</textarea>
     ${body}`;
   d._fields = Object.fromEntries(fields.map(([k,,val]) => [k, val || ""]));
+  if (changedVersion) d.scrollTop = 0;
 }
 function refreshCopyButtons(v) {
   const d = $("detail"), fields = fieldsOf(v);
   d._fields = Object.fromEntries(fields.map(([k,,val]) => [k, val || ""]));
-  for (const [k,,val] of fields) { const sm = d.querySelector(`[data-copy="${k}"] small`); if (sm) sm.textContent = countText(val); }
+  for (const [k,,val] of fields) {
+    const section = d.querySelector(`[data-field="${k}"]`), button = section && section.querySelector("[data-copy]");
+    if (!button) continue;
+    section.querySelector(".field-count").textContent = countText(val);
+    button.disabled = !val; button.classList.remove("copied"); button.textContent = "Copy";
+  }
 }
 function renderAlbum() {
   const t = state.tracklist.filter(slug => BY[slug]);
@@ -292,7 +353,7 @@ function renderAlbum() {
     return `<div class="track" data-slug="${esc(slug)}">
       <div class="n">${i+1}</div>
       <div class="score ${scoreClass(r.score)}">${r.score ?? "–"}</div>
-      <div class="t"><b>${esc(s.title)}</b><small>${esc(s.session)} · ${esc(verLabel(v))}${r.note ? " · " + esc(r.note.slice(0,80)) : ""}</small></div>
+      <div class="t"><b>${esc(s.title)}</b><small>${esc(verLabel(v))}${r.note ? " · " + esc(r.note.slice(0,80)) : ""}</small></div>
       <div class="ctl">
         <button class="btn small" data-move="-1" aria-label="Move up" ${i===0?"disabled":""}>↑</button>
         <button class="btn small" data-move="1" aria-label="Move down" ${i===t.length-1?"disabled":""}>↓</button>
@@ -316,17 +377,31 @@ $("tabSongs").onclick = () => { ui.view = "songs"; render(); };
 $("tabAlbum").onclick = () => { ui.view = "album"; render(); };
 $("q").oninput = e => { ui.q = e.target.value.trim(); renderList(); };
 $("sort").onchange = e => { ui.sort = e.target.value; renderList(); };
-$("chips").onclick = e => { const b = e.target.closest("[data-f]"); if (!b) return; ui.filter = b.dataset.f; renderChips(); renderList(); };
+$("chips").onclick = e => { const b = e.target.closest("[data-f]"); if (!b) return; ui.filter = b.dataset.f; renderChips(); renderList(); if (BY[ui.open] && matches(BY[ui.open])) renderDetail(); };
 $("list").onclick = e => {
   const row = e.target.closest(".row"); if (!row) return;
   ui.open = row.dataset.slug; renderList(); renderDetail();
   if (window.innerWidth <= 820) $("detail").scrollIntoView({ behavior:"smooth", block:"start" });
 };
+$("list").addEventListener("keydown",e => {
+  if (e.key === "Enter" || e.key === " ") { const row = e.target.closest(".row"); if (row) { e.preventDefault(); row.click(); } }
+});
 $("detail").addEventListener("click", async e => {
   const s = BY[ui.open]; if (!s) return;
+  if (e.target.closest("#detailBack")) {
+    const row = $("list").querySelector(`[data-slug="${CSS.escape(s.slug)}"]`);
+    (row || $("list")).scrollIntoView({behavior:"smooth",block:"center"});
+    if (row) row.focus({preventScroll:true});
+    return;
+  }
   const cur = version(s);
   const ver = e.target.closest("[data-ver]");
-  if (ver) { state.pick[s.slug] = ver.dataset.ver; save(); renderDetail(); renderList(); return; }
+  if (ver) {
+    state.pick[s.slug] = ver.dataset.ver;
+    const chosen = versionsOf(s).find(v => v.stem === ver.dataset.ver);
+    if (ui.filter.startsWith("session:") && chosen && chosen.session !== ui.filter.slice(8)) { ui.filter = "all"; renderChips(); }
+    save(); renderDetail(); renderList(); return;
+  }
   const st = e.target.closest("[data-status]");
   if (st) { const k = st.dataset.status; setRating(cur.stem, { status: rating(cur.stem).status === k ? null : k }); renderDetail(); rerenderKeepDetail(); return; }
   if (e.target.closest("#albumToggle")) {
@@ -335,8 +410,8 @@ $("detail").addEventListener("click", async e => {
   }
   if (e.target.closest("#copyEdit")) {
     const su = cur.suno || {}, lyr = su.lyrics ?? cur.lyrics, list = state.custom[s.slug] || (state.custom[s.slug] = []);
-    const nv = { stem: `mine-${s.slug}-${Date.now().toString(36)}`, custom:true, version:0, label:`My copy ${list.length + 1}`, writer:"Me", session:s.session,
-      copiedFrom:cur.stem, title:su.title || s.title, lyrics:lyr, header:"", suno:{ title:su.title || s.title, lyrics:lyr, style:su.style || "", exclude:su.exclude || "" }, created:Date.now() };
+    const nv = { stem: `mine-${s.slug}-${Date.now().toString(36)}`, custom:true, version:0, label:`My copy ${list.length + 1}`, writer:"Me", session:cur.session,
+      copiedFrom:cur.stem, title:su.title || s.title, lyrics:lyr, header:"", suno:{ title:su.title || s.title, lyrics:lyr, style:su.style || "", exclude:su.exclude || "", ...(su.instrumental ? {instrumental:su.instrumental} : {}) }, created:Date.now() };
     list.push(nv); state.pick[s.slug] = nv.stem; save(); renderDetail(); renderList(); toast("Copied. Edit it below.");
     $("edLyrics") && $("edLyrics").focus(); return;
   }
@@ -349,8 +424,11 @@ $("detail").addEventListener("click", async e => {
   const cp = e.target.closest("[data-copy]");
   if (cp) {
     const text = $("detail")._fields[cp.dataset.copy] || "";
-    try { await navigator.clipboard.writeText(text); cp.classList.add("copied"); toast("Copied " + cp.dataset.copy); }
-    catch (err) { const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); toast("Copied " + cp.dataset.copy); }
+    if (!text) return;
+    if (await copyText(text)) {
+      cp.classList.add("copied"); cp.textContent = "Copied ✓"; toast("Copied " + cp.dataset.copy);
+      setTimeout(() => { if(cp.isConnected) { cp.classList.remove("copied"); cp.textContent = "Copy"; } },1400);
+    } else toast("Copy failed. Select the text and copy it manually.");
   }
 });
 $("detail").addEventListener("input", e => {
@@ -365,13 +443,14 @@ $("detail").addEventListener("input", e => {
     rerenderKeepDetail(); updateChip(s, v);
   }
   if (id === "note") { setRating(v.stem, { note: e.target.value }); return; }
-  if (v.custom && ["edLabel","edTitle","edStyle","edExclude","edLyrics"].includes(id)) {
+  if (v.custom && ["edLabel","edTitle","edStyle","edExclude","edLyrics","edInstrumental"].includes(id)) {
     const val = e.target.value; v.suno = v.suno || {};
     if (id === "edLabel") v.label = val;
-    if (id === "edTitle") v.suno.title = v.title = val;
+    if (id === "edTitle") { v.suno.title = v.title = val; $("detail").querySelector("h2").textContent = val || s.title; }
     if (id === "edStyle") v.suno.style = val;
     if (id === "edExclude") v.suno.exclude = val;
     if (id === "edLyrics") v.suno.lyrics = v.lyrics = val;
+    if (id === "edInstrumental") v.suno.instrumental = val;
     save(); refreshCopyButtons(v);
     if (id === "edLabel") { updateChip(s, v); renderList(); }
   }
@@ -390,7 +469,7 @@ $("tracks").onclick = e => {
 };
 $("copyTracklist").onclick = async () => {
   const text = state.tracklist.filter(s => BY[s]).map((s, i) => `${i+1}. ${BY[s].title}`).join("\n");
-  try { await navigator.clipboard.writeText(text); toast("Tracklist copied"); } catch (e) { toast("Copy failed"); }
+  toast(await copyText(text) ? "Tracklist copied" : "Copy failed. Select and copy the text manually.");
 };
 $("clearAlbum").onclick = () => { if (state.tracklist.length && confirm("Clear the whole tracklist? Scores and notes stay.")) { state.tracklist = []; save(); render(); } };
 $("exportBtn").onclick = () => {

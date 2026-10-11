@@ -1,55 +1,86 @@
 #!/usr/bin/env python3
-"""Rebuilds songs.js for the Album Board from the SBGLP writing-session folders.
+"""Import all dated Writing Sessions packets, preserving sources and existing rating IDs."""
+import argparse, datetime, hashlib, json, re
+from pathlib import Path
+HERE = Path(__file__).resolve().parent
+LEGACY = {'2026-10-08-Reset':'Oct 8 Reset', '2026-10-09-Lyric-Mine':'Oct 9 Lyric Mine'}
+PATTERN = re.compile(r'^(?P<slug>[a-z0-9-]+)_v(?P<ver>\d+)_(?P<writer>[A-Za-z]+)_lyrics\.md$')
 
-Run from anywhere:  python3 build_songs.py
-Default source: <this folder>/../../../../../SBGLP/02 Album Project/Writing Sessions
-(the same relative layout on the Mac mini and on the PC's D:\\SYNCt).
-Pass a different Writing Sessions path as the first argument to override.
-"""
-import json, os, re, sys, datetime
-HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = sys.argv[1] if len(sys.argv) > 1 else os.path.normpath(os.path.join(HERE, "..", "..", "..", "..", "..", "SBGLP", "02 Album Project", "Writing Sessions"))
-SESSIONS = {"2026-10-08-Reset": "Oct 8 Reset", "2026-10-09-Lyric-Mine": "Oct 9 Lyric Mine"}
-STEM = re.compile(r"^(?P<slug>[a-z0-9-]+)_v(?P<ver>\d+)_(?P<writer>[A-Za-z]+)_lyrics\.md$")
+def label(folder):
+    if folder in LEGACY: return LEGACY[folder]
+    date = datetime.date.fromisoformat(folder[:10])
+    suffix = re.sub(r'Battle(\d+)', r'Battle \1', folder[10:].strip('-').replace('-', ' '))
+    return f'{date:%b} {date.day}' + (' ' + suffix if suffix else '')
 
-def read(p):
-    try:
-        with open(p, encoding="utf-8") as f: return f.read()
-    except OSError: return ""
+def build(source):
+    source = Path(source)
+    if not source.is_dir(): raise ValueError(f'Writing Sessions folder not found: {source}')
+    songs, sessions, inputs, ids = {}, [], {}, set()
+    def read(path):
+        if not path.is_file(): return ''
+        data = path.read_bytes()
+        inputs[str(path.relative_to(source))] = hashlib.sha256(data).hexdigest()
+        return data.decode('utf-8-sig').replace('\r\n', '\n')
+    for directory in sorted(source.iterdir()):
+        if not directory.is_dir() or not re.fullmatch(r'\d{4}-\d{2}-\d{2}(?:-.+)?', directory.name): continue
+        folder, session, count = directory.name, label(directory.name), 0
+        for path in sorted(directory.glob('*_lyrics.md')):
+            match = PATTERN.fullmatch(path.name)
+            if not match: raise ValueError(f'Unrecognized lyric packet name: {path}')
+            file_stem = path.name[:-len('_lyrics.md')]
+            stem = file_stem if folder in LEGACY else f'{folder}/{file_stem}'
+            if stem in ids: raise ValueError(f'Repeated version ID: {stem}')
+            ids.add(stem)
+            raw = read(path)
+            tm = re.match(r'# (.+)\n', raw)
+            title = tm.group(1).strip() if tm else match['slug'].replace('-', ' ').title()
+            body = re.sub(r'\A# [^\n]*\n+', '', raw).strip('\n')
+            if not body.strip(): raise ValueError(f'Empty lyrics: {path}')
+            suno = {k:read(directory/'Suno Pass'/f'{file_stem}_suno-{suffix}.txt') for k,suffix in [('title','title'),('lyrics','lyrics'),('style','style'),('exclude','exclude'),('instrumental','style-instrumental')]}
+            if not suno['lyrics']: suno['lyrics'] = body
+            chars = len(suno['lyrics'].encode('utf-16-le')) // 2
+            if suno['lyrics'] == body: suno['lyrics'] = None
+            if not suno['title']: suno['title'] = title
+            header = re.search(r'^Version v\d+\..*$', read(directory/f'{file_stem}_notes.md'), re.M)
+            writer = 'Misc' if match['writer'].lower() == 'cg' else match['writer']
+            v = dict(stem=stem,file_stem=file_stem,version=int(match['ver']),writer=writer,session=session,folder=folder,source=f'{folder}/{path.name}',title=title,lyrics=body,suno=suno,header=header.group(0).replace('**','') if header else '',chars=chars)
+            song = songs.setdefault(match['slug'],dict(slug=match['slug'],ep=match['slug'].startswith('ep'),versions=[]))
+            song['versions'].append(v); count += 1
+        if count: sessions.append(dict(folder=folder,label=session,versions=count))
+    if not songs: raise ValueError('No lyric packets found; existing catalogue was not replaced.')
+    out = []
+    for song in songs.values():
+        song['versions'].sort(key=lambda v:(v['folder'],v['version'],v['writer']=='Cue',v['stem']))
+        latest = song['versions'][-1]
+        song.update(title=latest['title'],session=latest['session'],latest=latest['stem'])
+        out.append(song)
+    out.sort(key=lambda s:s['title'].lower())
+    out.sort(key=lambda s:s['versions'][-1]['folder'],reverse=True)
+    for relative,digest in inputs.items():
+        if hashlib.sha256((source/relative).read_bytes()).hexdigest() != digest: raise ValueError(f'Source changed while reading: {relative}; rerun.')
+    return out,sessions,inputs
 
-songs = {}
-for folder, label in SESSIONS.items():
-    d = os.path.join(SRC, folder)
-    if not os.path.isdir(d): continue
-    for fn in sorted(os.listdir(d)):
-        m = STEM.match(fn)
-        if not m: continue
-        stem = fn[:-len("_lyrics.md")]
-        raw = read(os.path.join(d, fn))
-        tm = re.match(r"# (.+)\n", raw)
-        title = tm.group(1).strip() if tm else m["slug"].replace("-", " ").title()
-        body = re.sub(r"\A# [^\n]*\n+", "", raw).strip("\n")
-        sp = os.path.join(d, "Suno Pass")
-        suno = {k: read(os.path.join(sp, f"{stem}_suno-{k}.txt")) for k in ("title", "lyrics", "style", "exclude")}
-        if not suno["lyrics"]: suno["lyrics"] = body
-        chars = len(suno["lyrics"].encode("utf-16-le")) // 2
-        if suno["lyrics"].strip() == body.strip(): suno["lyrics"] = None  # same text; the page uses the lyrics field
-        if not suno["title"]: suno["title"] = title
-        header = re.search(r"^Version v\d+\..*$", read(os.path.join(d, stem + "_notes.md")), re.M)
-        v = {"stem": stem, "version": int(m["ver"]), "writer": m["writer"], "session": label, "folder": folder,
-             "title": title, "lyrics": body, "suno": suno, "header": header.group(0).replace("**", "") if header else "",
-             "chars": chars}
-        s = songs.setdefault(m["slug"], {"slug": m["slug"], "ep": m["slug"].startswith("ep"), "versions": []})
-        s["versions"].append(v)
-
-out = []
-for slug, s in songs.items():
-    s["versions"].sort(key=lambda v: (v["folder"], v["version"], v["writer"] == "Cue"))
-    latest = s["versions"][-1]
-    s.update(title=latest["title"], session=latest["session"], latest=latest["stem"])
-    out.append(s)
-out.sort(key=lambda s: (s["session"], s["title"].lower()))
-built = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-js = "// Generated by build_songs.py. Do not edit by hand.\nwindow.ALBUM_BUILT = %s;\nwindow.ALBUM_SONGS = %s;\n" % (json.dumps(built), json.dumps(out, ensure_ascii=False))
-with open(os.path.join(HERE, "songs.js"), "w", encoding="utf-8") as f: f.write(js)
-print(f"{len(out)} songs, {sum(len(s['versions']) for s in out)} versions -> songs.js ({built})")
+def main(argv=None):
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('source',nargs='?',type=Path,default=HERE.joinpath('../../../../../SBGLP/02 Album Project/Writing Sessions').resolve())
+    p.add_argument('--output',type=Path,default=HERE/'songs.js')
+    p.add_argument('--manifest',type=Path)
+    p.add_argument('--built-at')
+    args = p.parse_args(argv)
+    try: songs,sessions,inputs = build(args.source)
+    except (ValueError,OSError,UnicodeError) as e: p.error(str(e))
+    built = args.built_at or datetime.datetime.now().astimezone().isoformat(timespec='minutes')
+    js = '// Generated by build_songs.py. Do not edit by hand.\n'
+    for key,value in [('ALBUM_BUILT',built),('ALBUM_SESSIONS',sessions),('ALBUM_SONGS',songs)]: js += f'window.{key} = {json.dumps(value,ensure_ascii=False)};\n'
+    tmp = args.output.with_suffix('.js.tmp'); tmp.write_text(js,encoding='utf-8'); tmp.replace(args.output)
+    if args.output.resolve() == (HERE/'songs.js').resolve():
+        shell = HERE.parent/'service-worker.js'
+        if shell.is_file():
+            cache_source = (HERE.parent/'mm-home/index.html').read_text(encoding='utf-8')+'\n'+''.join((HERE/name).read_text(encoding='utf-8') for name in ('index.html','songs.js'))
+            cache_name = 'scattabrain-unified-shell-v5-'+hashlib.sha256(cache_source.encode()).hexdigest()[:12]
+            worker = re.sub(r'const CACHE_NAME = "[^"]+";', f'const CACHE_NAME = "{cache_name}";', shell.read_text(encoding='utf-8'),count=1)
+            shell.write_text(worker,encoding='utf-8',newline='\r\n')
+    count = sum(s['versions'] for s in sessions)
+    if args.manifest: args.manifest.write_text(json.dumps(dict(source=str(args.source.resolve()),built=built,songs=len(songs),versions=count,sessions=sessions,sha256=inputs),indent=2),encoding='utf-8')
+    print(f'{len(songs)} songs, {count} versions, {len(sessions)} sessions -> {args.output}')
+if __name__ == '__main__': main()
