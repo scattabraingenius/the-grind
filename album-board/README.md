@@ -93,3 +93,7 @@ Audio Board lives at `/audio-board/` and stores decisions by Suno clip UUID. It 
 The source link is exact: the original SBGLP path is retained, and a promoted copy can link back to one imported session packet only when full lyric text, writer and version agree. Ambiguous packets are not guessed. Audio Board links back to that exact lyric version; Lyric Board’s small `audio-links.js` index lets a packet open its associated takes without loading the full audio catalogue. Scores are not copied between boards.
 
 `python3 scripts/refresh-board-cache.py` versions all shared UI, both catalogues, manifests, and icon assets. Both catalogue builders and the embedded-planner update script call it. No audio downloads or signed URLs are stored in the offline cache.
+
+## Lyric app icon
+
+Lyric Board now uses the neon notebook and pen icon (`icons/lyric-notebook-*.png`) for installation, the browser tab and Apple touch icon. Audio Board uses the cassette artwork made earlier today. The app IDs, URLs and score storage are unchanged. The previous cassette files remain available for older cached installs.

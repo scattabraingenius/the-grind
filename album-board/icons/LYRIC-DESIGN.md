@@ -1,0 +1,7 @@
+# Lyric Board icon
+
+Created with the built-in ImageGen tool on October 12, 2026. The original is `lyric-notebook-master.png`; app sizes are `lyric-notebook-32.png`, `lyric-notebook-180.png`, `lyric-notebook-192.png`, `lyric-notebook-512.png`, and the padded `lyric-notebook-maskable-512.png`.
+
+## Final prompt
+
+Use case: logo-brand. Asset: finished square app icon for Lyric Board, a lyric writing app in the ScattaBrain to Genius family. A bold beautifully sculpted open songwriting notebook with luminous violet pages and three thick magenta handwritten-style strokes on each page (abstract strokes only, not legible words). A single elegant glossy purple fountain pen rests diagonally across the lower right of the notebook, its nib catching one tiny warm golden star glint. Slight three-quarter perspective, rounded premium 3D forms, strong clean silhouette recognizable at small app-icon sizes. Electric purple #A855F7, hot pink and magenta highlights, indigo-blue reflections, deep black-plum #0C0812 background. Same vivid neon glow and polished glossy style as the purple cassette app icon, but this is clearly a writing/lyrics symbol. Centered composition; all meaningful artwork fits inside central 68% of square canvas, generous dark margin for phone icon masks. Opaque full-bleed dark plum background extends to all four square edges, subtle soft purple halo. No outer rounded tile boundary. No cassette, no vinyl, no brain, no microphone, no extra props, no readable lettering, no labels, no watermark, no mockup. One square icon artwork only.

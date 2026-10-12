@@ -1,4 +1,4 @@
-const CACHE_NAME = "scattabrain-unified-shell-v5-27e3c22ed2e1";
+const CACHE_NAME = "scattabrain-unified-shell-v5-c1b148086de2";
 // Cache Storage is per-origin, not per service-worker scope: /the-grind/ and /s2g/ share one
 // origin (scattabraingenius.github.io), so an unqualified CACHE_NAME could let one site's
 // activate cleanup delete the other site's live cache once their content hashes diverge.
@@ -24,6 +24,16 @@ const APP_SHELL = [
   "./audio-board/index.html",
   "./audio-board/tracks.js",
   "./audio-board/manifest.webmanifest",
+  "./album-board/icons/lyric-notebook-32.png",
+  "./album-board/icons/lyric-notebook-180.png",
+  "./album-board/icons/lyric-notebook-192.png",
+  "./album-board/icons/lyric-notebook-512.png",
+  "./album-board/icons/lyric-notebook-maskable-512.png",
+  "./audio-board/icons/audio-cassette-32.png",
+  "./audio-board/icons/audio-cassette-180.png",
+  "./audio-board/icons/audio-cassette-192.png",
+  "./audio-board/icons/audio-cassette-512.png",
+  "./audio-board/icons/audio-cassette-maskable-512.png",
   "./album-board/manifest.webmanifest",
   "./album-board/icons/album-cassette-32.png",
   "./album-board/icons/album-cassette-180.png",
