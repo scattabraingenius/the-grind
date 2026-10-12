@@ -38,6 +38,11 @@ checked(`${allVersions.length} versions in ${current.ALBUM_SESSIONS.length} sess
     const manifest = await (await context.request.get(new URL(manifestURL,page.url()).href)).json();
     assert.equal(manifest.name,'Album Board'); assert.equal(manifest.display,'standalone');
     assert.equal(new URL(manifest.id,new URL(manifestURL,page.url())).pathname,'/album-board/');
+    const iconSizes = await page.evaluate(async icons => Promise.all(icons.map(icon => new Promise((resolve,reject) => {
+      const image = new Image(); image.onload = () => resolve(`${image.naturalWidth}x${image.naturalHeight}`);
+      image.onerror = () => reject(Error('App icon missing: '+icon.src)); image.src = icon.src;
+    }))),manifest.icons);
+    assert.deepEqual(iconSizes,manifest.icons.map(icon=>icon.sizes),'All app icon images match their declared sizes');
     await page.evaluate(async()=>{await navigator.serviceWorker.ready;});
     await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
     const cdp = await context.newCDPSession(page);
