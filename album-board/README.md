@@ -71,3 +71,11 @@ Sync checks use two independent browser contexts and an isolated transactional b
 - This page contains writing packets and local ratings. It does not download audio or consume Suno downloads.
 
 The October 10 refresh includes 69 songs and 98 versions from six sessions: October 4 (4 versions), October 4 Cold Pass (12), October 8 Reset (39), October 9 Lyric Mine (29), October 10 Cue Battle 01 (7), and October 10 Misc Battle 01 (7). Source packets remain drafts unless Scatta approves them; catalogue inclusion is not listening approval.
+
+## October 12 Suno title refresh
+
+70 songs, 99 versions and seven sessions, including the Dearly Beloved v02 Cue rewrite. The read-only `suno-titles.csv` snapshot records all 298 library clips: 192 renamed and verified, 106 unchanged. The builder attaches clips only by their approved source path so repeated version numbers in different sessions cannot cross-link. Existing rating IDs remain intact.
+
+The Suno library panel searches current and previous titles and links to each clip. Matched packets show their vocal and instrumental clips. Copy Title uses the first verified vocal title where available; the clip list can copy any individual title. These are existing clip names, not a reservation of the next generation number. C = Cue, M = Misc, S = Scatta; the first number is the lyric version, the final number is the clip; i denotes an instrumental with a separate count. Instrumental stems without approved renames keep their original names.
+
+Future rebuilds automatically use this snapshot. To refresh it, replace it with a verified export of the same columns, or pass `--suno-titles <csv>`. No Suno credentials or audio are stored in this repository.

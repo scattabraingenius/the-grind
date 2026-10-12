@@ -9,6 +9,26 @@ builder = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(builder)
 
 class ImportTest(unittest.TestCase):
+    def test_monthly_rewrites_and_exact_clip_source_keep_versions_distinct(self):
+        import csv
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for folder in ('2026-10-08-Reset', '2026-10-Cue-Rewrites'):
+                directory = root / folder; directory.mkdir()
+                (directory / 'song_v01_Cue_lyrics.md').write_text('# Song\n\nLyrics')
+            songs, sessions, _ = builder.build(root)
+            snapshot = root / 'clips.csv'
+            with snapshot.open('w', newline='') as f:
+                writer = csv.DictWriter(f, fieldnames=['clip_id','title','old_title','result','source'])
+                writer.writeheader()
+                writer.writerow(dict(clip_id='1062c997-8fff-4e93-bcac-dabb89ccee21',title='Song.C1.3',old_title='Song',result='renamed and verified',source='02 Album Project/Writing Sessions/2026-10-Cue-Rewrites/song_v01_Cue_lyrics.md'))
+            builder.attach_clips(songs, snapshot)
+            versions = {v['folder']:v for v in songs[0]['versions']}
+            self.assertEqual(versions['2026-10-08-Reset']['clips'], [])
+            self.assertEqual(versions['2026-10-Cue-Rewrites']['suno']['title'], 'Song.C1.3')
+            self.assertEqual(versions['2026-10-08-Reset']['stem'], 'song_v01_Cue')
+            self.assertEqual(len(sessions), 2)
+
     def test_same_filename_in_new_session_keeps_old_rating_id(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

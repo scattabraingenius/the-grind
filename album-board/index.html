@@ -179,6 +179,12 @@
     <div id="tracks"></div>
   </section>
 
+  <details class="style" id="sunoLibrary">
+    <summary>Suno library · October 12 title update</summary>
+    <p>Song.C2.3 = Cue, lyric version 2, Suno clip 3. M = Misc, S = Scatta. Add i for instrumentals (Song.iC2.3); vocals and instrumentals count separately. These titles identify existing clips.</p>
+    <input type="search" id="clipSearch" aria-label="Search Suno clip titles" placeholder="Find current or previous Suno titles">
+    <p id="clipSummary" class="meta"></p><div id="clipList"></div>
+  </details>
   <div class="foot">
     <span id="built"></span>
     <span class="save-status" id="saveStatus" role="status">Saved on this device. Export scores keeps a separate backup.</span>
@@ -355,6 +361,21 @@ function fieldsOf(v) {
   return fields;
 }
 function countText(val) { return val ? (val.length.toLocaleString() + " chars") : "missing"; }
+function clipHtml(c) {
+  return `<p style="overflow-wrap:anywhere"><a href="https://suno.com/song/${esc(c.id)}" target="_blank" rel="noopener noreferrer">${esc(c.title)}</a> <button class="btn small" data-clip-title="${esc(c.title)}">Copy title</button>${c.oldTitle !== c.title ? `<br><small>Previously: ${esc(c.oldTitle)}</small>` : ''}</p>`;
+}
+function renderClips() {
+  const clips = window.ALBUM_CLIPS || [], q = $("clipSearch").value.toLowerCase();
+  const found = clips.filter(c => [c.title,c.oldTitle].some(t => t.toLowerCase().includes(q)));
+  $("clipSummary").textContent = `${clips.length} clips · ${clips.filter(c => c.result === 'renamed and verified').length} renamed and verified · ${found.length} shown`;
+  $("clipList").innerHTML = found.map(clipHtml).join('') || '<p>No clips match.</p>';
+}
+$("clipSearch").oninput = renderClips;
+document.addEventListener('click', async e => {
+  const button = e.target.closest('[data-clip-title]'); if (!button) return;
+  try { await navigator.clipboard.writeText(button.dataset.clipTitle); toast('Copied title'); }
+  catch (err) { toast('Copy failed. Select the title manually.'); }
+});
 function fieldHtml(k, label, value, editable) {
   const id = {title:"edTitle",style:"edStyle",exclude:"edExclude",lyrics:"edLyrics",instrumental:"edInstrumental"}[k];
   const heading = editable ? `<label for="${id}">${label}</label>` : `<h3 id="field-${k}">${label}</h3>`;
@@ -400,6 +421,8 @@ function renderDetail() {
     <h2>${esc(su.title || v.title || s.title)}</h2>
     <div class="meta">${v.custom ? `Your version${src ? ", copied from " + esc(verLabel(src)) : ""}. Edits save as you type.` : esc(v.header || "")}</div>
     <div class="versions">${vs.map(x => chipHtml(s, x, v)).join("")}</div>
+    ${v.naming ? `<div class="meta">Suno naming: ${esc(v.naming)}.[clip number] · instrumental: ${esc(v.naming.replace(/\.([CMS])/,'.i$1'))}.[clip number]</div>` : ''}
+    ${(v.clips || []).length ? `<details class="style"><summary>${v.clips.length} verified Suno clips for this packet</summary>${v.clips.map(clipHtml).join('')}</details>` : ''}
     <div class="eyebrow">Score for ${esc(verLabel(v))} (0 to 100)</div>
     <div class="scorebox">
       <input type="range" aria-label="Version score" min="0" max="100" step="1" id="scoreRange" value="${r.score ?? 50}">
@@ -706,6 +729,7 @@ function initAlbumSync() {
   } catch (err) { syncStatus("Sync could not start. Your local scores are safe. Reload to retry.", true); }
 }
 render();
+renderClips();
 initAlbumSync();
 </script>
 </body>
