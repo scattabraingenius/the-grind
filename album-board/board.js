@@ -204,6 +204,7 @@ function chipHtml(s, x, cur) {
 function renderDetail() {
   const d = $("detail"), s = BY[ui.open];
   const previousPlayer = d.querySelector("audio"), previousStem = d.dataset.stem;
+  const previousPanels = new Map(Array.from(d.querySelectorAll("details[data-panel]"), panel => [panel.dataset.panel, panel.open]));
   if (!s || !scopedVersions(s).length) { d.className = "detail empty"; d.textContent = AUDIO_BOARD ? "Pick a take in this session to open it in Suno and score it." : "Pick a song in this session to read it, score it, and copy its Suno fields."; return; }
   const v = version(s), r = rating(v.stem), su = v.suno || {}, fields = fieldsOf(v);
   const vs = scopedVersions(s), src = v.custom ? versionsOf(s).find(x => x.stem === v.copiedFrom) : null;
@@ -212,7 +213,7 @@ function renderDetail() {
     ${v.custom ? `<label>Version name<input id="edLabel" value="${esc(v.label || "")}" autocomplete="off"></label>` : ""}
     ${fields.map(([k,label,value]) => fieldHtml(k,label,value,v.custom)).join("")}
     ${v.custom ? `<div><button class="btn" id="delMine">Delete my version</button></div>` : su.lyrics != null && su.lyrics !== v.lyrics ?
-      `<details class="style"><summary>Full writing draft</summary><p>The boxes above contain the exact Suno fields. This is the original writing draft.</p><pre class="lyrics">${lyricHtml(v.lyrics)}</pre></details>` : ""}
+      `<details class="style" data-panel="writing-draft"><summary>Full writing draft</summary><p>The boxes above contain the exact Suno fields. This is the original writing draft.</p><pre class="lyrics">${lyricHtml(v.lyrics)}</pre></details>` : ""}
     </div>`;
   const changedVersion = d.dataset.stem !== v.stem;
   d.dataset.stem = v.stem;
@@ -236,7 +237,12 @@ function renderDetail() {
       ${AUDIO_BOARD ? "" : `<button class="btn" id="copyEdit">Copy &amp; edit</button>`}
     </div>
     <textarea id="note" aria-label="Notes for this version" placeholder="Notes for this version: timestamps, what hit, what to fix">${esc(r.note || "")}</textarea>
-    ${AUDIO_BOARD ? `<details class="style"><summary>Lyrics and generation style</summary>${body}</details>` : body}`;
+    ${AUDIO_BOARD ? `<details class="style" data-panel="audio-fields" open><summary>Lyrics and generation style</summary>${body}</details>` : body}`;
+  // Focus changes and cloud acknowledgments can rebuild the same detail view.
+  // Read the live DOM state rather than waiting for an asynchronously dispatched toggle event.
+  if (!changedVersion) for (const panel of d.querySelectorAll("details[data-panel]")) {
+    if (previousPanels.has(panel.dataset.panel)) panel.open = previousPanels.get(panel.dataset.panel);
+  }
   d._fields = Object.fromEntries(fields.map(([k,,val]) => [k, val || ""]));
   if (AUDIO_BOARD && previousPlayer) {
     const player = d.querySelector("audio");
@@ -542,8 +548,8 @@ function audioHtml(v) {
     <div class="audio-controls"><a class="btn primary" id="openSuno" href="https://suno.com/song/${esc(v.stem)}" target="_blank" rel="noopener noreferrer">Open in Suno ↗</a><button class="btn small" data-copy="title">Copy title</button>${sourceLink}</div>
     ${v.audioUrl ? `<audio class="audio-player" controls preload="none" src="${esc(v.audioUrl)}"></audio>` : ''}
     <p class="meta" id="audioNotice">${v.audioUrl ? 'Play this take here or open it in Suno.' : 'Open this take in Suno to listen.'}</p>
-    ${v.sources?.length ? `<details class="style"><summary>Source audio</summary>${v.sources.map(source=>`<p><a href="https://suno.com/song/${esc(source.id)}" target="_blank" rel="noopener noreferrer">${esc(source.title)}</a></p>`).join("")}</details>` : ""}
-    ${v.source ? `<details class="style"><summary>SBGLP source</summary><p style="overflow-wrap:anywhere">${esc(v.source)}</p></details>` : ''}`;
+    ${v.sources?.length ? `<details class="style" data-panel="source-audio"><summary>Source audio</summary>${v.sources.map(source=>`<p><a href="https://suno.com/song/${esc(source.id)}" target="_blank" rel="noopener noreferrer">${esc(source.title)}</a></p>`).join("")}</details>` : ""}
+    ${v.source ? `<details class="style" data-panel="sbglp-source"><summary>SBGLP source</summary><p style="overflow-wrap:anywhere">${esc(v.source)}</p></details>` : ''}`;
 }
 function initializeBoard() {
   if (AUDIO_BOARD) {
