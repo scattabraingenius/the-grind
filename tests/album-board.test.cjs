@@ -34,6 +34,27 @@ checked(`${allVersions.length} versions in ${current.ALBUM_SESSIONS.length} sess
     const page=await context.newPage(), errors=[];
     page.on('pageerror',e=>errors.push(e.message));
     await page.goto(BASE+'/album-board/',{waitUntil:'networkidle'});
+    const manifestURL = await page.locator('link[rel="manifest"]').getAttribute('href');
+    const manifest = await (await context.request.get(new URL(manifestURL,page.url()).href)).json();
+    assert.equal(manifest.name,'Album Board'); assert.equal(manifest.display,'standalone');
+    assert.equal(new URL(manifest.id,new URL(manifestURL,page.url())).pathname,'/album-board/');
+    await page.evaluate(async()=>{await navigator.serviceWorker.ready;});
+    await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
+    const cdp = await context.newCDPSession(page);
+    const appManifest = await cdp.send('Page.getAppManifest');
+    assert.equal(appManifest.errors.length,0,'Chrome parses the app manifest');
+    const install = await cdp.send('Page.getInstallabilityErrors');
+    // Playwright's isolated context is incognito; Chrome prevents actual installation there.
+    assert.equal(install.installabilityErrors.filter(e=>e.errorId!=='in-incognito').length,0,JSON.stringify(install.installabilityErrors));
+    await page.evaluate(()=>{
+      const event = new Event('beforeinstallprompt',{cancelable:true});
+      event.prompt = async()=>{window.__installAsked=true;}; event.userChoice=Promise.resolve({outcome:'dismissed'});
+      window.dispatchEvent(event);
+    });
+    await page.locator('#installApp').click();
+    assert.equal(await page.evaluate(()=>window.__installAsked),true);
+    assert.equal(await page.locator('#installApp').isHidden(),true);
+    checked('Chrome accepts the standalone Album Board manifest; service worker starts automatically and install button invokes the prompt');
     assert.equal(current.ALBUM_CLIPS.length,298);
     assert.equal(current.ALBUM_CLIPS.filter(c=>c.result==='renamed and verified').length,192);
     await page.locator('#sunoLibrary summary').click();

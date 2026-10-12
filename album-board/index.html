@@ -6,6 +6,9 @@
 <meta name="theme-color" content="#0C0812">
 <title>Album Board</title>
 <link rel="icon" href="../favicon-32.png">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<meta name="application-name" content="Album Board">
 <style>
   :root {
     color-scheme: dark;
@@ -136,7 +139,7 @@
       <h1>Album Board</h1>
       <div class="meta" id="summary"></div>
     </div>
-    <a href="../">← The Grind</a>
+    <div><button class="btn small" id="installApp" hidden>Install Album Board</button> <a href="../">← The Grind</a></div>
   </header>
 
   <div class="account-bar">
@@ -214,6 +217,25 @@
 "use strict";
 // Keep the existing local key. Account sync merges private records in a child of The Grind's node.
 const KEY = "grind.album.v1";
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', event => {
+  event.preventDefault(); installPrompt = event;
+  document.getElementById('installApp').hidden = false;
+});
+window.addEventListener('appinstalled', () => {
+  installPrompt = null; document.getElementById('installApp').hidden = true;
+});
+document.getElementById('installApp').onclick = async () => {
+  const prompt = installPrompt; if (!prompt) return;
+  installPrompt = null; document.getElementById('installApp').hidden = true;
+  try { await prompt.prompt(); await prompt.userChoice; }
+  catch (err) { toast('Use Chrome’s address-bar install icon to install Album Board.'); }
+};
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('../service-worker.js').catch(() => {
+    console.warn('Album Board offline support could not start.');
+  });
+}
 const SONGS = (window.ALBUM_SONGS || []);
 const BY = Object.fromEntries(SONGS.map(s => [s.slug, s]));
 const STATUSES = [["short","Shortlist"],["maybe","Maybe"],["cut","Cut"]];

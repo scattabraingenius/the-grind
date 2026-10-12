@@ -79,3 +79,7 @@ The October 10 refresh includes 69 songs and 98 versions from six sessions: Octo
 The Suno library panel searches current and previous titles and links to each clip. Matched packets show their vocal and instrumental clips. Copy Title uses the first verified vocal title where available; the clip list can copy any individual title. These are existing clip names, not a reservation of the next generation number. C = Cue, M = Misc, S = Scatta; the first number is the lyric version, the final number is the clip; i denotes an instrumental with a separate count. Instrumental stems without approved renames keep their original names.
 
 Future rebuilds automatically use this snapshot. To refresh it, replace it with a verified export of the same columns, or pass `--suno-titles <csv>`. No Suno credentials or audio are stored in this repository.
+
+## Install Album Board in Chrome
+
+Open the published `/album-board/` URL in a normal Chrome window and use the address-bar install icon or the **Install Album Board** button when Chrome offers it. It installs separately from The Grind and launches directly into Album Board in a standalone window. The board registers the shared service worker itself, so visiting The Grind first is not required. Its manifest and offline page are precached; existing song ratings and account sync continue to use the same origin and storage.
