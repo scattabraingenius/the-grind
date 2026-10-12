@@ -29,3 +29,7 @@ The optional match file is the earlier tracklist export’s JSON, with a `rows` 
     APP_BASE_URL=http://127.0.0.1:8765 node tests/audio-media.test.cjs  # isolated plain-audio fixture
 
 Browser checks use an isolated backend with synthetic accounts and cover independent scores for two takes of one lyric packet, separate tracklist membership, two-device sync, intact lyric data, exact source navigation, writer/song/type filters, listening sessions, installability, responsive layout and offline reload.
+
+## Installation identity fix
+
+The previous `id: "./"` resolved against the site origin, making both boards collide. The fixed IDs are `/the-grind/album-board/` and `/the-grind/audio-board/`. Start URLs, scopes, browser storage and cloud score paths are unchanged. A previously installed board with the shared origin-root identity may need to be removed and installed again from the correct board URL. Tests now verify Chrome’s processed identities as well as origin-based ID resolution.

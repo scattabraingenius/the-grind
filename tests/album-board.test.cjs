@@ -37,7 +37,7 @@ checked(`${allVersions.length} versions in ${current.ALBUM_SESSIONS.length} sess
     const manifestURL = await page.locator('link[rel="manifest"]').getAttribute('href');
     const manifest = await (await context.request.get(new URL(manifestURL,page.url()).href)).json();
     assert.equal(manifest.name,'Lyric Board'); assert.equal(manifest.display,'standalone');
-    assert.equal(new URL(manifest.id,new URL(manifestURL,page.url())).pathname,'/album-board/');
+    assert.equal(new URL(manifest.id,new URL(page.url()).origin).pathname,'/the-grind/album-board/');
     const iconSizes = await page.evaluate(async icons => Promise.all(icons.map(icon => new Promise((resolve,reject) => {
       const image = new Image(); image.onload = () => resolve(`${image.naturalWidth}x${image.naturalHeight}`);
       image.onerror = () => reject(Error('App icon missing: '+icon.src)); image.src = icon.src;
@@ -48,6 +48,7 @@ checked(`${allVersions.length} versions in ${current.ALBUM_SESSIONS.length} sess
     const cdp = await context.newCDPSession(page);
     const appManifest = await cdp.send('Page.getAppManifest');
     assert.equal(appManifest.errors.length,0,'Chrome parses the app manifest');
+    assert.equal(new URL(appManifest.manifest.id).pathname,'/the-grind/album-board/','Check Chrome’s processed app ID');
     const install = await cdp.send('Page.getInstallabilityErrors');
     // Playwright's isolated context is incognito; Chrome prevents actual installation there.
     assert.equal(install.installabilityErrors.filter(e=>e.errorId!=='in-incognito').length,0,JSON.stringify(install.installabilityErrors));

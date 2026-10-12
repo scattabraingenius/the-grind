@@ -97,3 +97,7 @@ The source link is exact: the original SBGLP path is retained, and a promoted co
 ## Lyric app icon
 
 Lyric Board now uses the neon notebook and pen icon (`icons/lyric-notebook-*.png`) for installation, the browser tab and Apple touch icon. Audio Board uses the cassette artwork made earlier today. The app IDs, URLs and score storage are unchanged. The previous cassette files remain available for older cached installs.
+
+## Installation identity fix
+
+The previous `id: "./"` resolved against the site origin, making both boards collide. The fixed IDs are `/the-grind/album-board/` and `/the-grind/audio-board/`. Start URLs, scopes, browser storage and cloud score paths are unchanged. A previously installed board with the shared origin-root identity may need to be removed and installed again from the correct board URL. Tests now verify Chrome’s processed identities as well as origin-based ID resolution.

@@ -120,9 +120,10 @@ const wait=async fn=>{for(let i=0;i<120;i++){if(await fn())return;await new Prom
   await phone.page.locator('#detail').evaluate(el=>el.scrollIntoView({block:'start'}));
   await phone.page.screenshot({path:path.join(ARTIFACTS,'audio-phone.png')});
   const manifest=await (await phone.context.request.get(BASE+'/audio-board/manifest.webmanifest')).json();
-  assert.equal(manifest.name,'Audio Board');assert.equal(manifest.id,'./');
+  assert.equal(manifest.name,'Audio Board');assert.equal(new URL(manifest.id,new URL(BASE).origin).pathname,'/the-grind/audio-board/');
   const cdp=await phone.context.newCDPSession(phone.page);
-  assert.equal((await cdp.send('Page.getAppManifest')).errors.length,0);
+  const parsedManifest=await cdp.send('Page.getAppManifest');
+  assert.equal(parsedManifest.errors.length,0);assert.equal(new URL(parsedManifest.manifest.id).pathname,'/the-grind/audio-board/');
   assert.equal((await cdp.send('Page.getInstallabilityErrors')).installabilityErrors.filter(e=>e.errorId!=='in-incognito').length,0);
   await phone.page.waitForFunction(()=>!!navigator.serviceWorker.controller);
   await phone.context.setOffline(true);await phone.page.reload({waitUntil:'domcontentloaded'});
