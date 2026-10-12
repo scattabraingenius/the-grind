@@ -1,4 +1,4 @@
-# Album Board
+# Lyric Board
 
 A page inside The Grind for the 2026 album: every song from the writing sessions in one list. Read the lyrics, copy each Suno field with one tap, score songs 0 to 100, mark them Shortlist, Maybe or Cut, keep notes, and build the tracklist.
 
@@ -44,7 +44,7 @@ Title, style prompt, excluded styles and lyrics have separate visible boxes, eac
 
 ## Where your scores live
 
-Refresh Album Board on the phone that holds your existing ratings, then on your PCs. Use the same Google account on each device. The page restores The Grind's existing sign-in on the same browser origin; if it is signed out, use **Sign in with Google**. Wait for **Synced across devices** before closing the page. Ratings, Shortlist/Maybe/Cut, notes, editable copies and tracklist sync automatically. The selected version and search/filter choices remain local to each browser.
+Refresh Lyric Board on the phone that holds your existing ratings, then on your PCs. Use the same Google account on each device. The page restores The Grind's existing sign-in on the same browser origin; if it is signed out, use **Sign in with Google**. Wait for **Synced across devices** before closing the page. Ratings, Shortlist/Maybe/Cut, notes, editable copies and tracklist sync automatically. The selected version and search/filter choices remain local to each browser.
 
 The existing localStorage key `grind.album.v1` stays in use. The first sync keeps a separate `grind.album.v1.before-cloud-sync` backup. Offline edits and their pending revisions are saved locally and merge when you reconnect. Signing out keeps your local data; switching accounts uses separate caches and does not upload the previous account's data. **Export scores** and **Import scores** remain available for separate backups. Import replaces this account's current board content and syncs that change.
 
@@ -66,8 +66,8 @@ Sync checks use two independent browser contexts and an isolated transactional b
 
 ## Current scope
 
-- The shared app bar already links to Album Board, and the service worker precaches its page and catalogue.
-- Account sync is confined to Album Board's child node; The Grind's existing partial planner updates preserve it. The service worker also precaches `sync.js`, and catalogue/planner release scripts include it in the cache hash.
+- The shared app bar already links to Lyric Board, and the service worker precaches its page and catalogue.
+- Account sync is confined to Lyric Board's child node; The Grind's existing partial planner updates preserve it. The service worker also precaches `sync.js`, and catalogue/planner release scripts include it in the cache hash.
 - This page contains writing packets and local ratings. It does not download audio or consume Suno downloads.
 
 The October 10 refresh includes 69 songs and 98 versions from six sessions: October 4 (4 versions), October 4 Cold Pass (12), October 8 Reset (39), October 9 Lyric Mine (29), October 10 Cue Battle 01 (7), and October 10 Misc Battle 01 (7). Source packets remain drafts unless Scatta approves them; catalogue inclusion is not listening approval.
@@ -76,10 +76,20 @@ The October 10 refresh includes 69 songs and 98 versions from six sessions: Octo
 
 70 songs, 99 versions and seven sessions, including the Dearly Beloved v02 Cue rewrite. The read-only `suno-titles.csv` snapshot records all 298 library clips: 192 renamed and verified, 106 unchanged. The builder attaches clips only by their approved source path so repeated version numbers in different sessions cannot cross-link. Existing rating IDs remain intact.
 
-The Suno library panel searches current and previous titles and links to each clip. Matched packets show their vocal and instrumental clips. Copy Title uses the first verified vocal title where available; the clip list can copy any individual title. These are existing clip names, not a reservation of the next generation number. C = Cue, M = Misc, S = Scatta; the first number is the lyric version, the final number is the clip; i denotes an instrumental with a separate count. Instrumental stems without approved renames keep their original names.
+Suno listening and per-recording decisions now live on Audio Board. Lyric Board shows each packet’s original title and exact copy fields. Matched packets link to Audio Board’s takes for that lyric version. C = Cue, M = Misc, S = Scatta; the first number is the lyric version, the final number is the clip; i denotes an instrumental with a separate count. Instrumental stems without approved renames keep their original names.
 
 Future rebuilds automatically use this snapshot. To refresh it, replace it with a verified export of the same columns, or pass `--suno-titles <csv>`. No Suno credentials or audio are stored in this repository.
 
-## Install Album Board in Chrome
+## Install Lyric Board in Chrome
 
-Open the published `/album-board/` URL in a normal Chrome window and use the address-bar install icon or the **Install Album Board** button when Chrome offers it. It installs separately from The Grind and launches directly into Album Board in a standalone window. The board registers the shared service worker itself, so visiting The Grind first is not required. Its manifest and offline page are precached; existing song ratings and account sync continue to use the same origin and storage.
+Open the published `/album-board/` URL in a normal Chrome window and use the address-bar install icon or the **Install Lyric Board** button when Chrome offers it. It installs separately from The Grind and launches directly into Lyric Board in a standalone window. The board registers the shared service worker itself, so visiting The Grind first is not required. Its manifest and offline page are precached; existing song ratings and account sync continue to use the same origin and storage.
+
+## Lyric and Audio Boards
+
+Lyric Board remains at `/album-board/` so existing shortcuts, the app identity, rating IDs, copied versions, custom sessions and cloud records stay intact. Its labels and install name now read Lyric Board. The shared `board.js`, `board.css` and `sync.js` power both boards.
+
+Audio Board lives at `/audio-board/` and stores decisions by Suno clip UUID. It has its own local key `grind.audio.v1`, score exports marked `audio-board`, and cloud path `planners/the-grind-scattabrain-2026/album/audio/accounts/<UID>`. Lyric cloud data remains at `album/accounts/<UID>` with the same `grind.album.v1` key and legacy `album-board` import format. Neither board imports the other board’s export. Both use the existing Google account authentication.
+
+The source link is exact: the original SBGLP path is retained, and a promoted copy can link back to one imported session packet only when full lyric text, writer and version agree. Ambiguous packets are not guessed. Audio Board links back to that exact lyric version; Lyric Board’s small `audio-links.js` index lets a packet open its associated takes without loading the full audio catalogue. Scores are not copied between boards.
+
+`python3 scripts/refresh-board-cache.py` versions all shared UI, both catalogues, manifests, and icon assets. Both catalogue builders and the embedded-planner update script call it. No audio downloads or signed URLs are stored in the offline cache.

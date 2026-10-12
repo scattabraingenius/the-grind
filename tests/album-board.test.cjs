@@ -36,7 +36,7 @@ checked(`${allVersions.length} versions in ${current.ALBUM_SESSIONS.length} sess
     await page.goto(BASE+'/album-board/',{waitUntil:'networkidle'});
     const manifestURL = await page.locator('link[rel="manifest"]').getAttribute('href');
     const manifest = await (await context.request.get(new URL(manifestURL,page.url()).href)).json();
-    assert.equal(manifest.name,'Album Board'); assert.equal(manifest.display,'standalone');
+    assert.equal(manifest.name,'Lyric Board'); assert.equal(manifest.display,'standalone');
     assert.equal(new URL(manifest.id,new URL(manifestURL,page.url())).pathname,'/album-board/');
     const iconSizes = await page.evaluate(async icons => Promise.all(icons.map(icon => new Promise((resolve,reject) => {
       const image = new Image(); image.onload = () => resolve(`${image.naturalWidth}x${image.naturalHeight}`);
@@ -60,18 +60,8 @@ checked(`${allVersions.length} versions in ${current.ALBUM_SESSIONS.length} sess
     assert.equal(await page.evaluate(()=>window.__installAsked),true);
     assert.equal(await page.locator('#installApp').isHidden(),true);
     checked('Chrome accepts the standalone Album Board manifest; service worker starts automatically and install button invokes the prompt');
-    assert.equal(current.ALBUM_CLIPS.length,298);
-    assert.equal(current.ALBUM_CLIPS.filter(c=>c.result==='renamed and verified').length,192);
-    await page.locator('#sunoLibrary summary').click();
-    await page.locator('#clipSearch').fill('Dearly Beloved.C2.1');
-    assert.equal(await page.locator('#clipList a').count(),1);
-    await page.locator('#clipList [data-clip-title]').click();
-    assert.equal(await page.evaluate(()=>window.__copied),'Dearly Beloved.C2.1');
-    assert.match(await page.locator('#clipList a').getAttribute('href'),/^https:\/\/suno.com\/song\//);
-    await page.locator('#clipSearch').fill('Dearly Beloved - Cue');
-    assert(await page.locator('#clipList a').count()>0,'Previous titles remain searchable');
-    await page.locator('#sunoLibrary summary').click();
-    checked('All 298 current titles included; verified rename links copy exactly and previous titles remain searchable');
+    assert.equal(await page.getByRole('link',{name:'Audio Board',exact:true}).getAttribute('href'),'../audio-board/');
+    checked('Lyric Board links to its separate Audio Board');
     const song = current.ALBUM_SONGS.find(s=>s.slug==='check-out');
     const old = song.versions[0];
     const seed={v:2,ratings:{[old.stem]:{score:87,note:'Existing note',status:'short'}},tracklist:['check-out'],pick:{'check-out':old.stem},custom:{'check-out':[{stem:'mine-existing',custom:true,label:'Existing edit',session:old.session,lyrics:'Existing edited lyric',suno:{title:'Edited title',style:'Edited style',exclude:'Edited exclude',lyrics:'Existing edited lyric'}}]}};

@@ -1,0 +1,31 @@
+{
+  "id": "./",
+  "name": "Audio Board",
+  "short_name": "Audio Board",
+  "description": "Suno takes, listening sessions, scores and tracklist.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0C0812",
+  "theme_color": "#0C0812",
+  "icons": [
+    {
+      "src": "../album-board/icons/album-cassette-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "../album-board/icons/album-cassette-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "../album-board/icons/album-cassette-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -25,7 +25,8 @@ class ImportTest(unittest.TestCase):
             builder.attach_clips(songs, snapshot)
             versions = {v['folder']:v for v in songs[0]['versions']}
             self.assertEqual(versions['2026-10-08-Reset']['clips'], [])
-            self.assertEqual(versions['2026-10-Cue-Rewrites']['suno']['title'], 'Song.C1.3')
+            self.assertEqual(versions['2026-10-Cue-Rewrites']['suno']['title'], 'Song')
+            self.assertEqual(versions['2026-10-Cue-Rewrites']['clips'][0]['title'], 'Song.C1.3')
             self.assertEqual(versions['2026-10-08-Reset']['stem'], 'song_v01_Cue')
             self.assertEqual(len(sessions), 2)
 

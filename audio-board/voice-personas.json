@@ -1,0 +1,13 @@
+{
+  "verified": "2026-10-12",
+  "personas": {
+    "1bc59be2-5f3b-4b23-b151-1579d9e9b45a": {
+      "name": "vsJBrazen",
+      "personalVoice": false
+    },
+    "a51442f3-be46-4d4d-adaf-28d74f71b0ec": {
+      "name": "Write what I can",
+      "personalVoice": true
+    }
+  }
+}

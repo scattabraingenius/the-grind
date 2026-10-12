@@ -27,6 +27,12 @@ replacements={
 for a,b in replacements.items():
     assert source.count(a)==1,a
     source=source.replace(a,b)
+# Keep both board destinations when the standalone family planner is re-embedded.
+source=source.replace('label:"Album", icon:"agenda", href:SB2G_URL+"album-board/"','label:"Lyrics", icon:"agenda", href:SB2G_URL+"album-board/"')
+if 'id:"audio", label:"Audio"' not in source:
+    album_link='  if(SB2G_URL) items.push({id:"album", label:"Lyrics", icon:"agenda", href:SB2G_URL+"album-board/"});'
+    assert source.count(album_link)==1,'Album Board destination missing from family planner'
+    source=source.replace(album_link,album_link+'\n  if(SB2G_URL) items.push({id:"audio", label:"Audio", icon:"time", href:SB2G_URL+"audio-board/"});')
 source=source.replace('src="./icons/nav/', 'src="../icons/nav/').replace('url("./icons/nav/', 'url("../icons/nav/')
 (root/'mm-home/index.html').write_text(source,encoding='utf-8',newline='\r\n')
 icons=root/'icons/nav'
@@ -34,11 +40,6 @@ icons.mkdir(parents=True,exist_ok=True)
 for icon in sorted((fp_root/'icons/nav').iterdir()):
     if icon.suffix.lower() not in ('.png', '.svg'): continue
     shutil.copyfile(icon,icons/icon.name)
-p=root/'service-worker.js'
-s=p.read_text(encoding='utf-8')
-# Album Board is part of the same offline shell and must invalidate it when updated.
-cache_source=source+'\n'+''.join((root/name).read_text(encoding='utf-8') for name in ('album-board/index.html','album-board/songs.js','album-board/sync.js'))
-version='scattabrain-unified-shell-v5-'+hashlib.sha256(cache_source.encode()).hexdigest()[:12]
-s=re.sub(r'const CACHE_NAME = \"[^\"]+\";', 'const CACHE_NAME = \"'+version+'\";', s, count=1)
-p.write_text(s,encoding='utf-8',newline='\r\n')
+import runpy
+runpy.run_path(str(root/'scripts/refresh-board-cache.py'),run_name='__main__')
 print('Updated embedded FP, nav icons and the app-shell version. Review and publish both repositories.')

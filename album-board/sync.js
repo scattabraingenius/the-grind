@@ -44,9 +44,9 @@
   }
   function recordsOf(envelope) {
     if (envelope == null) return {};
-    if (envelope.v !== 1 || !envelope.records || typeof envelope.records !== "object" || Array.isArray(envelope.records)) throw Error("Unsupported Album Board cloud data. Local data is safe; export a backup.");
+    if (envelope.v !== 1 || !envelope.records || typeof envelope.records !== "object" || Array.isArray(envelope.records)) throw Error("Unsupported board cloud data. Local data is safe; export a backup.");
     const entries = Object.entries(envelope.records);
-    if (entries.some(([key, value]) => !validRecord(key, value))) throw Error("Invalid Album Board cloud data. Local data is safe; export a backup.");
+    if (entries.some(([key, value]) => !validRecord(key, value))) throw Error("Invalid board cloud data. Local data is safe; export a backup.");
     return Object.fromEntries(entries);
   }
   function compare(a, b) {
@@ -112,12 +112,14 @@
     let user = null, ref = null, connection = null, ready = false, connected = false;
     let remote = {}, timer = null, writing = false, generation = 0, error = "", authBusy = false;
     const auth = firebase.auth();
+    const boardName = options.board === "audio" ? "Audio Board" : "Lyric Board";
+    const accountPath = options.board === "audio" ? "planners/the-grind-scattabrain-2026/album/audio/accounts/" : "planners/the-grind-scattabrain-2026/album/accounts/";
     function report() {
       account(user, authBusy);
       if (error) return status(error, true);
       if (!user) return status("Saved on this device. Sign in with Google to sync across your phone and PCs.");
       if (!connected) return status("Saved on this device. Offline — changes will sync when connected.");
-      if (!ready) return status("Loading your account’s Album Board…");
+      if (!ready) return status("Loading your account’s "+boardName+"…");
       if (writing || !sameRecords(remote, read()._sync.records)) return status("Saving to your account…");
       status("Synced across devices · " + (user.email || user.displayName || "Google account"));
     }
@@ -160,7 +162,7 @@
       try { selectAccount(user.uid); }
       catch (err) { error = err.message; report(); return; }
       // Existing planner rules apply at this child; nothing reads/writes unrelated planner fields.
-      ref = firebase.database().ref("planners/the-grind-scattabrain-2026/album/accounts/" + user.uid);
+      ref = firebase.database().ref(accountPath + user.uid);
       connection = firebase.database().ref(".info/connected");
       connection.on("value", snapshot => {
         if (token !== generation) return;

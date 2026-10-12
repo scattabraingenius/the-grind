@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0C0812">
+<title>Audio Board</title>
+<link rel="icon" type="image/png" sizes="32x32" href="../album-board/icons/album-cassette-32.png">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" sizes="180x180" href="../album-board/icons/album-cassette-180.png">
+<meta name="application-name" content="Audio Board">
+<link rel="stylesheet" href="../album-board/board.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">The Grind · Album</div>
+      <h1>Audio Board</h1>
+      <div class="meta" id="summary"></div>
+    </div>
+    <div><button class="btn small" id="installApp" hidden>Install Audio Board</button> <a href="../">← The Grind</a></div>
+  </header>
+
+  <div class="account-bar">
+    <span id="syncStatus" role="status" aria-live="polite">Checking sign-in… Your scores are saved on this device.</span>
+    <span id="accountWho"></span>
+    <button class="btn small" id="signInBtn" hidden>Sign in with Google</button>
+    <button class="btn small" id="signOutBtn" hidden>Sign out</button>
+    <button class="btn small" id="retrySyncBtn" hidden>Retry sync</button>
+  </div>
+
+  <nav class="board-switch" aria-label="Boards"><a class="btn small" href="../album-board/">Lyric Board</a><a class="btn small primary" href="../audio-board/" aria-current="page">Audio Board</a></nav>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tabSongs" aria-selected="true">Takes</button>
+    <button class="tab" role="tab" id="tabAlbum" aria-selected="false">Tracklist <span id="albumCount"></span></button>
+  </div>
+
+  <section id="viewSongs">
+    <div class="tools">
+      <input type="search" id="q" aria-label="Search songs and prompts" placeholder="Search titles, old names and lyrics" autocomplete="off">
+      <select id="sort" aria-label="Sort">
+        <option value="session">Sort: newest</option>
+        <option value="score">Sort: score</option>
+        <option value="title">Sort: title</option>
+      </select>
+    </div>
+    <div class="audio-filters"><select id="songFilter" aria-label="Filter by song"></select><select id="writerFilter" aria-label="Filter by lyric writer"><option value="">All writers</option><option>Cue</option><option>Misc</option><option>Scatta</option><option>Unknown</option></select><select id="voiceFilter" aria-label="Filter by voice persona"></select></div><p class="meta hidden" id="linkedLyrics">Takes for the selected lyric packet. <button class="btn small" id="clearLinkedLyrics">Show all takes</button></p>
+    <div class="scope-tools"><span class="eyebrow">Listening session</span><button class="btn small" id="newSession">+ New session</button><button class="btn small hidden" id="manageSession">Manage session</button></div>
+    <div class="chips" id="sessionChips" aria-label="Listening sessions"></div>
+    <div class="chips" id="chips" aria-label="Filter within this session"></div>
+    <div class="scope-note" id="scopeNote" role="status"></div>
+    <div class="grid">
+      <div class="list" id="list"></div>
+      <div class="detail empty" id="detail">Pick a take, open it in Suno, and score the recording.</div>
+    </div>
+  </section>
+
+  <section id="viewAlbum" class="hidden">
+    <div class="tools">
+      <button class="btn" id="copyTracklist">Copy tracklist</button>
+      <button class="btn" id="clearAlbum">Clear tracklist</button>
+    </div>
+    <div id="tracks"></div>
+  </section>
+
+  <div class="foot">
+    <span id="built"></span>
+    <span class="save-status" id="saveStatus" role="status">Saved on this device. Export scores keeps a separate backup.</span>
+    <button class="btn small" id="exportBtn">Export scores</button>
+    <button class="btn small" id="importBtn">Import scores</button>
+    <input type="file" id="importFile" accept="application/json" class="hidden">
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<dialog id="sessionDialog" aria-labelledby="sessionDialogTitle">
+  <form id="sessionForm">
+    <h2 id="sessionDialogTitle">New custom session</h2>
+    <label for="sessionName">Session name</label><input type="text" id="sessionName" maxlength="100" required placeholder="Album finalists">
+    <div class="scope-tools"><button class="btn small" type="button" id="seedCurrent">Use current session</button><button class="btn small" type="button" id="seedTracklist">Use tracklist</button><span id="sessionCount"></span></div>
+    <input type="search" id="sessionSearch" aria-label="Find versions to include" placeholder="Find a song or version">
+    <div class="session-options" id="sessionVersionOptions"></div>
+    <div class="scope-tools"><button class="btn primary" type="submit">Save session</button><button class="btn" type="button" id="sessionCancel">Cancel</button><button class="btn hidden" type="button" id="deleteSession">Delete session</button></div>
+  </form>
+</dialog>
+
+<script src="tracks.js"></script>
+<script src="../album-board/sync.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="../album-board/board.js"></script>
+</body>
+</html>

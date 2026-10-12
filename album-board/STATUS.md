@@ -1,3 +1,13 @@
+# Lyric Board status - 2026-10-12
+
+The existing app is renamed Lyric Board with its URL, install identity, score IDs, local storage and cloud data preserved. A separate Audio Board contains 295 Suno takes, independent per-take decisions, listening sessions, song/writer/type filters and original Suno links. Shared UI and sync code handle both boards; audio records use a distinct cloud child.
+
+Lyric importer, UI, session, two-device sync and unified-planner regression checks passed. New audio importer and two-device browser checks also passed, including different scores and tracklist membership for takes using the same lyrics, unchanged lyric records, exact lyric navigation, filtering, custom sessions, installation and offline use. Tests use synthetic accounts, not Jason’s real ratings.
+
+The generic Suno audio_url is a private placeholder; the returned media streams carry Suno’s encoding marker and cannot be decoded by Chrome’s native player. Every take opens on Suno; the importer skips encoded streams and supports future plain playable URLs. Voice metadata confirms Write what I can on 125 takes; vocal and instrumental persona labels are distinguished, unknown voices are not guessed, and no version number is invented for the single-version persona. No source lyrics, Suno titles or planner records are modified.
+
+## Earlier verification history
+
 # Album Board status - 2026-10-11
 
 Session workspace update: source-session selection now stays fixed through rating, notes, edits, version selection, reload and cloud acknowledgments. Only the selected session's versions appear. Session scope is independent of status/search filters. Custom sessions collect chosen version IDs across source sessions, support tracklist/current-session seeding, rename and membership editing, and sync privately through the existing account node. Deleting a session removes only that collection; files, scores and notes stay. Each song remains a single list card with a clickable score for every included version; best-score sorting uses only the current workspace. Test evidence for this update is in the sibling `album-session-verification` folder.

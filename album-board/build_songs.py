@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Import all dated Writing Sessions packets, preserving sources and existing rating IDs."""
-import argparse, csv, datetime, hashlib, json, re
+import argparse, csv, datetime, hashlib, json, re, runpy
 from pathlib import Path
 HERE = Path(__file__).resolve().parent
 LEGACY = {'2026-10-08-Reset':'Oct 8 Reset', '2026-10-09-Lyric-Mine':'Oct 9 Lyric Mine'}
@@ -75,12 +75,7 @@ def attach_clips(songs, snapshot):
     for song in songs:
         for v in song['versions']:
             v['clips'] = by_source.get('02 Album Project/Writing Sessions/'+v['source'], [])
-            # Only exact, approved source matches supply a renamed clip title.
-            vocals = [c for c in v['clips'] if re.search(r'\.[CMS]\d+\.\d+$', c['title'])]
             v['naming'] = f"{v['title']}.{ {'Cue':'C','Misc':'M','Scatta':'S'}.get(v['writer'],v['writer']) }{v['version']}"
-            if vocals:
-                v['suno']['sourceTitle'] = v['suno']['title']
-                v['suno']['title'] = vocals[0]['title']
     return clips
 
 def main(argv=None):
@@ -100,14 +95,7 @@ def main(argv=None):
     for key,value in [('ALBUM_BUILT',built),('ALBUM_SESSIONS',sessions),('ALBUM_SONGS',songs),('ALBUM_CLIPS',clips)]: js += f'window.{key} = {json.dumps(value,ensure_ascii=False)};\n'
     tmp = args.output.with_suffix('.js.tmp'); tmp.write_text(js,encoding='utf-8'); tmp.replace(args.output)
     if args.output.resolve() == (HERE/'songs.js').resolve():
-        shell = HERE.parent/'service-worker.js'
-        if shell.is_file():
-            cache_source = (HERE.parent/'mm-home/index.html').read_text(encoding='utf-8')+'\n'+''.join((HERE/name).read_text(encoding='utf-8') for name in ('index.html','songs.js','sync.js'))
-            for asset in [HERE/'manifest.webmanifest', *sorted((HERE/'icons').glob('*.png'))]:
-                if asset.is_file(): cache_source += hashlib.sha256(asset.read_bytes()).hexdigest()
-            cache_name = 'scattabrain-unified-shell-v5-'+hashlib.sha256(cache_source.encode()).hexdigest()[:12]
-            worker = re.sub(r'const CACHE_NAME = "[^"]+";', f'const CACHE_NAME = "{cache_name}";', shell.read_text(encoding='utf-8'),count=1)
-            shell.write_text(worker,encoding='utf-8')
+        runpy.run_path(str(HERE.parent/'scripts/refresh-board-cache.py'),run_name='__main__')
     count = sum(s['versions'] for s in sessions)
     if args.manifest: args.manifest.write_text(json.dumps(dict(source=str(args.source.resolve()),built=built,songs=len(songs),versions=count,sessions=sessions,sha256=inputs),indent=2),encoding='utf-8')
     print(f'{len(songs)} songs, {count} versions, {len(sessions)} sessions -> {args.output}')
