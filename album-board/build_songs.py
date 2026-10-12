@@ -103,6 +103,8 @@ def main(argv=None):
         shell = HERE.parent/'service-worker.js'
         if shell.is_file():
             cache_source = (HERE.parent/'mm-home/index.html').read_text(encoding='utf-8')+'\n'+''.join((HERE/name).read_text(encoding='utf-8') for name in ('index.html','songs.js','sync.js'))
+            for asset in [HERE/'manifest.webmanifest', *sorted((HERE/'icons').glob('*.png'))]:
+                if asset.is_file(): cache_source += hashlib.sha256(asset.read_bytes()).hexdigest()
             cache_name = 'scattabrain-unified-shell-v5-'+hashlib.sha256(cache_source.encode()).hexdigest()[:12]
             worker = re.sub(r'const CACHE_NAME = "[^"]+";', f'const CACHE_NAME = "{cache_name}";', shell.read_text(encoding='utf-8'),count=1)
             shell.write_text(worker,encoding='utf-8')
