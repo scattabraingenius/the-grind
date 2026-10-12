@@ -22,6 +22,9 @@ const BASE=process.env.APP_BASE_URL;
     assert.equal(await page.evaluate(()=>pendingRemoteDetail),true);
     await panel.locator('summary').click();
     await page.locator('#note').evaluate(el=>el.blur());
+    // A summary may receive focus before its click/default toggle finishes in Firefox/Zen.
+    // Release focus only after the toggle, so a pending repaint cannot replace its click target.
+    await page.locator('#q').focus();
     await page.waitForFunction(()=>!pendingRemoteDetail);
     assert.equal(await panel.evaluate(el=>el.open),true,'Deferred focusout repaint must not undo opening');
     const source=page.locator('[data-panel="sbglp-source"]');

@@ -428,7 +428,7 @@ $("importFile").onchange = async e => {
   } catch (err) { toast("Import failed: " + err.message); }
   e.target.value = "";
 };
-function editingDetail() { return $("detail").contains(document.activeElement) && document.activeElement.matches("input,textarea,select"); }
+function editingDetail() { return $("detail").contains(document.activeElement) && document.activeElement.matches("input,textarea,select,summary"); }
 function replaceSyncedState(next) {
   state = next; previousState = JSON.parse(JSON.stringify(state)); persist();
   if (ui.scope.startsWith("collection:") && !state.collections[ui.scope.slice(11)]) { ui.scope = "all"; saveView(); }
