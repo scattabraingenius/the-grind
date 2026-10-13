@@ -30,7 +30,7 @@
     <button class="btn small" id="retrySyncBtn" hidden>Retry sync</button>
   </div>
 
-  <nav class="board-switch" aria-label="Boards"><a class="btn small" href="../album-board/">Lyric Board</a><a class="btn small primary" href="../audio-board/" aria-current="page">Audio Board</a></nav>
+  <nav class="board-switch" aria-label="Boards"><a class="btn small" href="../album-board/">Lyric Board</a><a class="btn small primary" href="../audio-board/" aria-current="page">Audio Board</a><a class="btn small" href="../audio-board/album/">Album Planner</a></nav>
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" id="tabSongs" aria-selected="true">Takes</button>
     <button class="tab" role="tab" id="tabAlbum" aria-selected="false">Tracklist <span id="albumCount"></span></button>
@@ -44,6 +44,7 @@
         <option value="score">Sort: score</option>
         <option value="title">Sort: title</option>
       </select>
+      <button class="btn small" type="button" id="sortDir">↓ Desc</button>
     </div>
     <div class="audio-filters"><select id="songFilter" aria-label="Filter by song"></select><select id="writerFilter" aria-label="Filter by lyric writer"><option value="">All writers</option><option>Cue</option><option>Misc</option><option>Scatta</option><option>Unknown</option></select><select id="voiceFilter" aria-label="Filter by voice persona"></select></div><p class="meta hidden" id="linkedLyrics">Takes for the selected lyric packet. <button class="btn small" id="clearLinkedLyrics">Show all takes</button></p>
     <div class="scope-tools"><span class="eyebrow">Listening session</span><button class="btn small" id="newSession">+ New session</button><button class="btn small hidden" id="manageSession">Manage session</button></div>

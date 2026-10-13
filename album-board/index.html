@@ -30,7 +30,7 @@
     <button class="btn small" id="retrySyncBtn" hidden>Retry sync</button>
   </div>
 
-  <nav class="board-switch" aria-label="Boards"><a class="btn small primary" href="../album-board/" aria-current="page">Lyric Board</a><a class="btn small" href="../audio-board/">Audio Board</a></nav>
+  <nav class="board-switch" aria-label="Boards"><a class="btn small primary" href="../album-board/" aria-current="page">Lyric Board</a><a class="btn small" href="../audio-board/">Audio Board</a><a class="btn small" href="../audio-board/album/">Album Planner</a></nav>
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" id="tabSongs" aria-selected="true">Songs</button>
     <button class="tab" role="tab" id="tabAlbum" aria-selected="false">Tracklist <span id="albumCount"></span></button>
@@ -44,6 +44,7 @@
         <option value="score">Sort: best score</option>
         <option value="title">Sort: title</option>
       </select>
+      <button class="btn small" type="button" id="sortDir">↓ Desc</button>
     </div>
     <div class="scope-tools"><span class="eyebrow">Working session</span><button class="btn small" id="newSession">+ New session</button><button class="btn small hidden" id="manageSession">Manage session</button></div>
     <div class="chips" id="sessionChips" aria-label="Working sessions"></div>

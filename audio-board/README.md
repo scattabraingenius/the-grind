@@ -35,3 +35,17 @@ Browser checks use an isolated backend with synthetic accounts and cover indepen
 ## Installation identity fix
 
 The previous `id: "./"` resolved against the site origin, making both boards collide. The fixed IDs are `/the-grind/album-board/` and `/the-grind/audio-board/`. Start URLs, scopes, browser storage and cloud score paths are unchanged. A previously installed board with the shared origin-root identity may need to be removed and installed again from the correct board URL. Tests now verify Chrome’s processed identities as well as origin-based ID resolution.
+
+## Album Planner
+
+`/audio-board/album/` turns the take catalogue into album decisions in three steps:
+
+1. **Considered.** Every candidate take on one page, grouped by song or flat. Each card has ▶ Suno, Compare, + Album and Delete. **+ Add takes** imports a whole Audio Board listening session or the tracklist, pasted Suno links/IDs (IDs newer than the snapshot keep a Suno link and a placeholder title), or catalogue search. Delete removes the take from the plan everywhere and offers Undo. Sort by title, score, newest or length, ascending or descending. Filter by stage: not sorted yet, in a session, winners, lost a session, on an album.
+2. **Sessions.** Compare puts like-takes head to head. **Auto-build sessions** makes one session per song with two or more unsorted takes. Each session shows Audio Board score, status and note, lyrics and style per take, **Score it** (opens that take in Audio Board via `?take=<uuid>`), **Pick winner**, session notes, and **Drop the other N** to clear losers from Considered.
+3. **Albums.** Album 1 · Debut and Album 2 by default; add, rename or delete albums and set a track-count target. Drag or use ↑/↓ to order, move tracks between albums, copy the tracklist. **Ready to place** lists session winners and uncompared takes. **What's missing** flags track count, runtime, the same song twice, unscored or Cut tracks, non-vocal takes, sessions without winners, unplaced winners and songs split across albums.
+
+Scores are read from the Audio Board account (read-only); the planner never writes Audio Board records. The plan syncs with the same Google sign-in at `planners/the-grind-scattabrain-2026/album/planner/accounts/<UID>` using the same per-record revision merge as the boards, with tombstones for deletions. Local storage key: `grind.planner.v1`. Export/Import plan is separate from the boards' backups.
+
+Audio Board and Lyric Board also gained an ascending/descending toggle beside Sort (natural defaults: newest first, highest score first, A to Z; unscored stays last).
+
+Verification: `APP_BASE_URL=http://127.0.0.1:8765 node tests/album-planner.test.cjs` (synthetic data, Firebase blocked).

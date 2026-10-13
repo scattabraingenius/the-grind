@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0C0812">
+<title>Album Planner</title>
+<link rel="icon" type="image/png" sizes="32x32" href="../icons/audio-cassette-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="../icons/audio-cassette-180.png">
+<meta name="application-name" content="Album Planner">
+<link rel="stylesheet" href="../../album-board/board.css">
+<link rel="stylesheet" href="planner.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">The Grind · Album</div>
+      <h1>Album Planner</h1>
+      <div class="meta" id="summary"></div>
+    </div>
+    <div><a href="../../">← The Grind</a></div>
+  </header>
+
+  <div class="account-bar">
+    <span id="syncStatus" role="status" aria-live="polite">Checking sign-in… Your plan is saved on this device.</span>
+    <span id="accountWho"></span>
+    <button class="btn small" id="signInBtn" hidden>Sign in with Google</button>
+    <button class="btn small" id="signOutBtn" hidden>Sign out</button>
+    <button class="btn small" id="retrySyncBtn" hidden>Retry sync</button>
+  </div>
+
+  <nav class="board-switch" aria-label="Boards"><a class="btn small" href="../../album-board/">Lyric Board</a><a class="btn small" href="../">Audio Board</a><a class="btn small primary" href="./" aria-current="page">Album Planner</a></nav>
+
+  <ol class="flow" id="flow" aria-label="Planning steps"></ol>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tabConsider" data-view="consider" aria-selected="true"><span class="step">1 · </span>Considered <span id="countConsider"></span></button>
+    <button class="tab" role="tab" id="tabSessions" data-view="sessions" aria-selected="false"><span class="step">2 · </span>Sessions <span id="countSessions"></span></button>
+    <button class="tab" role="tab" id="tabAlbums" data-view="albums" aria-selected="false"><span class="step">3 · </span>Albums <span id="countAlbums"></span></button>
+  </div>
+
+  <!-- 1. Considered: every candidate take on one page -->
+  <section id="viewConsider">
+    <div class="tools">
+      <input type="search" id="q" aria-label="Search considered takes" placeholder="Search titles, writers, lyrics" autocomplete="off">
+      <select id="sort" aria-label="Sort">
+        <option value="title">Sort: title</option>
+        <option value="score">Sort: score</option>
+        <option value="newest">Sort: newest</option>
+        <option value="length">Sort: length</option>
+      </select>
+      <button class="btn small" type="button" id="sortDir">↑ Asc</button>
+      <button class="btn small" type="button" id="groupToggle" aria-pressed="true">Group by song</button>
+    </div>
+    <div class="chips" id="filterChips" aria-label="Show"></div>
+    <div class="scope-tools">
+      <button class="btn small primary" id="importOpen">+ Add takes</button>
+      <button class="btn small" id="autoGroup" title="Make a compare session for every song with two or more considered takes">Auto-build sessions</button>
+    </div>
+    <div id="considerList"></div>
+  </section>
+
+  <!-- 2. Sessions: like-tracks head to head -->
+  <section id="viewSessions" class="hidden">
+    <div class="session-layout">
+      <div id="sessionList" class="session-index"></div>
+      <div id="sessionDetail" class="detail empty">Pick a session to compare its takes and choose a winner.</div>
+    </div>
+  </section>
+
+  <!-- 3. Albums: order, runtime, what's missing -->
+  <section id="viewAlbums" class="hidden">
+    <div class="chips" id="albumChips" aria-label="Albums"></div>
+    <div class="album-layout">
+      <div>
+        <div class="album-head" id="albumHead"></div>
+        <ol class="tracklist" id="albumTracks"></ol>
+        <h3 class="sub">Ready to place</h3>
+        <p class="meta">Session winners and takes that aren't in a session yet. Nothing here is on an album.</p>
+        <div id="pool"></div>
+      </div>
+      <aside class="missing" id="missing" aria-label="What's missing"></aside>
+    </div>
+  </section>
+
+  <div class="foot">
+    <span class="save-status" id="saveStatus" role="status">Saved on this device.</span>
+    <span id="built"></span>
+    <button class="btn small" id="exportBtn">Export plan</button>
+    <button class="btn small" id="importBtn">Import plan</button>
+    <input type="file" id="importFile" accept="application/json" class="hidden">
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"><span id="toastText"></span> <button class="btn small hidden" id="toastUndo">Undo</button></div>
+
+<dialog id="importDialog" aria-labelledby="importTitle">
+  <h2 id="importTitle">Add takes to Considered</h2>
+  <p class="meta">Pull in a whole Audio Board listening session, paste Suno links, or search the catalogue. Takes already considered are skipped.</p>
+  <h3 class="sub">From Audio Board</h3>
+  <div id="importSources" class="import-sources"></div>
+  <h3 class="sub">Paste Suno links or IDs</h3>
+  <textarea id="pasteIds" placeholder="https://suno.com/song/…  one per line, or a whole copied playlist page"></textarea>
+  <div class="scope-tools"><button class="btn small" id="pasteAdd">Add pasted</button><span class="meta" id="pasteNote"></span></div>
+  <h3 class="sub">Search the catalogue</h3>
+  <input type="search" id="catalogSearch" placeholder="Find a take" aria-label="Find a take in the catalogue">
+  <label class="inline"><input type="checkbox" id="catalogAll"> include instrumentals and stems</label>
+  <div id="catalogResults" class="session-options"></div>
+  <div class="scope-tools"><button class="btn" id="importClose">Done</button></div>
+</dialog>
+
+<dialog id="compareDialog" aria-labelledby="compareTitle">
+  <h2 id="compareTitle">Compare</h2>
+  <div id="compareBody"></div>
+  <div class="scope-tools"><button class="btn" id="compareCancel">Cancel</button></div>
+</dialog>
+
+<script src="../tracks.js"></script>
+<script src="../../album-board/sync.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="planner-sync.js"></script>
+<script src="planner.js"></script>
+</body>
+</html>

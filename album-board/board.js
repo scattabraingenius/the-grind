@@ -77,8 +77,8 @@ function save() {
 }
 let viewPrefs = {};
 try { viewPrefs = JSON.parse(localStorage.getItem(KEY + ".view")) || {}; } catch (err) {}
-let ui = { view:"songs", scope:viewPrefs.scope || (AUDIO_BOARD ? "session:Vocals" : "all"), filter:FILTERS.some(([key]) => key === viewPrefs.filter) ? viewPrefs.filter : "all", q:"", sort:["session","score","title"].includes(viewPrefs.sort) ? viewPrefs.sort : "session", open:null, song:"", writer:"", voice:"", lyricSource:new URLSearchParams(location.search).get("lyrics") || "" };
-function saveView() { try { localStorage.setItem(KEY + ".view", JSON.stringify({scope:ui.scope,filter:ui.filter,sort:ui.sort})); } catch (err) {} }
+let ui = { view:"songs", scope:viewPrefs.scope || (AUDIO_BOARD ? "session:Vocals" : "all"), filter:FILTERS.some(([key]) => key === viewPrefs.filter) ? viewPrefs.filter : "all", q:"", sort:["session","score","title"].includes(viewPrefs.sort) ? viewPrefs.sort : "session", dir:["asc","desc"].includes(viewPrefs.dir) ? viewPrefs.dir : "", open:null, song:"", writer:"", voice:"", lyricSource:new URLSearchParams(location.search).get("lyrics") || "" };
+function saveView() { try { localStorage.setItem(KEY + ".view", JSON.stringify({scope:ui.scope,filter:ui.filter,sort:ui.sort,dir:ui.dir})); } catch (err) {} }
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -121,13 +121,26 @@ function matches(s) {
   }
   return true;
 }
+// Each sort has a natural direction (newest first, highest score first, A to Z); the toggle flips it.
+const SORT_DIR = {session:"desc", score:"desc", title:"asc"};
+function sortDir() { return ui.dir || SORT_DIR[ui.sort] || "desc"; }
 function sorted(arr) {
-  const a = arr.slice();
-  if (AUDIO_BOARD && ui.sort === "session") a.sort((x,y) => y.versions[0].createdAt.localeCompare(x.versions[0].createdAt));
-  else if (ui.sort === "title") a.sort((x,y) => x.title.localeCompare(y.title));
-  else if (ui.sort === "score") a.sort((x,y) => (best(y) ?? -1) - (best(x) ?? -1) || x.title.localeCompare(y.title));
+  const a = arr.slice(), down = sortDir() === "desc";
+  if (ui.sort === "session") {
+    // Lyric Board's catalogue order is already newest session first.
+    if (AUDIO_BOARD) a.sort((x,y) => x.versions[0].createdAt.localeCompare(y.versions[0].createdAt) || x.title.localeCompare(y.title));
+    else a.reverse();
+    if (down) a.reverse();
+  } else if (ui.sort === "title") {
+    a.sort((x,y) => x.title.localeCompare(y.title, undefined, {numeric:true}));
+    if (down) a.reverse();
+  } else if (ui.sort === "score") {
+    // Unrated takes stay at the bottom in both directions.
+    a.sort((x,y) => { const bx = best(x), by = best(y); if (bx == null || by == null) return (bx == null) - (by == null) || x.title.localeCompare(y.title); return (down ? by - bx : bx - by) || x.title.localeCompare(y.title); });
+  }
   return a;
 }
+function renderSortDir() { const b = $("sortDir"); if (!b) return; const down = sortDir() === "desc"; b.textContent = down ? "↓ Desc" : "↑ Asc"; b.setAttribute("aria-label", "Sort direction: "+(down ? "descending" : "ascending")+". Click to flip."); b.title = ui.sort === "title" ? (down ? "Z to A" : "A to Z") : ui.sort === "score" ? (down ? "Highest first" : "Lowest first") : (down ? "Newest first" : "Oldest first"); }
 
 function renderSummary() {
   const rated = SONGS.filter(s => best(s, versionsOf(s)) != null).length;
@@ -294,7 +307,8 @@ $("tabSongs").onclick = () => { ui.view = "songs"; render(); };
 $("tabAlbum").onclick = () => { ui.view = "album"; render(); };
 $("q").oninput = e => { ui.q = e.target.value.trim(); renderList(); };
 $("sort").value = ui.sort;
-$("sort").onchange = e => { ui.sort = e.target.value; saveView(); renderList(); };
+$("sort").onchange = e => { ui.sort = e.target.value; ui.dir = ""; saveView(); renderSortDir(); renderList(); };
+if ($("sortDir")) { renderSortDir(); $("sortDir").onclick = () => { ui.dir = sortDir() === "desc" ? "asc" : "desc"; saveView(); renderSortDir(); renderList(); }; }
 $("chips").onclick = e => { const b = e.target.closest("[data-f]"); if (!b) return; ui.filter = b.dataset.f; saveView(); renderChips(); renderList(); if (BY[ui.open] && scopedVersions(BY[ui.open]).length) renderDetail(); };
 function chooseScope(key) { ui.scope = key; saveView(); renderChips(); renderList(); renderDetail(); }
 $("sessionChips").onclick = e => { const button = e.target.closest("[data-scope]"); if (button) chooseScope(button.dataset.scope); };
@@ -560,6 +574,8 @@ function initializeBoard() {
     picker.onchange = e => { ui.song=e.target.value; renderList(); };
     writer.onchange = e => { ui.writer=e.target.value; renderList(); };
     if (ui.lyricSource) { ui.scope='all'; $('linkedLyrics').classList.remove('hidden'); }
+    const take = new URLSearchParams(location.search).get('take');
+    if (take && BY[take]) { ui.scope='all'; ui.open=take; }
     $('clearLinkedLyrics').onclick = () => { ui.lyricSource=''; $('linkedLyrics').classList.add('hidden'); history.replaceState(null,'',location.pathname); renderList(); };
   } else {
     const params = new URLSearchParams(location.search), song=BY[params.get('song')];
