@@ -1,7 +1,7 @@
 /* Album Planner account sync. Same pattern as Lyric/Audio Board sync (album-board/sync.js):
    each planner item is its own record with a revision, records merge last-writer-wins,
    deletions keep tombstones, and Firebase transactions merge instead of replacing.
-   The planner lives in its own cloud child, so Audio Board records are only ever read here. */
+   Scores, status and notes are Audio Board records, synced by album-board/sync.js. */
 (function (root, factory) {
   const api = factory();
   if (typeof module === "object" && module.exports) module.exports = api;
@@ -91,10 +91,10 @@
   }
   function sameRecords(a, b) { const keys = Object.keys(a); return keys.length === Object.keys(b).length && keys.every(key => equal(a[key], b[key])); }
 
-  // Cloud connection. `audio` receives a read-only projection of the Audio Board account (scores, sessions).
+  // Cloud connection for the planner's own records.
   function create(options) {
-    const {firebase, read, replace, selectAccount, status, account, audio, AlbumSync} = options;
-    let user = null, ref = null, audioRef = null, connection = null, ready = false, connected = false;
+    const {firebase, read, replace, selectAccount, status, account} = options;
+    let user = null, ref = null, connection = null, ready = false, connected = false;
     let remote = {}, timer = null, writing = false, generation = 0, error = "", authBusy = false;
     const auth = firebase.auth();
     function report() {
@@ -108,8 +108,8 @@
     }
     function stop() {
       generation++; clearTimeout(timer); timer = null;
-      for (const r of [ref, audioRef, connection]) if (r) r.off();
-      ref = audioRef = connection = null; ready = connected = writing = false; remote = {};
+      for (const r of [ref, connection]) if (r) r.off();
+      ref = connection = null; ready = connected = writing = false; remote = {};
     }
     function fail(err, token) {
       if (token !== generation) return;
@@ -141,7 +141,6 @@
       const token = generation;
       try { selectAccount(user.uid); } catch (err) { error = err.message; report(); return; }
       ref = firebase.database().ref(PATH + user.uid);
-      audioRef = firebase.database().ref(AUDIO_PATH + user.uid);
       connection = firebase.database().ref(".info/connected");
       connection.on("value", snapshot => { if (token !== generation) return; connected = snapshot.val() === true; if (connected) schedule(); else report(); });
       ref.on("value", snapshot => {
@@ -153,12 +152,6 @@
           schedule();
         } catch (err) { ready = false; error = err.message; report(); }
       }, err => { ready = false; fail(err, token); });
-      // Read-only: the planner never writes Audio Board records.
-      audioRef.on("value", snapshot => {
-        if (token !== generation) return;
-        try { audio(AlbumSync.project({ratings:{}, custom:{}, tracklist:[], collections:{}, pick:{}}, AlbumSync.recordsOf(snapshot.val()), user.uid), user.uid); }
-        catch (err) { console.warn("Audio Board scores could not be read", err); }
-      }, err => console.warn("Audio Board scores could not be read", err));
       report();
     }
     async function signIn() {

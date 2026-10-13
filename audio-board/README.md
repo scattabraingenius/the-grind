@@ -38,14 +38,22 @@ The previous `id: "./"` resolved against the site origin, making both boards col
 
 ## Album Planner
 
-`/audio-board/album/` turns the take catalogue into album decisions in three steps:
+`/audio-board/album/` is where album decisions happen. **Adding to** at the top picks the album you're building; every **+ Album** button and every **Cut** applies to that album.
 
-1. **Considered.** Every candidate take on one page, grouped by song or flat. Each card has ▶ Suno, Compare, + Album and Delete. **+ Add takes** imports a whole Audio Board listening session or the tracklist, pasted Suno links/IDs (IDs newer than the snapshot keep a Suno link and a placeholder title), or catalogue search. Delete removes the take from the plan everywhere and offers Undo. Sort by title, score, newest or length, ascending or descending. Filter by stage: not sorted yet, in a session, winners, lost a session, on an album.
-2. **Sessions.** Compare puts like-takes head to head. **Auto-build sessions** makes one session per song with two or more unsorted takes. Each session shows Audio Board score, status and note, lyrics and style per take, **Score it** (opens that take in Audio Board via `?take=<uuid>`), **Pick winner**, session notes, and **Drop the other N** to clear losers from Considered.
-3. **Albums.** Album 1 · Debut and Album 2 by default; add, rename or delete albums and set a track-count target. Drag or use ↑/↓ to order, move tracks between albums, copy the tracklist. **Ready to place** lists session winners and uncompared takes. **What's missing** flags track count, runtime, the same song twice, unscored or Cut tracks, non-vocal takes, sessions without winners, unplaced winners and songs split across albums.
+Every take card, on Considered and inside compare Sessions, has the same controls:
 
-Scores are read from the Audio Board account (read-only); the planner never writes Audio Board records. The plan syncs with the same Google sign-in at `planners/the-grind-scattabrain-2026/album/planner/accounts/<UID>` using the same per-record revision merge as the boards, with tombstones for deletions. Local storage key: `grind.planner.v1`. Export/Import plan is separate from the boards' backups.
+- **Score box** (0 to 100). Type a number, Enter saves and jumps to the next take's box (Shift+Enter goes back).
+- **Shortlist / Maybe** and **Notes**. Score, status and notes are Audio Board records, so both pages show the same values.
+- **▶ Suno** opens the take on Suno. Nothing links back into Audio Board.
+- **+ Album** toggles the take on the current album. **Add to…** places it on another album or creates a new one.
+- **Cut** removes the take from contention for the current album only. It stays in the planner and stays a contender for every other album.
+- **Delete** tags the take for deletion on Suno. It stays in the planner, dimmed, until it's ticked done on the **Suno cleanup** page.
+- **✎ Rename** gives the take a planner name; the Suno title stays in brackets until the rename is ticked done on Suno cleanup.
 
-Audio Board and Lyric Board also gained an ascending/descending toggle beside Sort (natural defaults: newest first, highest score first, A to Z; unscored stays last).
+**Considered** filters: in contention, Shortlist, Maybe, unscored, on the current album, not on an album, cut from the current album, tagged delete, everything. Sort by title, score, newest or length, ascending or descending. **Sessions** group like-takes (Compare, Compare all, or Auto-build); cut and delete-tagged takes sink to the bottom, dimmed. **Album** orders the current album (drag or ↑/↓, move to another album), lists Shortlist/Maybe takes ready to place, and shows **What's missing**. **Suno cleanup** lists takes to delete and to rename, each with a Suno link and a done checkbox.
+
+Planner records (albums, cut lists, sessions, renames, delete tags) sync at `planners/the-grind-scattabrain-2026/album/planner/accounts/<UID>`; scores, status and notes sync through Audio Board's own account child. Both use the per-record revision merge with tombstones. Local keys: `grind.planner.v1` and Audio Board's `grind.audio.v1`.
+
+Audio Board and Lyric Board also have an ascending/descending toggle beside Sort, and Audio Board accepts `?take=<uuid>` to open one take.
 
 Verification: `APP_BASE_URL=http://127.0.0.1:8765 node tests/album-planner.test.cjs` (synthetic data, Firebase blocked).

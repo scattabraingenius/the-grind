@@ -32,18 +32,23 @@
 
   <nav class="board-switch" aria-label="Boards"><a class="btn small" href="../../album-board/">Lyric Board</a><a class="btn small" href="../">Audio Board</a><a class="btn small primary" href="./" aria-current="page">Album Planner</a></nav>
 
-  <ol class="flow" id="flow" aria-label="Planning steps"></ol>
-
-  <div class="tabs" role="tablist">
-    <button class="tab" role="tab" id="tabConsider" data-view="consider" aria-selected="true"><span class="step">1 · </span>Considered <span id="countConsider"></span></button>
-    <button class="tab" role="tab" id="tabSessions" data-view="sessions" aria-selected="false"><span class="step">2 · </span>Sessions <span id="countSessions"></span></button>
-    <button class="tab" role="tab" id="tabAlbums" data-view="albums" aria-selected="false"><span class="step">3 · </span>Albums <span id="countAlbums"></span></button>
+  <!-- The album every "Add to album" button targets. Cut is per this album. -->
+  <div class="target-bar" id="targetBar">
+    <label for="targetAlbum">Adding to</label>
+    <select id="targetAlbum" aria-label="Album you are building"></select>
+    <span class="target-stats" id="targetStats"></span>
   </div>
 
-  <!-- 1. Considered: every candidate take on one page -->
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tabConsider" data-view="consider" aria-selected="true">Considered <span id="countConsider"></span></button>
+    <button class="tab" role="tab" id="tabSessions" data-view="sessions" aria-selected="false">Sessions <span id="countSessions"></span></button>
+    <button class="tab" role="tab" id="tabAlbums" data-view="albums" aria-selected="false">Album <span id="countAlbums"></span></button>
+    <button class="tab" role="tab" id="tabCleanup" data-view="cleanup" aria-selected="false">Suno cleanup <span id="countCleanup"></span></button>
+  </div>
+
   <section id="viewConsider">
     <div class="tools">
-      <input type="search" id="q" aria-label="Search considered takes" placeholder="Search titles, writers, lyrics" autocomplete="off">
+      <input type="search" id="q" aria-label="Search considered takes" placeholder="Search titles, writers, notes, lyrics" autocomplete="off">
       <select id="sort" aria-label="Sort">
         <option value="title">Sort: title</option>
         <option value="score">Sort: score</option>
@@ -56,32 +61,34 @@
     <div class="chips" id="filterChips" aria-label="Show"></div>
     <div class="scope-tools">
       <button class="btn small primary" id="importOpen">+ Add takes</button>
-      <button class="btn small" id="autoGroup" title="Make a compare session for every song with two or more considered takes">Auto-build sessions</button>
+      <button class="btn small" id="autoGroup" title="Make a compare session for every song with two or more takes that aren't in a session yet">Auto-build sessions</button>
+      <span class="meta hint">Score box: type a number, Enter jumps to the next take.</span>
     </div>
     <div id="considerList"></div>
   </section>
 
-  <!-- 2. Sessions: like-tracks head to head -->
   <section id="viewSessions" class="hidden">
     <div class="session-layout">
       <div id="sessionList" class="session-index"></div>
-      <div id="sessionDetail" class="detail empty">Pick a session to compare its takes and choose a winner.</div>
+      <div id="sessionDetail" class="detail empty">Pick a session to compare its takes.</div>
     </div>
   </section>
 
-  <!-- 3. Albums: order, runtime, what's missing -->
   <section id="viewAlbums" class="hidden">
-    <div class="chips" id="albumChips" aria-label="Albums"></div>
     <div class="album-layout">
       <div>
         <div class="album-head" id="albumHead"></div>
         <ol class="tracklist" id="albumTracks"></ol>
         <h3 class="sub">Ready to place</h3>
-        <p class="meta">Session winners and takes that aren't in a session yet. Nothing here is on an album.</p>
+        <p class="meta">Shortlist and Maybe takes that aren't on any album, minus anything cut from this one.</p>
         <div id="pool"></div>
       </div>
       <aside class="missing" id="missing" aria-label="What's missing"></aside>
     </div>
+  </section>
+
+  <section id="viewCleanup" class="hidden">
+    <div id="cleanup"></div>
   </section>
 
   <div class="foot">

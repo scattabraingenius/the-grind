@@ -94,3 +94,41 @@ dialog textarea { min-height:70px; }
   .tabs .step { display:none; }
   .title-edit { font-size:17px; }
 }
+
+/* v2: the album you're building, inline scoring, notes, cut/delete states, Suno cleanup */
+.target-bar { position:sticky; top:0; z-index:5; display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:var(--paper); border-bottom:1px solid var(--line); padding:8px 0; margin:0 0 6px; }
+.target-bar label { font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
+.target-bar select { font-weight:800; border-color:var(--signal); }
+.target-stats { font-family:var(--mono); font-size:12px; color:var(--muted); }
+.hint { margin:0; font-size:12px; }
+.score-in { width:58px; flex-shrink:0; text-align:center; font:800 18px var(--mono); background:var(--input-bg); border:1px solid var(--line); border-radius:8px; padding:6px 2px; -moz-appearance:textfield; }
+.score-in::-webkit-outer-spin-button, .score-in::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+.score-in.hi { background:var(--star); color:#0C0812; border-color:var(--star); }
+.score-in.mid { background:var(--track); }
+.score-in:focus { outline:2px solid var(--signal-dim); outline-offset:1px; }
+.icon-btn { background:none; border:1px solid transparent; border-radius:8px; color:var(--muted); cursor:pointer; padding:4px 7px; font-size:15px; flex-shrink:0; }
+.icon-btn:hover { border-color:var(--line); color:var(--ink); }
+.card-top .t b { white-space:normal; overflow-wrap:anywhere; }
+.old { color:var(--muted-2); font-weight:500; font-size:12px; }
+.status-row { display:flex; gap:4px; flex-wrap:wrap; }
+.status-row .btn { flex:1 1 auto; text-align:center; justify-content:center; }
+.card textarea.note { min-height:34px; height:34px; resize:none; font-size:13px; padding:7px 9px; overflow:auto; line-height:1.4; }
+.card textarea.note:placeholder-shown { opacity:.7; }
+.card-actions select.add-to { padding:5px 8px; font-size:12px; font-weight:600; border-radius:10px; background:var(--surface-2); max-width:130px; }
+.card.on-album { border-left-color:var(--ok); }
+.card.is-cut, .card.is-del { opacity:.5; }
+.card.is-cut:focus-within, .card.is-del:focus-within, .card.is-cut:hover, .card.is-del:hover { opacity:.85; }
+.card.is-del { border-left-color:var(--alarm); }
+.badge.del { border-color:var(--alarm); color:#fff; background:var(--alarm); }
+.btn[aria-pressed="true"][data-act="cut"] { border-color:var(--alarm); color:var(--alarm); }
+.btn[aria-pressed="true"][data-act="delete"] { background:var(--alarm); border-color:var(--alarm); color:#fff; }
+.compare-grid .card { border-left-width:3px; }
+.tracklist .track .score-in { width:50px; font-size:15px; padding:4px 2px; }
+.tracklist select.add-to { padding:4px 6px; font-size:12px; max-width:120px; }
+.cleanup-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:18px; }
+.cleanup-grid h3 { margin:0; font-size:16px; } .cleanup-grid h3 small { font-family:var(--mono); font-size:11px; color:var(--muted); font-weight:400; }
+.clean-row { display:flex; align-items:center; gap:10px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px 10px; margin-bottom:6px; cursor:pointer; }
+.clean-row input { width:20px; height:20px; accent-color:var(--ok); flex-shrink:0; }
+.clean-row .t { flex:1; min-width:0; } .clean-row .t b { display:block; overflow-wrap:anywhere; } .clean-row .t small { color:var(--muted-2); font-size:12px; }
+.clean-row.done { opacity:.5; } .clean-row.done b { text-decoration:line-through; }
+@media (max-width:600px) { .tabs { flex-wrap:wrap; } .tabs .tab { flex:1 1 40%; } }
