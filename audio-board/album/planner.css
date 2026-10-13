@@ -133,3 +133,5 @@ dialog textarea { min-height:70px; }
 .clean-row.done { opacity:.5; } .clean-row.done b { text-decoration:line-through; }
 @media (max-width:600px) { .tabs { flex-wrap:wrap; } .tabs .tab { flex:1 1 40%; } }
 .session-sort { margin:4px 0 8px; } .session-sort .meta { margin:0; font-size:12px; }
+.link-row { display:flex; gap:4px; flex-wrap:wrap; }
+.link-row .btn { flex:1 1 auto; text-align:center; justify-content:center; }

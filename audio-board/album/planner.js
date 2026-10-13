@@ -84,6 +84,8 @@ function nameHtml(stem) {
 }
 const dur = s => { s = Math.round(s || 0); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
 const longDur = s => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return (h ? h + "h " : "") + m + "m " + String(s % 60).padStart(2, "0") + "s"; };
+const lyricSearch = title => String(title || "").replace(/^[A-Z]-\s+/, "").replace(/(\s+(v\d+|\d+|misc|-\s*\w+))+$/i, "").trim();
+const lyricHref = stem => { const t = take(stem); return t.lyricSlug && t.lyricStem ? `../../album-board/?song=${encodeURIComponent(t.lyricSlug)}&version=${encodeURIComponent(t.lyricStem)}` : `../../album-board/?q=${encodeURIComponent(lyricSearch(t.baseTitle))}`; };
 const suno = stem => "https://suno.com/song/" + encodeURIComponent(stem);
 const scoreClass = n => n == null ? "" : n >= 80 ? "hi" : n >= 50 ? "mid" : "";
 function takeLabel(t) { return [t.type && t.type !== "Vocal" ? t.type : "", t.writer && t.writer !== "Unknown" ? t.writer : "", t.packetVersion ? "lyrics v" + t.packetVersion : "", t.take ? "take " + t.take : "", t.duration ? dur(t.duration) : ""].filter(Boolean).join(" · "); }
@@ -168,7 +170,11 @@ function card(stem, opts = {}) {
     <div class="status-row">
       <button class="btn small s-short" data-act="short" aria-pressed="${r.status === "short"}">Shortlist</button>
       <button class="btn small s-maybe" data-act="maybe" aria-pressed="${r.status === "maybe"}">Maybe</button>
+    </div>
+    <div class="link-row">
       <a class="btn small" href="${suno(stem)}" target="_blank" rel="noopener">▶ Suno</a>
+      <a class="btn small" href="${lyricHref(stem)}" target="_blank" rel="noopener" title="${t.lyricStem ? "Open the matching lyric version" : "No exact lyric match; searches Lyric Board for this song"}">${t.lyricStem ? "Lyrics ↗" : "Find lyrics ↗"}</a>
+      <a class="btn small" href="../?take=${encodeURIComponent(stem)}" target="_blank" rel="noopener">Audio Board ↗</a>
     </div>
     <textarea class="note" rows="1" placeholder="Notes" aria-label="Notes for ${esc(nameOf(stem))}">${esc(r.note || "")}</textarea>
     <div class="badges">${badges}</div>
@@ -184,7 +190,9 @@ function card(stem, opts = {}) {
 
 // ---------- render ----------
 let pendingRender = false;
-const editing = () => document.activeElement?.matches?.(".score-in, .note, #sessionNote, .title-edit, #albumTarget");
+const editing = () => document.activeElement?.matches?.(".score-in, .note, #sessionNote, .title-edit, #albumTarget, select");
+// Replace a dropdown's options only when they actually change.
+function setOptions(el, html) { if (el.dataset.html !== html) { el.innerHTML = html; el.dataset.html = html; } }
 function requestRender() { if (editing()) pendingRender = true; else render(); }
 document.addEventListener("focusout", () => setTimeout(() => { if (pendingRender && !editing()) { pendingRender = false; render(); } }, 150));
 function render() {
@@ -198,7 +206,8 @@ function render() {
 }
 function renderTarget() {
   const albums = Object.entries(state.albums).sort(([, a], [, b]) => a.created - b.created), a = album();
-  $("targetAlbum").innerHTML = albums.map(([id, x]) => `<option value="${esc(id)}" ${id === ui.album ? "selected" : ""}>${esc(x.name)}</option>`).join("") + `<option value="__new">+ New album…</option>`;
+  setOptions($("targetAlbum"), albums.map(([id, x]) => `<option value="${esc(id)}">${esc(x.name)}</option>`).join("") + `<option value="__new">+ New album…</option>`);
+  $("targetAlbum").value = ui.album;
   const total = a.order.reduce((n, s) => n + (take(s).duration || 0), 0);
   $("targetStats").textContent = `${a.order.length}/${a.target || 12} tracks · ${longDur(total)} · ${a.cut.length} cut`;
 }
@@ -232,7 +241,7 @@ function sortStems(stems, sort = ui.sort, dir = sortDir()) {
     return (down ? -c : c) || tie(a, b);
   });
 }
-const sortOptions = cur => Object.entries(SORTS).map(([k, [l]]) => `<option value="${k}" ${k === cur ? "selected" : ""}>Sort: ${l.toLowerCase()}</option>`).join("");
+const sortOptions = cur => Object.entries(SORTS).map(([k, [l]]) => `<option value="${k}"${cur && k === cur ? " selected" : ""}>Sort: ${l.toLowerCase()}</option>`).join("");
 const dirLabel = dir => dir === "desc" ? "↓ Desc" : "↑ Asc";
 function filters() {
   const a = album(), n = shortName(a);
@@ -254,7 +263,7 @@ function matchesQuery(stem) {
   return [nameOf(stem), t.title, t.baseTitle, t.writer, t.lyrics, t.oldTitle, rating(stem).note].some(x => String(x || "").toLowerCase().includes(q));
 }
 function renderConsider() {
-  $("sort").innerHTML = sortOptions(ui.sort);
+  setOptions($("sort"), sortOptions()); $("sort").value = ui.sort;
   $("sortDir").textContent = dirLabel(sortDir()); $("sortDir").setAttribute("aria-label", "Sort direction " + (sortDir() === "desc" ? "descending" : "ascending"));
   $("groupToggle").setAttribute("aria-pressed", ui.group);
   const all = live(), fs = filters();

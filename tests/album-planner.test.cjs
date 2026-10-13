@@ -151,6 +151,33 @@ const pass = m => console.log('PASS ' + m);
     assert.equal(await page.inputValue('#sessionSort'), 'newest', 'session sort persists');
     pass('Session sort by title, rating, date, status, length and writer, both directions');
 
+    // Lyrics / Audio Board links open in a new tab and land on the right take.
+    await page.click('#tabConsider'); await page.click('[data-f="all"]');
+    const matched = vocals.find(v => pick.includes(v.slug) && v.versions[0].lyricStem);
+    const mc = page.locator(`.card[data-stem="${matched.slug}"]`);
+    assert.equal(await mc.locator('a', {hasText:'Lyrics ↗'}).getAttribute('target'), '_blank');
+    const [lyricTab] = await Promise.all([context.waitForEvent('page'), mc.locator('a', {hasText:'Lyrics ↗'}).click()]);
+    await lyricTab.waitForLoadState(); assert.match(await lyricTab.textContent('#detail'), new RegExp(matched.versions[0].lyricStem ? '' : 'x'));
+    assert.equal(await lyricTab.locator('#detail h2').count(), 1, 'Lyric Board opens the matched version'); await lyricTab.close();
+    const unmatched = vocals.find(v => pick.includes(v.slug) && !v.versions[0].lyricStem);
+    const uc = page.locator(`.card[data-stem="${unmatched.slug}"]`);
+    const [findTab] = await Promise.all([context.waitForEvent('page'), uc.locator('a', {hasText:'Find lyrics ↗'}).click()]);
+    await findTab.waitForLoadState(); assert(unmatched.baseTitle.includes(await findTab.inputValue('#q'))); await findTab.close();
+    const [abTab] = await Promise.all([context.waitForEvent('page'), mc.locator('a', {hasText:'Audio Board ↗'}).click()]);
+    await abTab.waitForLoadState(); assert.equal(await abTab.locator('#detail h2').textContent(), matched.title); await abTab.close();
+    await page.click('[data-f="contenders"]');
+    pass('Each take links to its lyrics (or a Lyric Board search) and to Audio Board in a new tab');
+
+    // An open dropdown is not rebuilt by background updates.
+    await page.click('#tabConsider');
+    await page.evaluate(() => { window.__rebuilds = 0; for (const id of ['sort', 'targetAlbum']) new MutationObserver(() => window.__rebuilds++).observe(document.getElementById(id), {childList:true}); });
+    await page.focus('#sort');
+    await page.evaluate(() => window.dispatchEvent(new StorageEvent('storage', {key:'x'})));
+    await page.locator('#considerList .score-in').first().fill('55'); await page.locator('#considerList .score-in').first().press('Enter');
+    await page.click('[data-f="short"]'); await page.click('[data-f="contenders"]');
+    assert.equal(await page.evaluate(() => window.__rebuilds), 0, 'sort/album dropdown options untouched by re-renders');
+    pass('Dropdown options are never replaced unless they change');
+
     // Album page.
     await page.click('#tabAlbums');
     assert.equal(await page.locator('#albumTracks .track').count(), 2);

@@ -556,8 +556,9 @@ function initAlbumSync() {
   } catch (err) { syncStatus("Sync could not start. Your local scores are safe. Reload to retry.", true); }
 }
 
+const lyricSearch = title => String(title || "").replace(/^[A-Z]-\s+/, "").replace(/(\s+(v\d+|\d+|misc|-\s*\w+))+$/i, "").trim();
 function audioHtml(v) {
-  const sourceLink = v.lyricSlug && v.lyricStem ? `<a class="btn small" href="../album-board/?song=${encodeURIComponent(v.lyricSlug)}&version=${encodeURIComponent(v.lyricStem)}">Open matching lyrics</a>` : '';
+  const sourceLink = v.lyricSlug && v.lyricStem ? `<a class="btn small" href="../album-board/?song=${encodeURIComponent(v.lyricSlug)}&version=${encodeURIComponent(v.lyricStem)}">Open matching lyrics</a>` : `<a class="btn small" href="../album-board/?q=${encodeURIComponent(lyricSearch(BY[v.stem]?.baseTitle || v.title))}">Find lyrics</a>`;
   return `<div class="meta">${esc(verLabel(v))}${v.voiceName ? "" : "<br>"+esc(voiceLabel(v))}<br>${esc(v.match)}${v.oldTitle && v.oldTitle !== v.title ? `<br>Previously: ${esc(v.oldTitle)}` : ''}</div>
     <div class="audio-controls"><a class="btn primary" id="openSuno" href="https://suno.com/song/${esc(v.stem)}" target="_blank" rel="noopener noreferrer">Open in Suno ↗</a><button class="btn small" data-copy="title">Copy title</button>${sourceLink}</div>
     ${v.audioUrl ? `<audio class="audio-player" controls preload="none" src="${esc(v.audioUrl)}"></audio>` : ''}
@@ -581,6 +582,8 @@ function initializeBoard() {
     const params = new URLSearchParams(location.search), song=BY[params.get('song')];
     const selected = song && song.versions.find(v=>v.stem===params.get('version'));
     if (selected) { ui.scope='all'; ui.open=song.slug; state.pick[song.slug]=selected.stem; }
+    const q = params.get('q');
+    if (q && !selected) { ui.scope='all'; ui.filter='all'; ui.q=q.trim(); $('q').value=ui.q; }
   }
 }
 

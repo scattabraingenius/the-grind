@@ -44,7 +44,7 @@ Every take card, on Considered and inside compare Sessions, has the same control
 
 - **Score box** (0 to 100). Type a number, Enter saves and jumps to the next take's box (Shift+Enter goes back).
 - **Shortlist / Maybe** and **Notes**. Score, status and notes are Audio Board records, so both pages show the same values.
-- **▶ Suno** opens the take on Suno. Nothing links back into Audio Board.
+- **▶ Suno**, **Lyrics ↗** and **Audio Board ↗** open in a new tab, so the planner keeps its place. Lyrics opens the exact matching lyric version; takes without a match show **Find lyrics ↗**, which opens Lyric Board searching that song name (`?q=`). Audio Board's detail panel has the same Find lyrics fallback.
 - **+ Album** toggles the take on the current album. **Add to…** places it on another album or creates a new one.
 - **Cut** removes the take from contention for the current album only. It stays in the planner and stays a contender for every other album.
 - **Delete** tags the take for deletion on Suno. It stays in the planner, dimmed, until it's ticked done on the **Suno cleanup** page.
@@ -57,3 +57,5 @@ Planner records (albums, cut lists, sessions, renames, delete tags) sync at `pla
 Audio Board and Lyric Board also have an ascending/descending toggle beside Sort, and Audio Board accepts `?take=<uuid>` to open one take.
 
 Verification: `APP_BASE_URL=http://127.0.0.1:8765 node tests/album-planner.test.cjs` (synthetic data, Firebase blocked).
+
+Dropdowns are only rebuilt when their options change, and background sync never re-renders the page while a dropdown is open (Android Chrome reopens the native picker when its options are replaced).
