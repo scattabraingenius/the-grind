@@ -132,3 +132,4 @@ dialog textarea { min-height:70px; }
 .clean-row .t { flex:1; min-width:0; } .clean-row .t b { display:block; overflow-wrap:anywhere; } .clean-row .t small { color:var(--muted-2); font-size:12px; }
 .clean-row.done { opacity:.5; } .clean-row.done b { text-decoration:line-through; }
 @media (max-width:600px) { .tabs { flex-wrap:wrap; } .tabs .tab { flex:1 1 40%; } }
+.session-sort { margin:4px 0 8px; } .session-sort .meta { margin:0; font-size:12px; }

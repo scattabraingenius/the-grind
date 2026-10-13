@@ -64,8 +64,8 @@ function undo() { if (!undoSnap) return; Object.assign(state, clone(undoSnap)); 
 
 // ---------- view prefs ----------
 let viewPrefs = {}; try { viewPrefs = JSON.parse(localStorage.getItem(KEY + ".view")) || {}; } catch (err) {}
-const ui = {view:["consider","sessions","albums","cleanup"].includes(viewPrefs.view) ? viewPrefs.view : "consider", q:"", sort:viewPrefs.sort || "title", dir:viewPrefs.dir || "", group:viewPrefs.group !== false, filter:viewPrefs.filter || "contenders", session:viewPrefs.session || "", album:viewPrefs.album || "debut"};
-function saveView() { try { localStorage.setItem(KEY + ".view", JSON.stringify({view:ui.view, sort:ui.sort, dir:ui.dir, group:ui.group, filter:ui.filter, session:ui.session, album:ui.album})); } catch (err) {} }
+const ui = {view:["consider","sessions","albums","cleanup"].includes(viewPrefs.view) ? viewPrefs.view : "consider", q:"", sort:viewPrefs.sort || "title", dir:viewPrefs.dir || "", group:viewPrefs.group !== false, filter:viewPrefs.filter || "contenders", session:viewPrefs.session || "", album:viewPrefs.album || "debut", ssort:viewPrefs.ssort || "score", sdir:viewPrefs.sdir || ""};
+function saveView() { try { localStorage.setItem(KEY + ".view", JSON.stringify({view:ui.view, sort:ui.sort, dir:ui.dir, group:ui.group, filter:ui.filter, session:ui.session, album:ui.album, ssort:ui.ssort, sdir:ui.sdir})); } catch (err) {} }
 
 // ---------- helpers ----------
 const take = stem => TAKES[stem] || {stem, title:"Suno " + stem.slice(0, 8), baseTitle:"Not in catalogue", missing:true, writer:"", duration:0, createdAt:""};
@@ -214,11 +214,16 @@ function renderSummary() {
   $("built").textContent = window.ALBUM_BUILT ? "Suno snapshot " + window.ALBUM_BUILT : "";
 }
 
-const SORT_DIR = {title:"asc", score:"desc", newest:"desc", length:"desc"};
-const sortDir = () => ui.dir || SORT_DIR[ui.sort];
-function sortStems(stems) {
-  const down = sortDir() === "desc", tie = (a, b) => nameOf(a).localeCompare(nameOf(b), undefined, {numeric:true});
-  const key = {title:null, score:s => rating(s).score ?? null, newest:s => take(s).createdAt || null, length:s => take(s).duration || null}[ui.sort];
+// Shared by Considered and Sessions. Each sort has a natural direction; the toggle flips it.
+const SORTS = {title:["Title","asc"], score:["Rating","desc"], newest:["Date","desc"], status:["Status","asc"], length:["Length","desc"], writer:["Writer","asc"]};
+// Status order: on the album you're building, Shortlist, Maybe, unmarked, Audio Board cut.
+const statusRank = s => album().order.includes(s) ? 0 : ({short:1, maybe:2, cut:4}[rating(s).status] ?? 3);
+const SORT_KEYS = {title:null, score:s => rating(s).score ?? null, newest:s => take(s).createdAt || null, status:statusRank, length:s => take(s).duration || null, writer:s => take(s).writer && take(s).writer !== "Unknown" ? take(s).writer : null};
+const dirOf = (sort, dir) => dir || SORTS[sort]?.[1] || "asc";
+const sortDir = () => dirOf(ui.sort, ui.dir);
+function sortStems(stems, sort = ui.sort, dir = sortDir()) {
+  const down = dir === "desc", tie = (a, b) => nameOf(a).localeCompare(nameOf(b), undefined, {numeric:true});
+  const key = SORT_KEYS[sort];
   return stems.slice().sort((a, b) => {
     if (!key) return down ? tie(b, a) : tie(a, b);
     const x = key(a), y = key(b);
@@ -227,6 +232,8 @@ function sortStems(stems) {
     return (down ? -c : c) || tie(a, b);
   });
 }
+const sortOptions = cur => Object.entries(SORTS).map(([k, [l]]) => `<option value="${k}" ${k === cur ? "selected" : ""}>Sort: ${l.toLowerCase()}</option>`).join("");
+const dirLabel = dir => dir === "desc" ? "↓ Desc" : "↑ Asc";
 function filters() {
   const a = album(), n = shortName(a);
   return [
@@ -247,8 +254,8 @@ function matchesQuery(stem) {
   return [nameOf(stem), t.title, t.baseTitle, t.writer, t.lyrics, t.oldTitle, rating(stem).note].some(x => String(x || "").toLowerCase().includes(q));
 }
 function renderConsider() {
-  $("sort").value = ui.sort;
-  const down = sortDir() === "desc"; $("sortDir").textContent = down ? "↓ Desc" : "↑ Asc"; $("sortDir").setAttribute("aria-label", "Sort direction " + (down ? "descending" : "ascending"));
+  $("sort").innerHTML = sortOptions(ui.sort);
+  $("sortDir").textContent = dirLabel(sortDir()); $("sortDir").setAttribute("aria-label", "Sort direction " + (sortDir() === "desc" ? "descending" : "ascending"));
   $("groupToggle").setAttribute("aria-pressed", ui.group);
   const all = live(), fs = filters();
   if (!fs.some(([k]) => k === ui.filter)) ui.filter = "contenders";
@@ -282,11 +289,13 @@ function renderSessions() {
   if (!s) { d.className = "detail empty"; d.innerHTML = "Pick a session to compare its takes."; return; }
   const st = sessionStats(s);
   // Contenders first; cut and delete-tagged takes sink to the bottom, dimmed.
-  const order = st.members.slice().sort((x, y) => ((isCut(x) || tagged(x)) - (isCut(y) || tagged(y))) || ((rating(y).score ?? -1) - (rating(x).score ?? -1)));
+  const sdir = dirOf(ui.ssort, ui.sdir), sorted = sortStems(st.members, ui.ssort, sdir);
+  const order = [...sorted.filter(m => !isCut(m) && !tagged(m)), ...sorted.filter(m => isCut(m) || tagged(m))];
   d.className = "detail";
   d.innerHTML = `<button class="btn small detail-back" data-back>← Sessions</button>
     <div class="field-head"><input class="title-edit" id="sessionName" value="${esc(s.name)}" aria-label="Session name"><button class="btn small danger" id="deleteSession">Delete session</button></div>
     <p class="meta">${st.members.length} takes for <b>${esc(a.name)}</b> · ${st.on} on it · ${st.cut} cut · ${st.open} still open.</p>
+    <div class="tools session-sort"><select id="sessionSort" aria-label="Sort takes in this session">${sortOptions(ui.ssort)}</select><button class="btn small" id="sessionSortDir" aria-label="Sort direction ${sdir === "desc" ? "descending" : "ascending"}">${dirLabel(sdir)}</button><span class="meta">Cut and delete-tagged takes stay at the bottom.</span></div>
     <div class="compare-grid">${order.map(m => card(m, {inSession:true})).join("") || `<p class="empty-note">No takes in this session.</p>`}</div>
     <label class="sub" for="sessionNote">Session notes</label>
     <textarea id="sessionNote" placeholder="Which verse hits harder, what to fix…">${esc(s.note || "")}</textarea>
@@ -512,6 +521,7 @@ $("sessionList").onclick = e => {
 $("sessionDetail").addEventListener("click", e => {
   const s = state.sessions[ui.session]; if (!s) return;
   if (e.target.closest("[data-back]")) { ui.session = ""; saveView(); renderSessions(); $("sessionList").scrollIntoView(); return; }
+  if (e.target.closest("#sessionSortDir")) { ui.sdir = dirOf(ui.ssort, ui.sdir) === "desc" ? "asc" : "desc"; saveView(); renderSessions(); return; }
   if (e.target.closest("#deleteSession")) { if (!confirm(`Delete session "${s.name}"? Its takes stay in the planner.`)) return; snapshot(); delete state.sessions[ui.session]; ui.session = ""; save(); toast("Session deleted", true); return; }
   if (e.target.closest("#sessionAddMore")) {
     const box = $("sessionAdder"); box.classList.toggle("hidden");
@@ -521,6 +531,7 @@ $("sessionDetail").addEventListener("click", e => {
 });
 $("sessionDetail").addEventListener("change", e => {
   const s = state.sessions[ui.session]; if (!s) return;
+  if (e.target.id === "sessionSort") { ui.ssort = e.target.value; ui.sdir = ""; saveView(); renderSessions(); return; }
   const m = e.target.closest("[data-add-member]"); if (m?.checked) { s.members = [...new Set([...s.members, m.dataset.addMember])]; save(); return; }
   if (e.target.id === "sessionName" && e.target.value.trim()) { s.name = e.target.value.trim(); save(false); renderSummary(); }
   if (e.target.id === "sessionNote") { s.note = e.target.value; save(false); }

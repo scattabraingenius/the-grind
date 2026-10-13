@@ -136,6 +136,21 @@ const pass = m => console.log('PASS ' + m);
     assert.equal(await page.locator('[data-act="win"], [data-win]').count(), 0, 'no pick-winner');
     pass('Sessions use the same card: score, add, cut (dimmed, sunk), no winner or link-out');
 
+    // Session sort: every option, both directions, cut stays at the bottom.
+    await page.locator('#sessionList .session-row', {hasText:'Dead Souls'}).click();
+    const names = async () => page.locator('#sessionDetail .card:not(.is-cut):not(.is-del) .t b').allTextContents();
+    await page.selectOption('#sessionSort', 'title');
+    const asc = await names(); assert.deepEqual(asc, [...asc].sort((x, y) => x.localeCompare(y, undefined, {numeric:true})));
+    await page.click('#sessionSortDir'); assert.deepEqual(await names(), [...asc].reverse());
+    for (const opt of ['score', 'newest', 'status', 'length', 'writer']) { await page.selectOption('#sessionSort', opt); await page.click('#sessionSortDir'); }
+    await page.selectOption('#sessionSort', 'newest');
+    const sc2 = page.locator('#sessionDetail .card').first(), cutStem = await sc2.getAttribute('data-stem');
+    await sc2.locator('[data-act="cut"]').click();
+    assert.equal(await page.locator('#sessionDetail .card').last().getAttribute('data-stem'), cutStem);
+    await page.reload(); await page.click('#tabSessions');
+    assert.equal(await page.inputValue('#sessionSort'), 'newest', 'session sort persists');
+    pass('Session sort by title, rating, date, status, length and writer, both directions');
+
     // Album page.
     await page.click('#tabAlbums');
     assert.equal(await page.locator('#albumTracks .track').count(), 2);
