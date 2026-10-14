@@ -65,15 +65,36 @@ function undo() { if (!undoSnap) return; Object.assign(state, clone(undoSnap)); 
 // ---------- view prefs ----------
 let viewPrefs = {}; try { viewPrefs = JSON.parse(localStorage.getItem(KEY + ".view")) || {}; } catch (err) {}
 const ui = {view:["consider","sessions","albums","cleanup"].includes(viewPrefs.view) ? viewPrefs.view : "consider", q:"", sort:viewPrefs.sort || "title", dir:viewPrefs.dir || "", group:viewPrefs.group !== false, filter:viewPrefs.filter || "contenders", session:viewPrefs.session || "", album:viewPrefs.album || "debut", ssort:viewPrefs.ssort || "score", sdir:viewPrefs.sdir || ""};
-function saveView() { try { localStorage.setItem(KEY + ".view", JSON.stringify({view:ui.view, sort:ui.sort, dir:ui.dir, group:ui.group, filter:ui.filter, session:ui.session, album:ui.album, ssort:ui.ssort, sdir:ui.sdir})); } catch (err) {} }
+let restoringNavigation = false;
+const navigation = () => ({view:ui.view, session:ui.session, album:ui.album});
+function saveView() {
+  try { localStorage.setItem(KEY + ".view", JSON.stringify({...ui, q:undefined})); } catch (err) {}
+  if (!restoringNavigation && JSON.stringify(history.state?.plannerNavigation) !== JSON.stringify(navigation())) {
+    const url = new URL(location.href);
+    for (const [key, value] of Object.entries(navigation())) value ? url.searchParams.set(key, value) : url.searchParams.delete(key);
+    history.pushState({plannerNavigation:navigation()}, "", url);
+  }
+}
+const route = new URLSearchParams(location.search);
+if (["consider", "sessions", "albums", "cleanup"].includes(route.get("view"))) ui.view = route.get("view");
+if (route.has("session")) ui.session = route.get("session");
+if (route.has("album")) ui.album = route.get("album");
+history.replaceState({...history.state, plannerNavigation:navigation()}, "");
+window.addEventListener("popstate", e => {
+  if (!e.state?.plannerNavigation) return;
+  Object.assign(ui, e.state.plannerNavigation);
+  restoringNavigation = true; saveView(); restoringNavigation = false; render();
+});
 
 // ---------- helpers ----------
 const take = stem => TAKES[stem] || {stem, title:"Suno " + stem.slice(0, 8), baseTitle:"Not in catalogue", missing:true, writer:"", duration:0, createdAt:""};
 const item = stem => state.considered[stem] || {};
 const live = () => Object.keys(state.considered).filter(s => !item(s).delDone);   // deleted on Suno = gone from the plan
 const album = () => state.albums[ui.album];
-const isCut = (stem, id = ui.album) => !!state.albums[id]?.cut?.includes(stem);
+const audioCut = stem => rating(stem).status === "cut";
+const isCut = (stem, id = ui.album) => !!state.albums[id]?.cut?.includes(stem) || audioCut(stem);
 const tagged = stem => !!item(stem).del && !item(stem).delDone;
+const eligible = stem => !item(stem).delDone && !isCut(stem) && !tagged(stem);
 const albumOf = stem => Object.entries(state.albums).find(([, a]) => a.order.includes(stem));
 const sessionsOf = stem => Object.entries(state.sessions).filter(([, s]) => s.members.includes(stem));
 const shortName = a => a.name.split(" ·")[0];
@@ -87,6 +108,11 @@ const longDur = s => { s = Math.round(s); const h = Math.floor(s / 3600), m = Ma
 const lyricSearch = title => String(title || "").replace(/^[A-Z]-\s+/, "").replace(/(\s+(v\d+|\d+|misc|-\s*\w+))+$/i, "").trim();
 const lyricHref = stem => { const t = take(stem); return t.lyricSlug && t.lyricStem ? `../../album-board/?song=${encodeURIComponent(t.lyricSlug)}&version=${encodeURIComponent(t.lyricStem)}` : `../../album-board/?q=${encodeURIComponent(lyricSearch(t.baseTitle))}`; };
 const suno = stem => "https://suno.com/song/" + encodeURIComponent(stem);
+function boardHref(href) {
+  const url = new URL(href, location.href);
+  url.searchParams.set("returnTo", location.pathname + location.search);
+  return url.pathname + url.search;
+}
 const scoreClass = n => n == null ? "" : n >= 80 ? "hi" : n >= 50 ? "mid" : "";
 function takeLabel(t) { return [t.type && t.type !== "Vocal" ? t.type : "", t.writer && t.writer !== "Unknown" ? t.writer : "", t.packetVersion ? "lyrics v" + t.packetVersion : "", t.take ? "take " + t.take : "", t.duration ? dur(t.duration) : ""].filter(Boolean).join(" · "); }
 let toastTimer;
@@ -123,7 +149,11 @@ function toggleOnAlbum(stem) {
 }
 function toggleCut(stem) {
   const a = album(); snapshot();
-  if (isCut(stem)) { a.cut = a.cut.filter(m => m !== stem); save(); toast("Back in contention for " + a.name); return; }
+  if (isCut(stem)) {
+    a.cut = a.cut.filter(m => m !== stem);
+    if (audioCut(stem)) setRating(stem, {status:null});
+    save(); toast("Back in contention for " + a.name); return;
+  }
   a.cut.push(stem); a.order = a.order.filter(m => m !== stem);
   save(); toast(`Cut from ${a.name}`, true);
 }
@@ -154,7 +184,7 @@ function card(stem, opts = {}) {
   const others = Object.entries(state.albums).filter(([id]) => id !== ui.album).sort(([, x], [, y]) => x.created - y.created);
   const badges = [
     placed ? `<button class="badge link placed" data-goto-album="${esc(placed[0])}">${esc(placed[1].name)} #${placed[1].order.indexOf(stem) + 1}</button>` : "",
-    cut ? `<span class="badge cut">cut from ${esc(shortName(a))}</span>` : "",
+    state.albums[ui.album]?.cut.includes(stem) ? `<span class="badge cut">cut from ${esc(shortName(a))}</span>` : "",
     del ? `<span class="badge del">delete</span>` : "",
     r.status === "cut" ? `<span class="badge cut">Audio Board: cut</span>` : "",
     ...(opts.inSession ? [] : sessionsOf(stem).map(([id, s]) => `<button class="badge link" data-goto-session="${esc(id)}">${esc(s.name)}</button>`)),
@@ -171,13 +201,14 @@ function card(stem, opts = {}) {
       <button class="btn small s-short" data-act="short" aria-pressed="${r.status === "short"}">Shortlist</button>
       <button class="btn small s-maybe" data-act="maybe" aria-pressed="${r.status === "maybe"}">Maybe</button>
     </div>
+    <p class="decision">${del ? "Marked for deletion on Suno" : cut ? "Cut · out of contention" : onThis ? "Selected for " + esc(a.name) : "In contention"}</p>
+    <div class="badges">${badges}</div>
     <div class="link-row">
       <a class="btn small" href="${suno(stem)}" target="_blank" rel="noopener">▶ Suno</a>
-      <a class="btn small" href="${lyricHref(stem)}" target="_blank" rel="noopener" title="${t.lyricStem ? "Open the matching lyric version" : "No exact lyric match; searches Lyric Board for this song"}">${t.lyricStem ? "Lyrics ↗" : "Find lyrics ↗"}</a>
-      <a class="btn small" href="../?take=${encodeURIComponent(stem)}" target="_blank" rel="noopener">Audio Board ↗</a>
+      <a class="btn small" href="${esc(boardHref(lyricHref(stem)))}" title="${t.lyricStem ? "Open the matching lyric version" : "No exact lyric match; searches Lyric Board for this song"}">${t.lyricStem ? "Lyrics" : "Find lyrics"}</a>
+      <a class="btn small" href="${esc(boardHref(`../?take=${encodeURIComponent(stem)}`))}">Audio Board</a>
     </div>
     <textarea class="note" rows="1" placeholder="Notes" aria-label="Notes for ${esc(nameOf(stem))}">${esc(r.note || "")}</textarea>
-    <div class="badges">${badges}</div>
     <div class="card-actions">
       <button class="btn small ${onThis ? "primary" : ""}" data-act="add" aria-pressed="${onThis}">${onThis ? "✓ On " : "+ "}${esc(shortName(a))}</button>
       <select class="add-to" aria-label="Add to another album"><option value="">Add to…</option>${others.map(([id, o]) => `<option value="${esc(id)}">${esc(o.name)}${o.order.includes(stem) ? " ✓" : ""}</option>`).join("")}<option value="__new">+ New album…</option></select>
@@ -209,14 +240,14 @@ function renderTarget() {
   setOptions($("targetAlbum"), albums.map(([id, x]) => `<option value="${esc(id)}">${esc(x.name)}</option>`).join("") + `<option value="__new">+ New album…</option>`);
   $("targetAlbum").value = ui.album;
   const total = a.order.reduce((n, s) => n + (take(s).duration || 0), 0);
-  $("targetStats").textContent = `${a.order.length}/${a.target || 12} tracks · ${longDur(total)} · ${a.cut.length} cut`;
+  $("targetStats").textContent = `${a.order.length}/${a.target || 12} tracks · ${longDur(total)} · ${live().filter(s => isCut(s)).length} cut`;
 }
 function renderSummary() {
   const stems = live(), a = album();
-  const contenders = stems.filter(s => !isCut(s) && !tagged(s)).length;
+  const contenders = stems.filter(eligible).length;
   const cleanup = stems.filter(tagged).length + stems.filter(s => item(s).name && !item(s).renameDone).length;
-  $("summary").textContent = `${stems.length} takes · ${new Set(stems.map(s => take(s).baseTitle)).size} songs · ${contenders} still in contention for ${a.name}`;
-  $("countConsider").textContent = stems.length ? `(${stems.length})` : "";
+  $("summary").textContent = `${contenders} takes still in contention for ${a.name} · ${stems.filter(s => isCut(s)).length} cut · ${stems.filter(tagged).length} marked for deletion`;
+  $("countConsider").textContent = contenders ? `(${contenders})` : "(0)";
   $("countSessions").textContent = Object.keys(state.sessions).length ? `(${Object.keys(state.sessions).length})` : "";
   $("countAlbums").textContent = `(${a.order.length})`;
   $("countCleanup").textContent = cleanup ? `(${cleanup})` : "";
@@ -246,12 +277,12 @@ const dirLabel = dir => dir === "desc" ? "↓ Desc" : "↑ Asc";
 function filters() {
   const a = album(), n = shortName(a);
   return [
-    ["contenders", "In contention", s => !isCut(s) && !tagged(s)],
-    ["short", "Shortlist", s => rating(s).status === "short"],
-    ["maybe", "Maybe", s => rating(s).status === "maybe"],
-    ["unscored", "Unscored", s => rating(s).score == null && !isCut(s) && !tagged(s)],
+    ["contenders", "In contention", eligible],
+    ["short", "Shortlist", s => eligible(s) && rating(s).status === "short"],
+    ["maybe", "Maybe", s => eligible(s) && rating(s).status === "maybe"],
+    ["unscored", "Unscored", s => rating(s).score == null && eligible(s)],
     ["on", "On " + n, s => a.order.includes(s)],
-    ["unplaced", "Not on an album", s => !albumOf(s) && !isCut(s) && !tagged(s)],
+    ["unplaced", "Not on an album", s => !albumOf(s) && eligible(s)],
     ["cut", "Cut from " + n, s => isCut(s)],
     ["del", "Tagged delete", s => tagged(s)],
     ["all", "Everything", () => true],
@@ -285,7 +316,7 @@ function renderConsider() {
 
 function sessionStats(s) {
   const members = s.members.filter(m => !item(m).delDone), a = album();
-  return {members, on:members.filter(m => a.order.includes(m)).length, cut:members.filter(m => isCut(m)).length, open:members.filter(m => !isCut(m) && !tagged(m) && !a.order.includes(m)).length};
+  return {members, on:members.filter(m => a.order.includes(m)).length, cut:members.filter(m => isCut(m)).length, excluded:members.filter(m => !eligible(m)).length, open:members.filter(m => eligible(m) && !a.order.includes(m)).length};
 }
 function renderSessions() {
   const a = album();
@@ -297,14 +328,14 @@ function renderSessions() {
   const d = $("sessionDetail"), s = state.sessions[ui.session];
   if (!s) { d.className = "detail empty"; d.innerHTML = "Pick a session to compare its takes."; return; }
   const st = sessionStats(s);
-  // Contenders first; cut and delete-tagged takes sink to the bottom, dimmed.
+  // Excluded takes remain reviewable, but never occupy the active comparison list.
   const sdir = dirOf(ui.ssort, ui.sdir), sorted = sortStems(st.members, ui.ssort, sdir);
-  const order = [...sorted.filter(m => !isCut(m) && !tagged(m)), ...sorted.filter(m => isCut(m) || tagged(m))];
+  const order = ui.showExcluded ? [...sorted.filter(eligible), ...sorted.filter(m => !eligible(m))] : sorted.filter(eligible);
   d.className = "detail";
   d.innerHTML = `<button class="btn small detail-back" data-back>← Sessions</button>
     <div class="field-head"><input class="title-edit" id="sessionName" value="${esc(s.name)}" aria-label="Session name"><button class="btn small danger" id="deleteSession">Delete session</button></div>
     <p class="meta">${st.members.length} takes for <b>${esc(a.name)}</b> · ${st.on} on it · ${st.cut} cut · ${st.open} still open.</p>
-    <div class="tools session-sort"><select id="sessionSort" aria-label="Sort takes in this session">${sortOptions(ui.ssort)}</select><button class="btn small" id="sessionSortDir" aria-label="Sort direction ${sdir === "desc" ? "descending" : "ascending"}">${dirLabel(sdir)}</button><span class="meta">Cut and delete-tagged takes stay at the bottom.</span></div>
+    <div class="tools session-sort"><select id="sessionSort" aria-label="Sort takes in this session">${sortOptions(ui.ssort)}</select><button class="btn small" id="sessionSortDir" aria-label="Sort direction ${sdir === "desc" ? "descending" : "ascending"}">${dirLabel(sdir)}</button><label class="inline"><input type="checkbox" id="showExcluded" ${ui.showExcluded ? "checked" : ""}> Show cut / delete (${st.excluded})</label></div>
     <div class="compare-grid">${order.map(m => card(m, {inSession:true})).join("") || `<p class="empty-note">No takes in this session.</p>`}</div>
     <label class="sub" for="sessionNote">Session notes</label>
     <textarea id="sessionNote" placeholder="Which verse hits harder, what to fix…">${esc(s.note || "")}</textarea>
@@ -329,7 +360,7 @@ function renderAlbums() {
       ${others.length ? `<select class="add-to" aria-label="Move to another album"><option value="">Move to…</option>${others.map(([id, o]) => `<option value="${esc(id)}">${esc(o.name)}</option>`).join("")}</select>` : ""}
       <button class="btn small" data-unplace aria-label="Take off this album">✕</button></div></li>`;
   }).join("") : `<li class="empty-note">No tracks yet. Use <b>+ ${esc(shortName(a))}</b> on any take, or place from below.</li>`;
-  const pool = live().filter(s => ["short", "maybe"].includes(rating(s).status) && !albumOf(s) && !isCut(s) && !tagged(s))
+  const pool = live().filter(s => ["short", "maybe"].includes(rating(s).status) && !albumOf(s) && eligible(s))
     .sort((x, y) => (rating(x).status === "short" ? 0 : 1) - (rating(y).status === "short" ? 0 : 1) || (rating(y).score ?? -1) - (rating(x).score ?? -1));
   $("pool").innerHTML = pool.length ? `<div class="pool">${pool.map(stem => {
     const t = take(stem), r = rating(stem);
@@ -350,8 +381,8 @@ function renderMissing(a, albums) {
   const nonVocal = a.order.filter(s => take(s).type && take(s).type !== "Vocal");
   if (nonVocal.length) items.push(["warn", `Not a vocal take: ${nonVocal.map(s => nameOf(s) + " (" + take(s).type + ")").join(", ")}.`]);
   const open = Object.entries(state.sessions).map(([id, s]) => [id, s, sessionStats(s)]).filter(([, , st]) => !st.on && st.open);
-  const short = live().filter(s => rating(s).status === "short" && !albumOf(s) && !isCut(s) && !tagged(s));
-  const unscoredAll = live().filter(s => rating(s).score == null && !isCut(s) && !tagged(s));
+  const short = live().filter(s => rating(s).status === "short" && !albumOf(s) && eligible(s));
+  const unscoredAll = live().filter(s => rating(s).score == null && eligible(s));
   const where = new Map(); for (const [id, al] of albums) for (const s of al.order) { const b = take(s).baseTitle; if (!where.has(b)) where.set(b, new Set()); where.get(b).add(id); }
   const split = [...where].filter(([, ids]) => ids.size > 1).map(([b]) => b);
   const writers = {}; for (const s of a.order) { const w = take(s).writer || "Unknown"; writers[w] = (writers[w] || 0) + 1; }
@@ -540,6 +571,7 @@ $("sessionDetail").addEventListener("click", e => {
 });
 $("sessionDetail").addEventListener("change", e => {
   const s = state.sessions[ui.session]; if (!s) return;
+  if (e.target.id === "showExcluded") { ui.showExcluded = e.target.checked; saveView(); renderSessions(); return; }
   if (e.target.id === "sessionSort") { ui.ssort = e.target.value; ui.sdir = ""; saveView(); renderSessions(); return; }
   const m = e.target.closest("[data-add-member]"); if (m?.checked) { s.members = [...new Set([...s.members, m.dataset.addMember])]; save(); return; }
   if (e.target.id === "sessionName" && e.target.value.trim()) { s.name = e.target.value.trim(); save(false); renderSummary(); }
