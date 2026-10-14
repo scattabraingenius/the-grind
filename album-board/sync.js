@@ -10,7 +10,9 @@
   const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
   const fields = ["score", "status", "note"];
   const keyOf = (kind, id, field = "") => Array.from(new TextEncoder().encode(JSON.stringify([kind, id, field])), n => n.toString(16).padStart(2, "0")).join("");
-  const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  // Firebase may reorder object properties. Compare record contents consistently.
+  const canonical = value => JSON.stringify(value, (_, v) => v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(key => [key, v[key]])) : v);
+  const equal = (a, b) => canonical(a) === canonical(b);
   function content(state) {
     const records = {};
     for (const [id, rating] of Object.entries(state.ratings || {})) {
@@ -50,7 +52,7 @@
     return Object.fromEntries(entries);
   }
   function compare(a, b) {
-    const left = JSON.stringify(a), right = JSON.stringify(b);
+    const left = canonical(a), right = canonical(b);
     return a.rev[0] - b.rev[0] || (a.rev[1] < b.rev[1] ? -1 : a.rev[1] > b.rev[1] ? 1 : left < right ? -1 : left > right ? 1 : 0);
   }
   function merge(a, b) {

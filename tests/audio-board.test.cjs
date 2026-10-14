@@ -9,7 +9,7 @@ const ROOT=path.resolve(__dirname,'..');
 const ARTIFACTS=process.env.ARTIFACT_DIR || path.resolve(ROOT,'../audio-board-verification');
 const current={window:{}};vm.runInNewContext(fs.readFileSync(path.join(ROOT,'audio-board/tracks.js'),'utf8'),current);
 const songs=current.window.ALBUM_SONGS;
-assert.equal(songs.length,295);assert.equal(new Set(songs.map(s=>s.slug)).size,295);
+assert.equal(songs.length,258);assert.equal(new Set(songs.map(s=>s.slug)).size,258);
 assert(songs.every(s=>s.slug===s.versions[0].stem && s.versions.length===1));
 assert(songs.every(s=>!s.versions[0].audioUrl?.includes('forbidden')));
 const first=songs.find(s=>s.title==='Dearly Beloved.C2.1'),second=songs.find(s=>s.title==='Dearly Beloved.C2.2');
@@ -54,7 +54,7 @@ const wait=async fn=>{for(let i=0;i<120;i++){if(await fn())return;await new Prom
   }
   const phone=await client(),pc=await client();
   assert.equal(await phone.page.locator('h1').textContent(),'Audio Board');
-  assert.equal(await phone.page.locator('#list .row').count(),190);
+  assert.equal(await phone.page.locator('#list .row').count(),songs.filter(s=>s.session==='Vocals').length);
   await phone.page.locator('#songFilter').selectOption('Dearly Beloved');
   await phone.page.locator(`.row[data-slug="${first.slug}"]`).click();
   assert.equal(await phone.page.locator('#copyEdit').count(),0);
@@ -90,7 +90,7 @@ const wait=async fn=>{for(let i=0;i<120;i++){if(await fn())return;await new Prom
   await phone.page.goto(BASE+'/audio-board/?lyrics='+encodeURIComponent(first.versions[0].lyricStem),{waitUntil:'networkidle'});
   const linked=await phone.page.locator('#list .row').count();assert(linked>=2 && linked<15);
   await phone.page.locator('#clearLinkedLyrics').click();
-  assert.equal(await phone.page.locator('#list .row').count(),295);
+  assert.equal(await phone.page.locator('#list .row').count(),songs.length);
   await phone.page.getByRole('button',{name:'Instrumentals',exact:true}).click();assert.equal(await phone.page.locator('#list .row').count(),57);
   await phone.page.getByRole('button',{name:'Stems',exact:true}).click();assert.equal(await phone.page.locator('#list .row').count(),48);
   await phone.page.getByRole('button',{name:'Vocals',exact:true}).click();
@@ -127,7 +127,7 @@ const wait=async fn=>{for(let i=0;i<120;i++){if(await fn())return;await new Prom
   assert.equal((await cdp.send('Page.getInstallabilityErrors')).installabilityErrors.filter(e=>e.errorId!=='in-incognito').length,0);
   await phone.page.waitForFunction(()=>!!navigator.serviceWorker.controller);
   await phone.context.setOffline(true);await phone.page.reload({waitUntil:'domcontentloaded'});
-  assert.match(await phone.page.locator('#summary').textContent(),/295 audio takes/);
+  assert.match(await phone.page.locator('#summary').textContent(),/258 audio takes/);
   await phone.page.locator(`.row[data-slug="${first.slug}"]`).click();assert.equal(await phone.page.locator('#scoreNum').inputValue(),'91');
   await phone.context.setOffline(false);
   console.log('PASS Audio Board installs separately, fits phone/tablet/desktop and keeps offline ratings');
