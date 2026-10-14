@@ -32,6 +32,8 @@
 .badge.link:hover { border-color:var(--signal); color:var(--ink); }
 .badge.win, .badge.placed { border-color:var(--ok); color:var(--ok); }
 .badge.lost { border-color:var(--alarm); color:var(--alarm); }
+.decision { margin:0; font-size:12px; font-weight:600; color:var(--muted-2); }
+.is-cut .decision, .is-del .decision { color:var(--alarm); }
 .card-actions { display:flex; flex-wrap:wrap; gap:4px; margin-top:auto; }
 .card-actions .btn { flex:1 1 auto; justify-content:center; text-align:center; }
 

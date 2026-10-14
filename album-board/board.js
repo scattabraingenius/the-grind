@@ -3,6 +3,24 @@
 const AUDIO_BOARD = window.BOARD_KIND === "audio";
 const BOARD_NAME = AUDIO_BOARD ? "Audio Board" : "Lyric Board";
 const KEY = AUDIO_BOARD ? "grind.audio.v1" : "grind.album.v1";
+// Keep the planner's navigation context when inspecting a take or its lyrics.
+const plannerReturn = new URLSearchParams(location.search).get("returnTo");
+if (plannerReturn) {
+  try {
+    const destination = new URL(plannerReturn, location.href);
+    const plannerPath = new URL("../audio-board/album/", location.href).pathname;
+    const link = document.getElementById("returnToPlanner");
+    if (link && destination.origin === location.origin && destination.pathname === plannerPath) {
+      link.href = destination.pathname + destination.search;
+      link.hidden = false;
+      link.onclick = e => {
+        if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && document.referrer && new URL(document.referrer).origin === location.origin && new URL(document.referrer).pathname === plannerPath && history.length > 1) {
+          e.preventDefault(); history.back();
+        }
+      };
+    }
+  } catch (err) { /* Ignore invalid return routes. */ }
+}
 let installPrompt = null;
 window.addEventListener('beforeinstallprompt', event => {
   event.preventDefault(); installPrompt = event;

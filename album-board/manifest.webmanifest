@@ -4,7 +4,7 @@
   "short_name": "Lyric Board",
   "description": "Scatta's lyric versions, writing sessions, scores and tracklist.",
   "start_url": "./",
-  "scope": "./",
+  "scope": "../",
   "display": "standalone",
   "background_color": "#0C0812",
   "theme_color": "#0C0812",
