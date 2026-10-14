@@ -87,7 +87,7 @@ window.addEventListener("popstate", e => {
 });
 
 // ---------- helpers ----------
-const take = stem => TAKES[stem] || {stem, title:"Suno " + stem.slice(0, 8), baseTitle:"Not in catalogue", missing:true, writer:"", duration:0, createdAt:""};
+const take = stem => TAKES[stem] || window.ALBUM_TRASHED_TAKES?.[stem] || {stem, title:"Suno " + stem.slice(0, 8), baseTitle:"Not in catalogue", missing:true, writer:"", duration:0, createdAt:""};
 const item = stem => state.considered[stem] || {};
 const live = () => Object.keys(state.considered).filter(s => !item(s).delDone);   // deleted on Suno = gone from the plan
 const album = () => state.albums[ui.album];
