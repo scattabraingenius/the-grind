@@ -147,6 +147,20 @@ const pass = m => console.log('PASS ' + m);
     await popup.waitForLoadState().catch(() => {}); assert(blocked.some(u => u === 'https://suno.com/song/' + s0), 'opened the take on Suno'); await popup.close();
     pass('Space opens the focused take on Suno');
 
+    // --- Desktop: every Play reuses one player tab, so the last take stops when the next one loads ---
+    const playLinks = page.locator('#considerList .card:not(.leaving) a[data-play]');
+    const idOf = async i => (await playLinks.nth(i).getAttribute('href')).split('/').pop();
+    const pagesBefore = context.pages().length;
+    const [player] = await Promise.all([context.waitForEvent('page'), playLinks.nth(0).click()]);
+    await player.waitForLoadState().catch(() => {});
+    assert.equal(context.pages().length, pagesBefore + 1, 'first Play opens the player tab');
+    await playLinks.nth(1).click(); await page.waitForTimeout(400);
+    await playLinks.nth(2).click(); await page.waitForTimeout(400);
+    assert.equal(context.pages().length, pagesBefore + 1, 'later Plays reuse it instead of opening more tabs');
+    for (const i of [0, 1, 2]) assert(blocked.includes('https://suno.com/song/' + await idOf(i)), 'take ' + i + ' was loaded into the player tab');
+    await player.close();
+    pass('Play reuses one desktop player tab');
+
     // --- Album guardrails ---
     assert.match(await page.textContent('#targetStats'), /17\/12 tracks · 5 over target/);
     assert.equal(await page.locator('#targetStats .tstat.bad').count(), 1, '5 over a 12-track target is red');

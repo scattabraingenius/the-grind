@@ -140,6 +140,17 @@ const longDur = s => { s = Math.round(s); const h = Math.floor(s / 3600), m = Ma
 const lyricSearch = title => String(title || "").replace(/^[A-Z]-\s+/, "").replace(/(\s+(v\d+|\d+|misc|-\s*\w+))+$/i, "").trim();
 const lyricHref = stem => { const t = take(stem); return t.lyricSlug && t.lyricStem ? `../../album-board/?song=${encodeURIComponent(t.lyricSlug)}&version=${encodeURIComponent(t.lyricStem)}` : `../../album-board/?q=${encodeURIComponent(lyricSearch(t.baseTitle))}`; };
 const suno = stem => "https://suno.com/song/" + encodeURIComponent(stem);
+// Desktop: every Play opens in one reused "player" tab, so the previous take stops when the next one loads.
+// The tab is not opened "noopener" on purpose: a browser can only find a named tab it is still linked to.
+// Phones keep the plain link (the Suno app or the browser handles it, and it streams there).
+const desktopPlayer = () => matchMedia("(hover: hover) and (pointer: fine)").matches;
+function playOnSuno(stem) {
+  const url = suno(stem);
+  if (!desktopPlayer()) { window.open(url, "_blank", "noopener"); return; }
+  const w = window.open("", "sunoPlayer");   // same name = same tab; a new blank tab the first time
+  if (!w) { window.open(url, "_blank", "noopener"); return; }
+  w.location.href = url; w.focus();
+}
 function boardHref(href) {
   const url = new URL(href, location.href);
   url.searchParams.set("returnTo", location.pathname + location.search);
@@ -294,7 +305,7 @@ function card(stem, opts = {}) {
       ${seg("maybe", "Maybe")}${seg("short", "Shortlist")}${opts.sortMode ? "" : seg("on", (st === "on" ? "✓ On " : "+ ") + esc(shortName(a)))}<span class="seg-gap"></span>${seg("cut", "Cut")}
     </div>
     <div class="media-row">
-      <a class="btn small" href="${suno(stem)}" target="_blank" rel="noopener">▶ Suno</a>
+      <a class="btn small" data-play href="${suno(stem)}" target="_blank" rel="noopener">▶ Suno</a>
       <button class="btn small" type="button" data-act="lyrics" aria-expanded="${open}">Lyrics ${open ? "▾" : "▸"}</button>
       <a class="btn small" href="${esc(boardHref(`../classic.html?take=${encodeURIComponent(stem)}`))}" title="Full detail view: voice persona, source takes, Suno fields">Details</a>
       <button class="btn small danger" type="button" data-act="delete" aria-pressed="${del}" title="${del ? "Remove the delete tag" : "Tag this take to delete on Suno"}">${del ? "Undelete" : "Delete"}</button>
@@ -583,7 +594,7 @@ function renderAlbums() {
     return `<li class="track${twin ? " twin" : ""}" draggable="true" data-stem="${esc(stem)}"><span class="grip" aria-hidden="true">⋮⋮</span><span class="n">${i + 1}</span>
       <input class="score-in ${scoreClass(r.score)}" type="number" min="0" max="100" inputmode="numeric" value="${r.score ?? ""}" placeholder="–" aria-label="Score">
       <div class="t"><b>${nameHtml(stem)}</b>${twin ? ` <span class="badge warn">⚠ same song twice</span>` : ""}<small>${esc(takeLabel(t))}${r.note ? " · " + esc(r.note.slice(0, 80)) : ""}</small></div>
-      <div class="ctl"><a class="btn small" href="${suno(stem)}" target="_blank" rel="noopener" aria-label="Play on Suno">▶</a><button class="btn small" data-move="-1" aria-label="Move up">↑</button><button class="btn small" data-move="1" aria-label="Move down">↓</button>
+      <div class="ctl"><a class="btn small" data-play href="${suno(stem)}" target="_blank" rel="noopener" aria-label="Play on Suno">▶</a><button class="btn small" data-move="-1" aria-label="Move up">↑</button><button class="btn small" data-move="1" aria-label="Move down">↓</button>
       ${others.length ? `<select class="add-to" aria-label="Move to another album"><option value="">Move to…</option>${others.map(([id, o]) => `<option value="${esc(id)}">${esc(o.name)}</option>`).join("")}</select>` : ""}
       <button class="btn small" data-unplace aria-label="Take off this album">✕</button></div></li>`;
   }).join("") : `<li class="empty-note">No tracks yet. Use <b>+ ${esc(shortName(a))}</b> on any take, or place from below.</li>`;
@@ -733,6 +744,12 @@ function closeMenus(except = null) {
   document.querySelectorAll(".menu:not(.hidden)").forEach(m => { if (m === except) return; m.classList.add("hidden"); m.parentElement.querySelector("[data-act=menu]")?.setAttribute("aria-expanded", "false"); });
 }
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeMenus(); });
+// A plain click on a Play link reuses the player tab on desktop; ctrl/shift/middle-click still open a new tab.
+document.addEventListener("click", e => {
+  const a = e.target.closest?.("a[data-play]");
+  if (!a || e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || !desktopPlayer()) return;
+  e.preventDefault(); playOnSuno(new URL(a.href).pathname.split("/").pop());
+});
 // Every take control works the same wherever the card appears.
 document.addEventListener("click", e => {
   const menuBtn = e.target.closest(".card [data-act=menu]");
@@ -817,7 +834,7 @@ document.addEventListener("keydown", e => {
   if (!at) { if (cards[0] && !e.target.closest("button, a, summary")) { e.preventDefault(); focusCard(cards[0]); } return; }   // first key press shows which card the keys act on
   const stem = at.dataset.stem;
   if (acts[key]) { e.preventDefault(); setStatus(stem, acts[key]); return; }
-  if (!e.target.closest("button, a, summary")) { e.preventDefault(); window.open(suno(stem), "_blank", "noopener"); }
+  if (!e.target.closest("button, a, summary")) { e.preventDefault(); playOnSuno(stem); }
 });
 $("keysClose").onclick = () => $("keysDialog").close();
 
