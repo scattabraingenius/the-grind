@@ -115,7 +115,7 @@ const pass = m => console.log('PASS ' + m);
     // Delete tag -> cleanup list -> done removes it from the planner.
     const s5 = await page.locator('#considerList .card').nth(5).getAttribute('data-stem');
     await page.locator(`.card[data-stem="${s5}"] [data-act="menu"]`).click();
-    await page.locator(`.card[data-stem="${s5}"] [data-menu="delete"]`).click(); await page.waitForTimeout(450);
+    await page.locator(`.card[data-stem="${s5}"] [data-act="delete"]`).click(); await page.waitForTimeout(450);
     assert.equal(await page.locator(`.card[data-stem="${s5}"]`).count(), 0, 'tagged take leaves the buckets');
     await page.click('#tabCleanup');
     assert.equal(await page.locator('.clean-row').count(), 2, 'one delete + one rename');

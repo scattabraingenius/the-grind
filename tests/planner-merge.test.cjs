@@ -49,7 +49,7 @@ const withLyrics=vocals.find(s=>s.versions[0].lyrics);
     await mine.locator('[data-act="rename"]').click();
     assert.match(await mine.locator('.t b').textContent(),/Planner nickname/);
     await mine.locator('[data-act="menu"]').click();
-    await mine.locator('[data-menu="delete"]').click();
+    await mine.locator('[data-act="delete"]').click();
     await page.waitForTimeout(450);
     assert.equal(await page.locator(`.card[data-stem="${target}"]`).count(),0,'a delete-tagged take leaves the buckets');
     await page.click('#tabCleanup');

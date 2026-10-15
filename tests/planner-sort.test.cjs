@@ -53,7 +53,7 @@ const SONGS=ctx.window.ALBUM_SONGS,count=type=>SONGS.filter(s=>kind(s)===type).l
     await chip('todo').click();
     const third=await cards.nth(0).getAttribute('data-stem');
     await cards.nth(0).locator('[data-act="menu"]').click();
-    await cards.nth(0).locator('[data-menu="delete"]').click();
+    await cards.nth(0).locator('[data-act="delete"]').click();
     await page.waitForTimeout(450);
     assert.equal(await page.locator(`#sortList .card[data-stem="${third}"]`).count(),0);
     assert.equal((await plan()).considered[third].del,true);

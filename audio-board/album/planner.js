@@ -297,13 +297,13 @@ function card(stem, opts = {}) {
       <a class="btn small" href="${suno(stem)}" target="_blank" rel="noopener">▶ Suno</a>
       <button class="btn small" type="button" data-act="lyrics" aria-expanded="${open}">Lyrics ${open ? "▾" : "▸"}</button>
       <a class="btn small" href="${esc(boardHref(`../classic.html?take=${encodeURIComponent(stem)}`))}" title="Full detail view: voice persona, source takes, Suno fields">Details</a>
+      <button class="btn small danger" type="button" data-act="delete" aria-pressed="${del}" title="${del ? "Remove the delete tag" : "Tag this take to delete on Suno"}">${del ? "Undelete" : "Delete"}</button>
       <span class="more">
         <button class="icon-btn more-btn" type="button" data-act="menu" aria-haspopup="menu" aria-expanded="false" aria-label="More actions for ${esc(name)}">⋯</button>
         <div class="menu hidden" role="menu">
           ${others.map(([id, o]) => `<button role="menuitem" data-menu="addto" data-album="${esc(id)}">Add to ${esc(o.name)}${o.order.includes(stem) ? " ✓" : ""}</button>`).join("")}
           <button role="menuitem" data-menu="addto" data-album="__new">Add to new album…</button>
           ${opts.inSession ? "" : `<button role="menuitem" data-menu="compare">Compare</button>`}
-          <button role="menuitem" class="danger" data-menu="delete">${del ? "Undelete" : "Delete"}</button>
         </div>
       </span>
     </div>
@@ -701,6 +701,10 @@ function openCompare(stem) {
 
 // ---------- events ----------
 document.querySelector(".tabs").onclick = e => { const b = e.target.closest("[data-view]"); if (!b) return; ui.view = b.dataset.view; saveView(); render(); };
+$("renameAlbum").onclick = () => {
+  const a = album(), name = prompt("Rename this album", a.name);
+  if (name?.trim() && name.trim() !== a.name) { a.name = name.trim(); save(); toast("Album renamed"); }
+};
 $("targetAlbum").onchange = e => {
   if (e.target.value === "__new") { const id = newAlbum(); if (id) { ui.album = id; saveView(); save(); } else render(); return; }
   ui.album = e.target.value; saveView(); render();
@@ -724,7 +728,7 @@ $("clearOnly").onclick = () => { ui.only = null; history.replaceState(history.st
 $("toastUndo").onclick = undo;
 function gotoSession(id) { ui.view = "sessions"; ui.session = id; saveView(); render(); if (innerWidth < 820) $("sessionDetail").scrollIntoView(); }
 
-// The ⋯ menu: Add to…, Compare, Delete.
+// The ⋯ menu: Add to…, Compare.
 function closeMenus(except = null) {
   document.querySelectorAll(".menu:not(.hidden)").forEach(m => { if (m === except) return; m.classList.add("hidden"); m.parentElement.querySelector("[data-act=menu]")?.setAttribute("aria-expanded", "false"); });
 }
@@ -748,6 +752,7 @@ document.addEventListener("click", e => {
   const b = e.target.closest(".card [data-act]"); if (!b) return;
   const stem = b.closest("[data-stem]").dataset.stem, act = b.dataset.act;
   if (act === "rename") rename(stem);
+  if (act === "delete") toggleDelete(stem);
   if (act === "lyrics") {
     const body = b.closest(".card").querySelector(".lyrics-body"), open = body.hidden;
     body.hidden = !open; b.setAttribute("aria-expanded", open); b.textContent = "Lyrics " + (open ? "▾" : "▸");

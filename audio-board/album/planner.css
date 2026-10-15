@@ -270,3 +270,7 @@ table.log th, table.log td { text-align:left; border-bottom:1px solid var(--line
   .status-seg .seg { padding:8px 4px; }
 }
 @media (max-width:420px) { .status-seg .seg-gap { flex:0 0 6px; } .status-seg .seg { font-size:12px; } }
+
+.media-row > .btn.danger[data-act="delete"] { margin-left:auto; }
+.media-row > .btn.danger[data-act="delete"] + .more { margin-left:0; }
+.btn.danger[aria-pressed="true"] { background:var(--alarm); border-color:var(--alarm); color:#fff; }
