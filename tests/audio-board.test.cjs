@@ -48,7 +48,7 @@ const wait=async fn=>{for(let i=0;i<120;i++){if(await fn())return;await new Prom
     Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.__copied=text;}}});
    },lyricSeed);
    const page=await context.newPage();pages.push(page);page.on('pageerror',e=>errors.push(e.message));
-   await page.goto(BASE+'/audio-board/',{waitUntil:'networkidle'});
+   await page.goto(BASE+'/audio-board/classic.html',{waitUntil:'networkidle'});
    await wait(()=>page.locator('#syncStatus').textContent().then(t=>t.startsWith('Synced')));
    return {page,context};
   }
@@ -78,7 +78,7 @@ const wait=async fn=>{for(let i=0;i<120;i++){if(await fn())return;await new Prom
   console.log('PASS Each audio take has independent scores, notes and tracklist membership, synced across two devices');
   assert.deepEqual(server.get(LYRIC),lyricCloud);
   assert(writes.every(target=>target===AUDIO));
-  await phone.page.goto(new URL(lyricHref,BASE+'/audio-board/').href,{waitUntil:'networkidle'});
+  await phone.page.goto(new URL(lyricHref,BASE+'/audio-board/classic.html').href,{waitUntil:'networkidle'});
   assert.equal(await phone.page.locator('h1').textContent(),'Lyric Board');
   assert.equal(await phone.page.locator('#detail').getAttribute('data-stem'),first.versions[0].lyricStem);
   await wait(()=>phone.page.locator('#syncStatus').textContent().then(t=>t.startsWith('Synced')));
@@ -87,7 +87,7 @@ const wait=async fn=>{for(let i=0;i<120;i++){if(await fn())return;await new Prom
   assert.equal(await phone.page.locator('#note').inputValue(),'Existing lyric score');
   assert.equal(await phone.page.locator('#albumToggle').textContent(),'Remove from album');
   console.log('PASS Lyric scores and tracklist stay intact; matched audio opens the exact lyric packet');
-  await phone.page.goto(BASE+'/audio-board/?lyrics='+encodeURIComponent(first.versions[0].lyricStem),{waitUntil:'networkidle'});
+  await phone.page.goto(BASE+'/audio-board/classic.html?lyrics='+encodeURIComponent(first.versions[0].lyricStem),{waitUntil:'networkidle'});
   const linked=await phone.page.locator('#list .row').count();assert(linked>=2 && linked<15);
   await phone.page.locator('#clearLinkedLyrics').click();
   assert.equal(await phone.page.locator('#list .row').count(),songs.length);

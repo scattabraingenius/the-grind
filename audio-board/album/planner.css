@@ -137,3 +137,8 @@ dialog textarea { min-height:70px; }
 .session-sort { margin:4px 0 8px; } .session-sort .meta { margin:0; font-size:12px; }
 .link-row { display:flex; gap:4px; flex-wrap:wrap; }
 .link-row .btn { flex:1 1 auto; text-align:center; justify-content:center; }
+
+details.card-lyrics summary { cursor:pointer; color:var(--muted); font-size:13px; }
+details.card-lyrics pre.lyrics { margin-top:8px; max-height:360px; overflow:auto; font-size:13.5px; }
+details.card-lyrics p.meta { margin:6px 0 0; font-size:12px; }
+.tools #groupBy, .tools #typeFilter { max-width:100%; }

@@ -4,10 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0C0812">
-<title>Album Planner</title>
+<title>Audio Board</title>
 <link rel="icon" type="image/png" sizes="32x32" href="../icons/audio-cassette-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="../icons/audio-cassette-180.png">
-<meta name="application-name" content="Album Planner">
+<meta name="application-name" content="Audio Board">
+<link rel="manifest" href="../manifest.webmanifest">
 <link rel="stylesheet" href="../../album-board/board.css">
 <link rel="stylesheet" href="planner.css">
 </head>
@@ -16,7 +17,7 @@
   <header class="top">
     <div>
       <div class="eyebrow">The Grind · Album</div>
-      <h1>Album Planner</h1>
+      <h1>Audio Board</h1>
       <div class="meta" id="summary"></div>
     </div>
     <div><a href="../../">← The Grind</a></div>
@@ -30,7 +31,7 @@
     <button class="btn small" id="retrySyncBtn" hidden>Retry sync</button>
   </div>
 
-  <nav class="board-switch" aria-label="Boards"><a class="btn small" href="../../album-board/">Lyric Board</a><a class="btn small" href="../">Audio Board</a><a class="btn small primary" href="./" aria-current="page">Album Planner</a></nav>
+  <nav class="board-switch" aria-label="Boards"><a class="btn small" href="../../album-board/">Lyric Board</a><a class="btn small primary" href="./?scope=all" aria-current="page">Audio Board</a><a class="btn small" href="../classic.html">Classic view</a></nav>
 
   <!-- The album every "Add to album" button targets. Cut is per this album. -->
   <div class="target-bar" id="targetBar">
@@ -51,8 +52,12 @@
       <input type="search" id="q" aria-label="Search considered takes" placeholder="Search titles, writers, notes, lyrics" autocomplete="off">
       <select id="sort" aria-label="Sort"></select>
       <button class="btn small" type="button" id="sortDir">↑ Asc</button>
-      <button class="btn small" type="button" id="groupToggle" aria-pressed="true">Group by song</button>
+      <button class="btn small" type="button" id="groupToggle" aria-pressed="true">Group</button>
+      <select id="groupBy" aria-label="Group by"></select>
+      <select id="typeFilter" aria-label="Recording type"></select>
     </div>
+    <div class="chips" id="scopeChips" aria-label="Which takes"></div>
+    <p class="meta hidden" id="onlyBanner"><span id="onlyText"></span> <button class="btn small" id="clearOnly">Show all takes</button></p>
     <div class="chips" id="filterChips" aria-label="Show"></div>
     <div class="scope-tools">
       <button class="btn small primary" id="importOpen">+ Add takes</button>

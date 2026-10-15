@@ -19,7 +19,7 @@ const wav=Buffer.alloc(44+16000*2*10);wav.write('RIFF');wav.writeUInt32LE(wav.le
    if(url.endsWith('/audio-board/tracks.js'))return route.fulfill({contentType:'application/javascript',body:catalogue});
    return new URL(url).origin===new URL(BASE).origin?route.continue():route.abort();
   });
-  const page=await context.newPage();await page.goto(BASE+'/audio-board/',{waitUntil:'networkidle'});
+  const page=await context.newPage();await page.goto(BASE+'/audio-board/classic.html',{waitUntil:'networkidle'});
   await page.locator(`.row[data-slug="${song.slug}"]`).click();
   await page.locator('audio').evaluate(async audio=>{window.__player=audio;await audio.play();});
   await page.waitForTimeout(200);

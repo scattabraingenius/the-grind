@@ -64,11 +64,12 @@ function undo() { if (!undoSnap) return; Object.assign(state, clone(undoSnap)); 
 
 // ---------- view prefs ----------
 let viewPrefs = {}; try { viewPrefs = JSON.parse(localStorage.getItem(KEY + ".view")) || {}; } catch (err) {}
-const ui = {view:["consider","sessions","albums","cleanup"].includes(viewPrefs.view) ? viewPrefs.view : "consider", q:"", sort:viewPrefs.sort || "title", dir:viewPrefs.dir || "", group:viewPrefs.group !== false, filter:viewPrefs.filter || "contenders", session:viewPrefs.session || "", album:viewPrefs.album || "debut", ssort:viewPrefs.ssort || "score", sdir:viewPrefs.sdir || ""};
+const GROUP_BYS = [["song", "Group by song"], ["album", "Group by album"], ["status", "Group by status"], ["writer", "Group by writer"]];
+const ui = {view:["consider","sessions","albums","cleanup"].includes(viewPrefs.view) ? viewPrefs.view : "consider", q:"", sort:viewPrefs.sort || "title", dir:viewPrefs.dir || "", group:viewPrefs.group !== false, groupBy:GROUP_BYS.some(([k]) => k === viewPrefs.groupBy) ? viewPrefs.groupBy : "song", scope:viewPrefs.scope === "all" ? "all" : "considered", type:["Vocal", "Instrumental", "Stem", "all"].includes(viewPrefs.type) ? viewPrefs.type : "Vocal", only:null, lyricsOpen:new Set(), filter:viewPrefs.filter || "contenders", session:viewPrefs.session || "", album:viewPrefs.album || "debut", ssort:viewPrefs.ssort || "score", sdir:viewPrefs.sdir || ""};
 let restoringNavigation = false;
 const navigation = () => ({view:ui.view, session:ui.session, album:ui.album});
 function saveView() {
-  try { localStorage.setItem(KEY + ".view", JSON.stringify({...ui, q:undefined})); } catch (err) {}
+  try { localStorage.setItem(KEY + ".view", JSON.stringify({...ui, q:undefined, only:undefined, lyricsOpen:undefined})); } catch (err) {}
   if (!restoringNavigation && JSON.stringify(history.state?.plannerNavigation) !== JSON.stringify(navigation())) {
     const url = new URL(location.href);
     for (const [key, value] of Object.entries(navigation())) value ? url.searchParams.set(key, value) : url.searchParams.delete(key);
@@ -79,6 +80,11 @@ const route = new URLSearchParams(location.search);
 if (["consider", "sessions", "albums", "cleanup"].includes(route.get("view"))) ui.view = route.get("view");
 if (route.has("session")) ui.session = route.get("session");
 if (route.has("album")) ui.album = route.get("album");
+// Links from Lyric Board and Audio Board: ?scope=all, ?take=<uuid>, ?lyrics=<lyric version>, ?q=<search>.
+if (route.get("scope") === "all") ui.scope = "all";
+if (route.has("take")) { ui.only = {take:route.get("take")}; ui.scope = "all"; }
+else if (route.has("lyrics")) { ui.only = {lyrics:route.get("lyrics")}; ui.scope = "all"; }
+if (route.has("q")) ui.q = route.get("q").trim();
 history.replaceState({...history.state, plannerNavigation:navigation()}, "");
 window.addEventListener("popstate", e => {
   if (!e.state?.plannerNavigation) return;
@@ -96,6 +102,11 @@ const isCut = (stem, id = ui.album) => !!state.albums[id]?.cut?.includes(stem) |
 const tagged = stem => !!item(stem).del && !item(stem).delDone;
 const eligible = stem => !item(stem).delDone && !isCut(stem) && !tagged(stem);
 const albumOf = stem => Object.entries(state.albums).find(([, a]) => a.order.includes(stem));
+const catalog = () => Object.keys(TAKES).filter(s => !item(s).delDone);
+const pool = () => ui.scope === "all" ? [...new Set([...catalog(), ...live()])] : live();
+const ensure = stem => { if (!state.considered[stem]) state.considered[stem] = {added:Date.now()}; return state.considered[stem]; };
+const lyricHtml = text => esc(text).replace(/^(\[[^\]\n]+\])/gm, '<span class="tag">$1</span>');
+const voiceText = t => t.voiceName ? (t.type === "Vocal" && t.personalVoice ? "Your voice · " : t.type === "Vocal" ? "Voice persona · " : "Persona setting · ") + t.voiceName : "";
 const sessionsOf = stem => Object.entries(state.sessions).filter(([, s]) => s.members.includes(stem));
 const shortName = a => a.name.split(" ·")[0];
 function nameOf(stem) { const i = item(stem); return i.name || take(stem).title; }
@@ -114,7 +125,7 @@ function boardHref(href) {
   return url.pathname + url.search;
 }
 const scoreClass = n => n == null ? "" : n >= 80 ? "hi" : n >= 50 ? "mid" : "";
-function takeLabel(t) { return [t.type && t.type !== "Vocal" ? t.type : "", t.writer && t.writer !== "Unknown" ? t.writer : "", t.packetVersion ? "lyrics v" + t.packetVersion : "", t.take ? "take " + t.take : "", t.duration ? dur(t.duration) : ""].filter(Boolean).join(" · "); }
+function takeLabel(t) { return [t.type && t.type !== "Vocal" ? t.type : "", t.writer && t.writer !== "Unknown" ? t.writer : "", t.packetVersion ? "lyrics v" + t.packetVersion : "", t.take ? "take " + t.take : "", t.duration ? dur(t.duration) : "", voiceText(t)].filter(Boolean).join(" · "); }
 let toastTimer;
 function toast(msg, withUndo = false) {
   $("toastText").textContent = msg; $("toastUndo").classList.toggle("hidden", !withUndo);
@@ -143,12 +154,13 @@ function placeOnAlbum(stem, albumId) {
   save(); toast(`${nameOf(stem)} → ${target.name} #${target.order.length}`);
 }
 function toggleOnAlbum(stem) {
+  ensure(stem);
   const a = album();
   if (a.order.includes(stem)) { a.order = a.order.filter(m => m !== stem); save(); toast("Taken off " + a.name); }
   else placeOnAlbum(stem, ui.album);
 }
 function toggleCut(stem) {
-  const a = album(); snapshot();
+  const a = album(); snapshot(); ensure(stem);
   if (isCut(stem)) {
     a.cut = a.cut.filter(m => m !== stem);
     if (audioCut(stem)) setRating(stem, {status:null});
@@ -158,13 +170,13 @@ function toggleCut(stem) {
   save(); toast(`Cut from ${a.name}`, true);
 }
 function toggleDelete(stem) {
-  const i = state.considered[stem]; snapshot();
+  const i = ensure(stem); snapshot();
   if (i.del) { delete i.del; save(); toast("Delete tag removed"); return; }
   i.del = true; for (const a of Object.values(state.albums)) a.order = a.order.filter(m => m !== stem);
   save(); toast("Tagged to delete on Suno. It's on the Suno cleanup list.", true);
 }
 function rename(stem) {
-  const i = state.considered[stem], t = take(stem);
+  const i = ensure(stem), t = take(stem);
   const next = prompt(`Rename "${t.title}" in the planner.\nThe Suno title stays in brackets until you mark it renamed. Leave empty to undo.`, i.name || t.title);
   if (next == null) return;
   const v = next.trim();
@@ -190,7 +202,7 @@ function card(stem, opts = {}) {
     ...(opts.inSession ? [] : sessionsOf(stem).map(([id, s]) => `<button class="badge link" data-goto-session="${esc(id)}">${esc(s.name)}</button>`)),
     t.missing ? `<span class="badge cut">not in snapshot</span>` : "",
   ].join("");
-  const onThis = a.order.includes(stem);
+  const onThis = a.order.includes(stem), lyrics = (t.suno?.lyrics ?? t.lyrics) || "";
   return `<article class="card${cut ? " is-cut" : ""}${del ? " is-del" : ""}${onThis ? " on-album" : ""}" data-stem="${esc(stem)}">
     <div class="card-top">
       <input class="score-in ${scoreClass(r.score)}" type="number" min="0" max="100" step="1" inputmode="numeric" value="${r.score ?? ""}" placeholder="–" aria-label="Score for ${esc(nameOf(stem))}, 0 to 100">
@@ -206,8 +218,9 @@ function card(stem, opts = {}) {
     <div class="link-row">
       <a class="btn small" href="${suno(stem)}" target="_blank" rel="noopener">▶ Suno</a>
       <a class="btn small" href="${esc(boardHref(lyricHref(stem)))}" title="${t.lyricStem ? "Open the matching lyric version" : "No exact lyric match; searches Lyric Board for this song"}">${t.lyricStem ? "Lyrics" : "Find lyrics"}</a>
-      <a class="btn small" href="${esc(boardHref(`../?take=${encodeURIComponent(stem)}`))}">Audio Board</a>
+      <a class="btn small" href="${esc(boardHref(`../classic.html?take=${encodeURIComponent(stem)}`))}" title="Full detail view: voice persona, source takes, Suno fields">Details</a>
     </div>
+    <details class="card-lyrics" data-lyr="${esc(stem)}"${ui.lyricsOpen.has(stem) ? " open" : ""}><summary>Lyrics${lyrics ? "" : " (none in Suno data)"}</summary>${lyrics ? `<pre class="lyrics">${lyricHtml(lyrics)}</pre>` : `<p class="meta">Suno has no lyrics saved for this take. ${t.lyricStem ? "The Lyrics button opens the matching lyric version." : ""}</p>`}</details>
     <textarea class="note" rows="1" placeholder="Notes" aria-label="Notes for ${esc(nameOf(stem))}">${esc(r.note || "")}</textarea>
     <div class="card-actions">
       <button class="btn small ${onThis ? "primary" : ""}" data-act="add" aria-pressed="${onThis}">${onThis ? "✓ On " : "+ "}${esc(shortName(a))}</button>
@@ -221,7 +234,7 @@ function card(stem, opts = {}) {
 
 // ---------- render ----------
 let pendingRender = false;
-const editing = () => document.activeElement?.matches?.(".score-in, .note, #sessionNote, .title-edit, #albumTarget, select");
+const editing = () => document.activeElement?.matches?.(".score-in, .note, #sessionNote, .title-edit, #albumTarget, select, summary");
 // Replace a dropdown's options only when they actually change.
 function setOptions(el, html) { if (el.dataset.html !== html) { el.innerHTML = html; el.dataset.html = html; } }
 function requestRender() { if (editing()) pendingRender = true; else render(); }
@@ -297,20 +310,29 @@ function renderConsider() {
   setOptions($("sort"), sortOptions()); $("sort").value = ui.sort;
   $("sortDir").textContent = dirLabel(sortDir()); $("sortDir").setAttribute("aria-label", "Sort direction " + (sortDir() === "desc" ? "descending" : "ascending"));
   $("groupToggle").setAttribute("aria-pressed", ui.group);
-  const all = live(), fs = filters();
+  setOptions($("groupBy"), GROUP_BYS.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")); $("groupBy").value = ui.groupBy; $("groupBy").disabled = !ui.group;
+  $("scopeChips").innerHTML = [["considered", `Considered (${live().length})`], ["all", `All takes (${catalog().length})`]].map(([k, l]) => `<button class="chip" data-scope="${k}" aria-pressed="${ui.scope === k}">${l}</button>`).join("");
+  setOptions($("typeFilter"), [["Vocal", "Vocals"], ["Instrumental", "Instrumentals"], ["Stem", "Stems"], ["all", "All types"]].map(([k, l]) => `<option value="${k}">${l}</option>`).join("")); $("typeFilter").value = ui.type;
+  $("typeFilter").classList.toggle("hidden", ui.scope !== "all");
+  $("onlyBanner").classList.toggle("hidden", !ui.only);
+  if (ui.only) $("onlyText").textContent = ui.only.take ? "Showing one take." : "Showing the takes for one lyric version.";
+  const typeOk = s => ui.scope !== "all" || ui.type === "all" || (take(s).type || "Vocal") === ui.type;
+  const all = pool().filter(typeOk), fs = filters();
   if (!fs.some(([k]) => k === ui.filter)) ui.filter = "contenders";
   $("filterChips").innerHTML = fs.map(([k, l, f]) => `<button class="chip" data-f="${k}" aria-pressed="${ui.filter === k}">${esc(l)} <small>${all.filter(f).length}</small></button>`).join("");
-  const test = fs.find(([k]) => k === ui.filter)[2];
-  const stems = sortStems(all.filter(s => test(s) && matchesQuery(s)));
+  const onlyOk = s => !ui.only || (ui.only.take ? s === ui.only.take : take(s).lyricStem === ui.only.lyrics);
+  const test = ui.only ? () => true : fs.find(([k]) => k === ui.filter)[2];
+  const stems = sortStems(pool().filter(s => (ui.only || typeOk(s)) && onlyOk(s) && test(s) && matchesQuery(s)));
   const box = $("considerList");
   if (!all.length) { box.innerHTML = `<div class="empty-note big"><b>Nothing considered yet.</b><br>Use <b>+ Add takes</b> to pull in the Audio Board session holding your album candidates, paste Suno links, or search the catalogue.</div>`; return; }
   if (!stems.length) { box.innerHTML = `<p class="empty-note">No takes match.</p>`; return; }
   if (!ui.group) { box.innerHTML = `<div class="cards">${stems.map(s => card(s)).join("")}</div>`; return; }
   const groups = new Map();
-  for (const s of stems) { const g = take(s).baseTitle; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(s); }
+  const keyOf = s => ui.groupBy === "album" ? (albumOf(s)?.[1].name || "Not on an album") : ui.groupBy === "status" ? ({short:"Shortlist", maybe:"Maybe", cut:"Cut"}[rating(s).status] || "No status") : ui.groupBy === "writer" ? (take(s).writer && take(s).writer !== "Unknown" ? take(s).writer : "Unknown writer") : take(s).baseTitle;
+  for (const s of stems) { const g = keyOf(s); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(s); }
   box.innerHTML = [...groups].map(([name, list]) => {
-    const inOne = list.length > 1 && Object.entries(state.sessions).find(([, s]) => list.every(m => s.members.includes(m)));
-    return `<section class="group"><header><h3>${esc(name)} <small>${list.length} take${list.length > 1 ? "s" : ""}</small></h3>${list.length > 1 && !inOne ? `<button class="btn small" data-compare-group="${esc(name)}">Compare all ${list.length}</button>` : inOne ? `<button class="btn small" data-goto-session="${esc(inOne[0])}">Open session</button>` : ""}</header><div class="cards">${list.map(s => card(s)).join("")}</div></section>`;
+    const bySong = ui.groupBy === "song", inOne = bySong && list.length > 1 && Object.entries(state.sessions).find(([, s]) => list.every(m => s.members.includes(m)));
+    return `<section class="group"><header><h3>${esc(name)} <small>${list.length} take${list.length > 1 ? "s" : ""}</small></h3>${!bySong ? "" : list.length > 1 && !inOne ? `<button class="btn small" data-compare-group="${esc(name)}">Compare all ${list.length}</button>` : inOne ? `<button class="btn small" data-goto-session="${esc(inOne[0])}">Open session</button>` : ""}</header><div class="cards">${list.map(s => card(s)).join("")}</div></section>`;
   }).join("");
 }
 
@@ -457,6 +479,12 @@ $("q").oninput = e => { ui.q = e.target.value.trim(); renderConsider(); };
 $("sort").onchange = e => { ui.sort = e.target.value; ui.dir = ""; saveView(); renderConsider(); };
 $("sortDir").onclick = () => { ui.dir = sortDir() === "desc" ? "asc" : "desc"; saveView(); renderConsider(); };
 $("groupToggle").onclick = () => { ui.group = !ui.group; saveView(); renderConsider(); };
+$("groupBy").onchange = e => { ui.groupBy = e.target.value; saveView(); renderConsider(); };
+$("typeFilter").onchange = e => { ui.type = e.target.value; saveView(); renderConsider(); };
+$("scopeChips").onclick = e => { const b = e.target.closest("[data-scope]"); if (b) { ui.scope = b.dataset.scope; saveView(); renderConsider(); } };
+$("clearOnly").onclick = () => { ui.only = null; history.replaceState(history.state, "", location.pathname); renderConsider(); };
+// Lyrics dropdowns keep their state through redraws (toggle events do not bubble, so listen while capturing).
+document.addEventListener("toggle", e => { const d = e.target; if (d.matches?.("details.card-lyrics")) { if (d.open) ui.lyricsOpen.add(d.dataset.lyr); else ui.lyricsOpen.delete(d.dataset.lyr); } }, true);
 $("filterChips").onclick = e => { const b = e.target.closest("[data-f]"); if (b) { ui.filter = b.dataset.f; saveView(); renderConsider(); } };
 $("toastUndo").onclick = undo;
 function gotoSession(id) { ui.view = "sessions"; ui.session = id; saveView(); render(); if (innerWidth < 820) $("sessionDetail").scrollIntoView(); }
@@ -515,7 +543,7 @@ document.addEventListener("focusout", e => {
 
 $("considerList").addEventListener("click", e => {
   const g = e.target.closest("[data-compare-group]"); if (!g) return;
-  const stems = live().filter(s => take(s).baseTitle === g.dataset.compareGroup);
+  const stems = pool().filter(s => take(s).baseTitle === g.dataset.compareGroup && !tagged(s));
   const id = newSession(g.dataset.compareGroup, stems); save(); toast("Session started: " + g.dataset.compareGroup); gotoSession(id);
 });
 $("autoGroup").onclick = () => {

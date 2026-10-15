@@ -8,7 +8,7 @@ const BASE=process.env.APP_BASE_URL;
     await context.route('**/*',route=>new URL(route.request().url()).origin===new URL(BASE).origin?route.continue():route.abort());
     const page=await context.newPage(),errors=[];
     page.on('pageerror',error=>errors.push(error.message));
-    await page.goto(BASE+'/audio-board/',{waitUntil:'networkidle'});
+    await page.goto(BASE+'/audio-board/classic.html',{waitUntil:'networkidle'});
     await page.locator('#songFilter').selectOption('Dearly Beloved');
     const rows=page.locator('#list .row');
     await rows.first().click();

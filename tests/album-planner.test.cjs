@@ -40,7 +40,7 @@ const pass = m => console.log('PASS ' + m);
     page.on('dialog', d => d.type() === 'prompt' ? d.accept(promptAnswer) : d.accept());
 
     // Audio Board sort direction.
-    await page.goto(BASE + '/audio-board/');
+    await page.goto(BASE + '/audio-board/classic.html');
     await page.selectOption('#sort', 'title');
     const firstAsc = await page.locator('#list .row b').first().textContent();
     await page.click('#sortDir');
@@ -71,7 +71,7 @@ const pass = m => console.log('PASS ' + m);
     await c0.locator('[data-act="short"]').click();
     await c0.locator('textarea.note').fill('Hook needs a harder landing');
     await c0.locator('textarea.note').blur();
-    await page.goto(BASE + '/audio-board/?take=' + stem0);
+    await page.goto(BASE + '/audio-board/classic.html?take=' + stem0);
     const detail = await page.textContent('#detail');
     assert.equal(await page.inputValue('#scoreNum'), '87'); assert.equal(await page.inputValue('#note'), 'Hook needs a harder landing');
     assert.equal(await page.locator('#detail [data-status="short"][aria-pressed="true"]').count(), 1);
