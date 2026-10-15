@@ -66,11 +66,11 @@ function undo() { if (!undoSnap) return; Object.assign(state, clone(undoSnap)); 
 let viewPrefs = {}; try { viewPrefs = JSON.parse(localStorage.getItem(KEY + ".view")) || {}; } catch (err) {}
 const GROUP_BYS = [["song", "Group by song"], ["album", "Group by album"], ["status", "Group by status"], ["writer", "Group by writer"]];
 const VIEWS = ["sort","consider","sessions","albums","cleanup"];
-const ui = {sortFilter:["todo","later","done"].includes(viewPrefs.sortFilter) ? viewPrefs.sortFilter : "todo", view:VIEWS.includes(viewPrefs.view) ? viewPrefs.view : "consider", q:"", sort:viewPrefs.sort || "title", dir:viewPrefs.dir || "", group:viewPrefs.group !== false, groupBy:GROUP_BYS.some(([k]) => k === viewPrefs.groupBy) ? viewPrefs.groupBy : "song", scope:viewPrefs.scope === "all" ? "all" : "considered", type:["Vocal", "Instrumental", "Stem", "all"].includes(viewPrefs.type) ? viewPrefs.type : "Vocal", only:null, lyricsOpen:new Set(), filter:viewPrefs.filter || "contenders", session:viewPrefs.session || "", album:viewPrefs.album || "debut", ssort:viewPrefs.ssort || "score", sdir:viewPrefs.sdir || ""};
+const ui = {sortFilter:["todo","later","done"].includes(viewPrefs.sortFilter) ? viewPrefs.sortFilter : "todo", view:VIEWS.includes(viewPrefs.view) ? viewPrefs.view : "consider", q:"", sort:viewPrefs.sort || "title", dir:viewPrefs.dir || "", group:viewPrefs.group !== false, groupBy:GROUP_BYS.some(([k]) => k === viewPrefs.groupBy) ? viewPrefs.groupBy : "song", scope:viewPrefs.scope === "all" ? "all" : "considered", type:["Vocal", "Instrumental", "Stem", "all"].includes(viewPrefs.type) ? viewPrefs.type : "Vocal", only:null, song:"", lyricsOpen:new Set(), filter:viewPrefs.filter || "contenders", session:viewPrefs.session || "", album:viewPrefs.album || "debut", ssort:viewPrefs.ssort || "score", sdir:viewPrefs.sdir || ""};
 let restoringNavigation = false;
 const navigation = () => ({view:ui.view, session:ui.session, album:ui.album});
 function saveView() {
-  try { localStorage.setItem(KEY + ".view", JSON.stringify({...ui, q:undefined, only:undefined, lyricsOpen:undefined})); } catch (err) {}
+  try { localStorage.setItem(KEY + ".view", JSON.stringify({...ui, q:undefined, only:undefined, song:undefined, lyricsOpen:undefined})); } catch (err) {}
   if (!restoringNavigation && JSON.stringify(history.state?.plannerNavigation) !== JSON.stringify(navigation())) {
     const url = new URL(location.href);
     for (const [key, value] of Object.entries(navigation())) value ? url.searchParams.set(key, value) : url.searchParams.delete(key);
@@ -310,7 +310,16 @@ function filters() {
     ["all", "Everything", () => true],
   ];
 }
+// One dropdown for both the Sort and Considered lists: pick a song to see only its versions.
+function songOptions() {
+  const counts = new Map();
+  for (const s of pool().filter(typeOk)) { const b = take(s).baseTitle; counts.set(b, (counts.get(b) || 0) + 1); }
+  if (ui.song && !counts.has(ui.song)) counts.set(ui.song, 0);
+  const html = `<option value="">All songs</option>` + [...counts].sort(([a], [b]) => a.localeCompare(b, undefined, {numeric:true})).map(([b, n]) => `<option value="${esc(b)}">${esc(b)} (${n})</option>`).join("");
+  for (const id of ["songFilter", "sortSong"]) { setOptions($(id), html); $(id).value = ui.song; }
+}
 function matchesQuery(stem) {
+  if (ui.song && take(stem).baseTitle !== ui.song) return false;
   if (!ui.q) return true;
   const t = take(stem), q = ui.q.toLowerCase();
   return [nameOf(stem), t.title, t.baseTitle, t.writer, t.lyrics, t.oldTitle, rating(stem).note].some(x => String(x || "").toLowerCase().includes(q));
@@ -346,6 +355,7 @@ function bucket(stem, kind) {
   save(); toast(`${nameOf(stem)} → ${target.name} #${target.order.length}`, true);
 }
 function renderSort() {
+  songOptions();
   const b = sortBuckets(), a = album();
   $("sortQ").value = ui.q;
   setOptions($("sortSort"), sortOptions()); $("sortSort").value = ui.sort;
@@ -360,6 +370,7 @@ function renderSort() {
   document.querySelectorAll("textarea.note").forEach(fit);
 }
 function renderConsider() {
+  songOptions();
   setOptions($("sort"), sortOptions()); $("sort").value = ui.sort;
   $("sortDir").textContent = dirLabel(sortDir()); $("sortDir").setAttribute("aria-label", "Sort direction " + (sortDir() === "desc" ? "descending" : "ascending"));
   $("groupToggle").setAttribute("aria-pressed", ui.group);
@@ -533,6 +544,7 @@ $("sort").onchange = e => { ui.sort = e.target.value; ui.dir = ""; saveView(); r
 $("sortDir").onclick = () => { ui.dir = sortDir() === "desc" ? "asc" : "desc"; saveView(); renderConsider(); };
 $("groupToggle").onclick = () => { ui.group = !ui.group; saveView(); renderConsider(); };
 $("sortChips").onclick = e => { const b = e.target.closest("[data-sf]"); if (b) { ui.sortFilter = b.dataset.sf; saveView(); renderSort(); } };
+$("songFilter").onchange = $("sortSong").onchange = e => { ui.song = e.target.value; render(); };
 $("sortQ").oninput = e => { ui.q = e.target.value.trim(); renderSort(); };
 $("sortSort").onchange = e => { ui.sort = e.target.value; ui.dir = ""; saveView(); renderSort(); };
 $("sortSortDir").onclick = () => { ui.dir = sortDir() === "desc" ? "asc" : "desc"; saveView(); renderSort(); };

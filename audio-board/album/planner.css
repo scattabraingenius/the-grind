@@ -147,3 +147,4 @@ details.card-lyrics p.meta { margin:6px 0 0; font-size:12px; }
 .buckets .btn.primary { background:var(--signal); border-color:var(--signal); color:#fff; }
 .buckets [data-bucket="__later"].primary { background:var(--star); border-color:var(--star); color:#0C0812; }
 .btn[aria-pressed="true"][data-bucket="__delete"] { background:var(--alarm); border-color:var(--alarm); color:#fff; }
+#songFilter, #sortSong { max-width:100%; min-width:0; }

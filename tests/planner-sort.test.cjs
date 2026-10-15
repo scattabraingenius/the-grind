@@ -23,6 +23,14 @@ const SONGS=ctx.window.ALBUM_SONGS,count=type=>SONGS.filter(s=>s.versions[0].typ
     await page.locator('#sortType').selectOption('Vocal');
     checked('Sort starts with every undecided vocal take; instrumentals and stems stay out');
 
+    // Song dropdown: all versions of one song.
+    const byTitle={};for(const t of SONGS.filter(x=>x.versions[0].type==='Vocal'))byTitle[t.baseTitle]=(byTitle[t.baseTitle]||0)+1;
+    const many=Object.entries(byTitle).sort((a,b)=>b[1]-a[1])[0];
+    await page.locator('#sortSong').selectOption({label:`${many[0]} (${many[1]})`});
+    assert.equal(await cards.count(),many[1]);
+    await page.locator('#sortSong').selectOption('');
+    checked('The song dropdown shows every version of one song');
+
     const total=count('Vocal');
     const first=await cards.nth(0).getAttribute('data-stem');
     await cards.nth(0).locator('[data-bucket="debut"]').click();
