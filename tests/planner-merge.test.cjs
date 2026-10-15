@@ -15,8 +15,8 @@ const withLyrics=vocals.find(s=>s.versions[0].lyrics);
     page.on('pageerror',error=>errors.push(error.message));
     page.on('dialog',d=>d.type()==='prompt'?d.accept('Planner nickname'):d.accept());
 
-    await page.goto(BASE+'/audio-board/',{waitUntil:'networkidle'});
-    assert.match(page.url(),/\/audio-board\/album\/\?scope=all/);
+    await page.goto(BASE+'/audio-board/?view=consider',{waitUntil:'networkidle'});
+    assert.match(page.url(),/\/audio-board\/album\/\?/);
     assert.equal(await page.locator('#considerList .card').count(),vocals.length);
     checked('Audio Board opens the planner showing every vocal take, not only considered ones');
 

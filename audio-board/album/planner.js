@@ -65,7 +65,8 @@ function undo() { if (!undoSnap) return; Object.assign(state, clone(undoSnap)); 
 // ---------- view prefs ----------
 let viewPrefs = {}; try { viewPrefs = JSON.parse(localStorage.getItem(KEY + ".view")) || {}; } catch (err) {}
 const GROUP_BYS = [["song", "Group by song"], ["album", "Group by album"], ["status", "Group by status"], ["writer", "Group by writer"]];
-const ui = {view:["consider","sessions","albums","cleanup"].includes(viewPrefs.view) ? viewPrefs.view : "consider", q:"", sort:viewPrefs.sort || "title", dir:viewPrefs.dir || "", group:viewPrefs.group !== false, groupBy:GROUP_BYS.some(([k]) => k === viewPrefs.groupBy) ? viewPrefs.groupBy : "song", scope:viewPrefs.scope === "all" ? "all" : "considered", type:["Vocal", "Instrumental", "Stem", "all"].includes(viewPrefs.type) ? viewPrefs.type : "Vocal", only:null, lyricsOpen:new Set(), filter:viewPrefs.filter || "contenders", session:viewPrefs.session || "", album:viewPrefs.album || "debut", ssort:viewPrefs.ssort || "score", sdir:viewPrefs.sdir || ""};
+const VIEWS = ["sort","consider","sessions","albums","cleanup"];
+const ui = {sortFilter:["todo","later","done"].includes(viewPrefs.sortFilter) ? viewPrefs.sortFilter : "todo", view:VIEWS.includes(viewPrefs.view) ? viewPrefs.view : "consider", q:"", sort:viewPrefs.sort || "title", dir:viewPrefs.dir || "", group:viewPrefs.group !== false, groupBy:GROUP_BYS.some(([k]) => k === viewPrefs.groupBy) ? viewPrefs.groupBy : "song", scope:viewPrefs.scope === "all" ? "all" : "considered", type:["Vocal", "Instrumental", "Stem", "all"].includes(viewPrefs.type) ? viewPrefs.type : "Vocal", only:null, lyricsOpen:new Set(), filter:viewPrefs.filter || "contenders", session:viewPrefs.session || "", album:viewPrefs.album || "debut", ssort:viewPrefs.ssort || "score", sdir:viewPrefs.sdir || ""};
 let restoringNavigation = false;
 const navigation = () => ({view:ui.view, session:ui.session, album:ui.album});
 function saveView() {
@@ -77,7 +78,7 @@ function saveView() {
   }
 }
 const route = new URLSearchParams(location.search);
-if (["consider", "sessions", "albums", "cleanup"].includes(route.get("view"))) ui.view = route.get("view");
+if (VIEWS.includes(route.get("view"))) ui.view = route.get("view");
 if (route.has("session")) ui.session = route.get("session");
 if (route.has("album")) ui.album = route.get("album");
 // Links from Lyric Board and Audio Board: ?scope=all, ?take=<uuid>, ?lyrics=<lyric version>, ?q=<search>.
@@ -104,6 +105,7 @@ const eligible = stem => !item(stem).delDone && !isCut(stem) && !tagged(stem);
 const albumOf = stem => Object.entries(state.albums).find(([, a]) => a.order.includes(stem));
 const catalog = () => Object.keys(TAKES).filter(s => !item(s).delDone);
 const pool = () => ui.scope === "all" ? [...new Set([...catalog(), ...live()])] : live();
+const typeOk = s => ui.type === "all" || (take(s).type || "Vocal") === ui.type;
 const ensure = stem => { if (!state.considered[stem]) state.considered[stem] = {added:Date.now()}; return state.considered[stem]; };
 const lyricHtml = text => esc(text).replace(/^(\[[^\]\n]+\])/gm, '<span class="tag">$1</span>');
 const voiceText = t => t.voiceName ? (t.type === "Vocal" && t.personalVoice ? "Your voice · " : t.type === "Vocal" ? "Voice persona · " : "Persona setting · ") + t.voiceName : "";
@@ -209,6 +211,12 @@ function card(stem, opts = {}) {
       <div class="t"><b title="${esc(t.title)}">${nameHtml(stem)}</b><small>${esc(takeLabel(t)) || "&nbsp;"}</small></div>
       <button class="icon-btn" data-act="rename" title="Rename in planner" aria-label="Rename ${esc(nameOf(stem))}">✎</button>
     </div>
+    ${opts.sortMode ? `<div class="card-actions buckets" role="group" aria-label="Where does ${esc(nameOf(stem))} go?">
+      ${Object.entries(state.albums).sort(([, x], [, y]) => x.created - y.created).map(([id, o]) => `<button class="btn small bucket${o.order.includes(stem) ? " primary" : ""}" data-bucket="${esc(id)}" aria-pressed="${o.order.includes(stem)}">${esc(shortName(o))}</button>`).join("")}
+      <button class="btn small" data-bucket="__new" title="Start a new album with this take">+ Album</button>
+      <button class="btn small bucket${item(stem).later ? " primary" : ""}" data-bucket="__later" aria-pressed="${!!item(stem).later}">Later</button>
+      <button class="btn small danger" data-bucket="__delete" aria-pressed="${del}">${del ? "Undelete" : "Delete"}</button>
+    </div>` : ""}
     <div class="status-row">
       <button class="btn small s-short" data-act="short" aria-pressed="${r.status === "short"}">Shortlist</button>
       <button class="btn small s-maybe" data-act="maybe" aria-pressed="${r.status === "maybe"}">Maybe</button>
@@ -222,7 +230,7 @@ function card(stem, opts = {}) {
     </div>
     <details class="card-lyrics" data-lyr="${esc(stem)}"${ui.lyricsOpen.has(stem) ? " open" : ""}><summary>Lyrics${lyrics ? "" : " (none in Suno data)"}</summary>${lyrics ? `<pre class="lyrics">${lyricHtml(lyrics)}</pre>` : `<p class="meta">Suno has no lyrics saved for this take. ${t.lyricStem ? "The Lyrics button opens the matching lyric version." : ""}</p>`}</details>
     <textarea class="note" rows="1" placeholder="Notes" aria-label="Notes for ${esc(nameOf(stem))}">${esc(r.note || "")}</textarea>
-    <div class="card-actions">
+    <div class="card-actions${opts.sortMode ? " hidden" : ""}">
       <button class="btn small ${onThis ? "primary" : ""}" data-act="add" aria-pressed="${onThis}">${onThis ? "✓ On " : "+ "}${esc(shortName(a))}</button>
       <select class="add-to" aria-label="Add to another album"><option value="">Add to…</option>${others.map(([id, o]) => `<option value="${esc(id)}">${esc(o.name)}${o.order.includes(stem) ? " ✓" : ""}</option>`).join("")}<option value="__new">+ New album…</option></select>
       ${opts.inSession ? "" : `<button class="btn small" data-act="compare">Compare</button>`}
@@ -242,10 +250,10 @@ document.addEventListener("focusout", () => setTimeout(() => { if (pendingRender
 function render() {
   normalize();
   if (!state.albums[ui.album]) ui.album = Object.entries(state.albums).sort(([, a], [, b]) => a.created - b.created)[0][0];
-  const views = {consider:"Consider", sessions:"Sessions", albums:"Albums", cleanup:"Cleanup"};
+  const views = {sort:"Sort", consider:"Consider", sessions:"Sessions", albums:"Albums", cleanup:"Cleanup"};
   for (const [v, n] of Object.entries(views)) { $("view" + n).classList.toggle("hidden", ui.view !== v); $("tab" + n).setAttribute("aria-selected", ui.view === v); }
   renderTarget(); renderSummary();
-  ({consider:renderConsider, sessions:renderSessions, albums:renderAlbums, cleanup:renderCleanup})[ui.view]();
+  ({sort:renderSort, consider:renderConsider, sessions:renderSessions, albums:renderAlbums, cleanup:renderCleanup})[ui.view]();
   document.querySelectorAll("textarea.note").forEach(fit);
 }
 function renderTarget() {
@@ -261,6 +269,7 @@ function renderSummary() {
   const cleanup = stems.filter(tagged).length + stems.filter(s => item(s).name && !item(s).renameDone).length;
   $("summary").textContent = `${contenders} takes still in contention for ${a.name} · ${stems.filter(s => isCut(s)).length} cut · ${stems.filter(tagged).length} marked for deletion`;
   $("countConsider").textContent = contenders ? `(${contenders})` : "(0)";
+  $("countSort").textContent = `(${sortBuckets().todo.length})`;
   $("countSessions").textContent = Object.keys(state.sessions).length ? `(${Object.keys(state.sessions).length})` : "";
   $("countAlbums").textContent = `(${a.order.length})`;
   $("countCleanup").textContent = cleanup ? `(${cleanup})` : "";
@@ -306,6 +315,50 @@ function matchesQuery(stem) {
   const t = take(stem), q = ui.q.toLowerCase();
   return [nameOf(stem), t.title, t.baseTitle, t.writer, t.lyrics, t.oldTitle, rating(stem).note].some(x => String(x || "").toLowerCase().includes(q));
 }
+// ---------- Sort: one decision per take (album bucket, save for later, or delete) ----------
+const decided = s => !!albumOf(s);
+function sortBuckets() {
+  const base = catalog().filter(s => typeOk(s) && !tagged(s) && !audioCut(s));
+  return {
+    todo: base.filter(s => !decided(s) && !item(s).later),
+    later: base.filter(s => !decided(s) && item(s).later),
+    done: base.filter(decided),
+  };
+}
+function bucket(stem, kind) {
+  snapshot(); const i = ensure(stem);
+  if (kind === "__delete") {
+    if (i.del) { delete i.del; save(); toast("Delete tag removed"); return; }
+    i.del = true; delete i.later; for (const a of Object.values(state.albums)) a.order = a.order.filter(m => m !== stem);
+    save(); toast("Tagged to delete on Suno. It's on the Suno cleanup list.", true); return;
+  }
+  if (kind === "__later") {
+    if (i.later) { delete i.later; save(); toast("Back in To sort", true); return; }
+    i.later = true; for (const a of Object.values(state.albums)) a.order = a.order.filter(m => m !== stem);
+    save(); toast("Saved for later", true); return;
+  }
+  let id = kind;
+  if (id === "__new") { id = newAlbum(); if (!id) return; }
+  const target = state.albums[id]; if (!target) return;
+  if (target.order.includes(stem)) { target.order = target.order.filter(m => m !== stem); save(); toast("Taken off " + target.name + ". Back in To sort.", true); return; }
+  for (const a of Object.values(state.albums)) a.order = a.order.filter(m => m !== stem);
+  target.order.push(stem); target.cut = target.cut.filter(m => m !== stem); delete i.later;
+  save(); toast(`${nameOf(stem)} → ${target.name} #${target.order.length}`, true);
+}
+function renderSort() {
+  const b = sortBuckets(), a = album();
+  $("sortQ").value = ui.q;
+  setOptions($("sortSort"), sortOptions()); $("sortSort").value = ui.sort;
+  $("sortSortDir").textContent = dirLabel(sortDir());
+  setOptions($("sortType"), [["Vocal", "Vocals"], ["Instrumental", "Instrumentals"], ["Stem", "Stems"], ["all", "All types"]].map(([k, l]) => `<option value="${k}">${l}</option>`).join("")); $("sortType").value = ui.type;
+  $("sortChips").innerHTML = [["todo", "To sort"], ["later", "Saved for later"], ["done", "On an album"]].map(([k, l]) => `<button class="chip" data-sf="${k}" aria-pressed="${ui.sortFilter === k}">${l} <small>${b[k].length}</small></button>`).join("");
+  const albums = Object.values(state.albums).sort((x, y) => x.created - y.created);
+  $("sortStats").textContent = albums.map(o => `${shortName(o)}: ${o.order.length}`).join(" · ") + ` · ${Object.keys(state.considered).filter(tagged).length} tagged delete`;
+  const stems = sortStems(b[ui.sortFilter].filter(matchesQuery));
+  const empty = {todo:"Nothing left to sort here. Switch the type filter, or check Saved for later.", later:"Nothing saved for later.", done:"Nothing on an album yet."}[ui.sortFilter];
+  $("sortList").innerHTML = stems.length ? `<div class="cards">${stems.map(s => card(s, {sortMode:true})).join("")}</div>` : `<p class="empty-note big">${stems.length || b[ui.sortFilter].length ? "No takes match the search." : empty}</p>`;
+  document.querySelectorAll("textarea.note").forEach(fit);
+}
 function renderConsider() {
   setOptions($("sort"), sortOptions()); $("sort").value = ui.sort;
   $("sortDir").textContent = dirLabel(sortDir()); $("sortDir").setAttribute("aria-label", "Sort direction " + (sortDir() === "desc" ? "descending" : "ascending"));
@@ -313,10 +366,9 @@ function renderConsider() {
   setOptions($("groupBy"), GROUP_BYS.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")); $("groupBy").value = ui.groupBy; $("groupBy").disabled = !ui.group;
   $("scopeChips").innerHTML = [["considered", `Considered (${live().length})`], ["all", `All takes (${catalog().length})`]].map(([k, l]) => `<button class="chip" data-scope="${k}" aria-pressed="${ui.scope === k}">${l}</button>`).join("");
   setOptions($("typeFilter"), [["Vocal", "Vocals"], ["Instrumental", "Instrumentals"], ["Stem", "Stems"], ["all", "All types"]].map(([k, l]) => `<option value="${k}">${l}</option>`).join("")); $("typeFilter").value = ui.type;
-  $("typeFilter").classList.toggle("hidden", ui.scope !== "all");
+  $("typeFilter").classList.remove("hidden");
   $("onlyBanner").classList.toggle("hidden", !ui.only);
   if (ui.only) $("onlyText").textContent = ui.only.take ? "Showing one take." : "Showing the takes for one lyric version.";
-  const typeOk = s => ui.scope !== "all" || ui.type === "all" || (take(s).type || "Vocal") === ui.type;
   const all = pool().filter(typeOk), fs = filters();
   if (!fs.some(([k]) => k === ui.filter)) ui.filter = "contenders";
   $("filterChips").innerHTML = fs.map(([k, l, f]) => `<button class="chip" data-f="${k}" aria-pressed="${ui.filter === k}">${esc(l)} <small>${all.filter(f).length}</small></button>`).join("");
@@ -476,9 +528,16 @@ $("targetAlbum").onchange = e => {
   ui.album = e.target.value; saveView(); render();
 };
 $("q").oninput = e => { ui.q = e.target.value.trim(); renderConsider(); };
+$("q").value = ui.q;
 $("sort").onchange = e => { ui.sort = e.target.value; ui.dir = ""; saveView(); renderConsider(); };
 $("sortDir").onclick = () => { ui.dir = sortDir() === "desc" ? "asc" : "desc"; saveView(); renderConsider(); };
 $("groupToggle").onclick = () => { ui.group = !ui.group; saveView(); renderConsider(); };
+$("sortChips").onclick = e => { const b = e.target.closest("[data-sf]"); if (b) { ui.sortFilter = b.dataset.sf; saveView(); renderSort(); } };
+$("sortQ").oninput = e => { ui.q = e.target.value.trim(); renderSort(); };
+$("sortSort").onchange = e => { ui.sort = e.target.value; ui.dir = ""; saveView(); renderSort(); };
+$("sortSortDir").onclick = () => { ui.dir = sortDir() === "desc" ? "asc" : "desc"; saveView(); renderSort(); };
+$("sortType").onchange = e => { ui.type = e.target.value; saveView(); renderSort(); };
+document.addEventListener("click", e => { const b = e.target.closest(".card [data-bucket]"); if (b) bucket(b.closest("[data-stem]").dataset.stem, b.dataset.bucket); });
 $("groupBy").onchange = e => { ui.groupBy = e.target.value; saveView(); renderConsider(); };
 $("typeFilter").onchange = e => { ui.type = e.target.value; saveView(); renderConsider(); };
 $("scopeChips").onclick = e => { const b = e.target.closest("[data-scope]"); if (b) { ui.scope = b.dataset.scope; saveView(); renderConsider(); } };

@@ -142,3 +142,8 @@ details.card-lyrics summary { cursor:pointer; color:var(--muted); font-size:13px
 details.card-lyrics pre.lyrics { margin-top:8px; max-height:360px; overflow:auto; font-size:13.5px; }
 details.card-lyrics p.meta { margin:6px 0 0; font-size:12px; }
 .tools #groupBy, .tools #typeFilter { max-width:100%; }
+
+.buckets { gap:6px; } .buckets .btn { flex:1 1 auto; text-align:center; justify-content:center; min-height:38px; }
+.buckets .btn.primary { background:var(--signal); border-color:var(--signal); color:#fff; }
+.buckets [data-bucket="__later"].primary { background:var(--star); border-color:var(--star); color:#0C0812; }
+.btn[aria-pressed="true"][data-bucket="__delete"] { background:var(--alarm); border-color:var(--alarm); color:#fff; }

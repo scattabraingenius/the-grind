@@ -41,13 +41,27 @@
   </div>
 
   <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tabSort" data-view="sort" aria-selected="false">Sort <span id="countSort"></span></button>
     <button class="tab" role="tab" id="tabConsider" data-view="consider" aria-selected="true">Considered <span id="countConsider"></span></button>
     <button class="tab" role="tab" id="tabSessions" data-view="sessions" aria-selected="false">Sessions <span id="countSessions"></span></button>
     <button class="tab" role="tab" id="tabAlbums" data-view="albums" aria-selected="false">Album <span id="countAlbums"></span></button>
     <button class="tab" role="tab" id="tabCleanup" data-view="cleanup" aria-selected="false">Suno cleanup <span id="countCleanup"></span></button>
   </div>
 
-  <section id="viewConsider">
+  <section id="viewSort" class="hidden">
+    <div class="tools">
+      <input type="search" id="sortQ" aria-label="Search takes to sort" placeholder="Search titles, writers, notes, lyrics" autocomplete="off">
+      <select id="sortType" aria-label="Recording type"></select>
+      <select id="sortSort" aria-label="Sort"></select>
+      <button class="btn small" type="button" id="sortSortDir">↑ Asc</button>
+    </div>
+    <div class="chips" id="sortChips" aria-label="Show"></div>
+    <p class="meta" id="sortStats"></p>
+    <p class="meta hint">Pick a bucket for each take: an album, <b>Later</b>, or <b>Delete</b>. It leaves this list and the next one moves up. Undo is in the message at the bottom.</p>
+    <div id="sortList"></div>
+  </section>
+
+  <section id="viewConsider" class="hidden">
     <div class="tools">
       <input type="search" id="q" aria-label="Search considered takes" placeholder="Search titles, writers, notes, lyrics" autocomplete="off">
       <select id="sort" aria-label="Sort"></select>

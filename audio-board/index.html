@@ -9,7 +9,7 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" sizes="180x180" href="./icons/audio-cassette-180.png">
 <meta name="application-name" content="Audio Board">
-<noscript><meta http-equiv="refresh" content="0;url=./album/?scope=all"></noscript>
+<noscript><meta http-equiv="refresh" content="0;url=./album/?scope=all&amp;view=sort"></noscript>
 <style>body{background:#0C0812;color:#EDE7F6;font-family:system-ui,sans-serif;padding:24px}a{color:#C9A6FF}</style>
 </head>
 <body>
@@ -18,6 +18,7 @@
 // Audio Board and the Album Planner are one page now. Old links (?take=, ?lyrics=) carry over.
 var p = new URLSearchParams(location.search);
 if (!p.has("scope")) p.set("scope", "all");
+if (!p.has("view") && !p.has("take") && !p.has("lyrics")) p.set("view", "sort");
 location.replace("./album/?" + p.toString() + location.hash);
 </script>
 </body>
