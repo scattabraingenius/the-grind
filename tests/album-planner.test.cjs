@@ -51,6 +51,7 @@ const pass = m => console.log('PASS ' + m);
     // Import 110.
     await page.goto(BASE + '/audio-board/album/');
     await page.click('#importOpen'); await page.click('[data-import="c:cand"]'); await page.click('#importClose');
+    await page.selectOption('#typeFilter', 'all');
     assert.equal(await page.locator('#considerList .card').count(), 110);
     pass('110 takes imported and all visible at once');
 

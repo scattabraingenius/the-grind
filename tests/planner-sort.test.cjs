@@ -4,7 +4,8 @@ const fs=require('fs'),path=require('path'),vm=require('vm');
 const BASE=process.env.APP_BASE_URL,ROOT=path.join(__dirname,'..');
 const checked=message=>console.log('PASS '+message);
 const ctx={window:{}};vm.runInNewContext(fs.readFileSync(path.join(ROOT,'audio-board/tracks.js'),'utf8'),ctx);
-const SONGS=ctx.window.ALBUM_SONGS,count=type=>SONGS.filter(s=>s.versions[0].type===type).length;
+const hasWords=t=>/[\p{L}\p{N}]/u.test(String(t||'').replace(/\[[^\]]*\]|\([^)]*\)/g,' ')),kind=s=>{const v=s.versions[0];return v.type==='Vocal'&&!hasWords(v.suno?.lyrics??v.lyrics)?'Instrumental':v.type;};
+const SONGS=ctx.window.ALBUM_SONGS,count=type=>SONGS.filter(s=>kind(s)===type).length;
 (async()=>{
   const browser=await chromium.launch({headless:true,executablePath:process.env.BROWSER_EXECUTABLE});
   try {
@@ -24,7 +25,7 @@ const SONGS=ctx.window.ALBUM_SONGS,count=type=>SONGS.filter(s=>s.versions[0].typ
     checked('Sort starts with every undecided vocal take; instrumentals and stems stay out');
 
     // Song dropdown: all versions of one song.
-    const byTitle={};for(const t of SONGS.filter(x=>x.versions[0].type==='Vocal'))byTitle[t.baseTitle]=(byTitle[t.baseTitle]||0)+1;
+    const byTitle={};for(const t of SONGS.filter(x=>kind(x)==='Vocal'))byTitle[t.baseTitle]=(byTitle[t.baseTitle]||0)+1;
     const many=Object.entries(byTitle).sort((a,b)=>b[1]-a[1])[0];
     await page.locator('#sortSong').selectOption({label:`${many[0]} (${many[1]})`});
     assert.equal(await cards.count(),many[1]);

@@ -4,7 +4,8 @@ const fs=require('fs'),path=require('path'),vm=require('vm');
 const BASE=process.env.APP_BASE_URL,ROOT=path.join(__dirname,'..');
 const checked=message=>console.log('PASS '+message);
 const ctx={window:{}};vm.runInNewContext(fs.readFileSync(path.join(ROOT,'audio-board/tracks.js'),'utf8'),ctx);
-const SONGS=ctx.window.ALBUM_SONGS,vocals=SONGS.filter(s=>s.versions[0].type==='Vocal');
+const hasWords=t=>/[\p{L}\p{N}]/u.test(String(t||'').replace(/\[[^\]]*\]|\([^)]*\)/g,' ')),kind=s=>{const v=s.versions[0];return v.type==='Vocal'&&!hasWords(v.suno?.lyrics??v.lyrics)?'Instrumental':v.type;};
+const SONGS=ctx.window.ALBUM_SONGS,vocals=SONGS.filter(s=>kind(s)==='Vocal');
 const withLyrics=vocals.find(s=>s.versions[0].lyrics);
 (async()=>{
   const browser=await chromium.launch({headless:true,executablePath:process.env.BROWSER_EXECUTABLE});

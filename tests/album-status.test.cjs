@@ -51,6 +51,7 @@ const pass = m => console.log('PASS ' + m);
     const settle = () => page.waitForTimeout(450);
 
     await page.goto(BASE + '/audio-board/album/?view=consider');
+    await page.selectOption('#typeFilter', 'all');   // counts below cover every recording type
     await page.waitForSelector('#bucketTabs [data-bucket-tab]');
 
     // --- Migration ran on load: backup, log, and the owner's example ---

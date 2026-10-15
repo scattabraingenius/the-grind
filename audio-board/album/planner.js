@@ -11,7 +11,12 @@ const uid = prefix => prefix + "-" + crypto.randomUUID().slice(0, 8);
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
 const TAKES = {};
-for (const s of window.ALBUM_SONGS || []) TAKES[s.slug] = {...s.versions[0], stem:s.slug, title:s.title, baseTitle:s.baseTitle || s.title};
+// Suno labels some instrumentals "Vocal". A take with no sung words (empty, or only tags like [Instrumental]) is an instrumental.
+const hasWords = text => /[\p{L}\p{N}]/u.test(String(text || "").replace(/\[[^\]]*\]|\([^)]*\)/g, " "));
+for (const s of window.ALBUM_SONGS || []) {
+  const v = s.versions[0], lyrics = v.suno?.lyrics ?? v.lyrics;
+  TAKES[s.slug] = {...v, type:(v.type || "Vocal") === "Vocal" && typeof lyrics === "string" && !hasWords(lyrics) ? "Instrumental" : v.type, stem:s.slug, title:s.title, baseTitle:s.baseTitle || s.title};
+}
 const DEFAULT_ALBUMS = {debut:{name:"Album 1 · Debut", created:1, order:[], cut:[], target:12, statusV:2}, second:{name:"Album 2", created:2, order:[], cut:[], target:12, statusV:2}};
 const STATUS_LABEL = PlannerStatus.LABELS;
 
