@@ -1,6 +1,6 @@
 "use strict";
-// Album Planner. Score, Shortlist/Maybe and notes are Audio Board records (one score per take everywhere).
-// Albums, Cut (per album), sessions, renames and the Delete tag are planner records.
+// Album Planner. Score and notes are Audio Board records (one score per take everywhere).
+// Albums, the per-album status of every take (see planner-status.js), sessions, renames and the Delete tag are planner records.
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("../../service-worker.js").catch(() => {});
 const KEY = "grind.planner.v1";
 const AUDIO_KEY = "grind.audio.v1";
@@ -12,7 +12,8 @@ const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
 const TAKES = {};
 for (const s of window.ALBUM_SONGS || []) TAKES[s.slug] = {...s.versions[0], stem:s.slug, title:s.title, baseTitle:s.baseTitle || s.title};
-const DEFAULT_ALBUMS = {debut:{name:"Album 1 · Debut", created:1, order:[], cut:[], target:12}, second:{name:"Album 2", created:2, order:[], cut:[], target:12}};
+const DEFAULT_ALBUMS = {debut:{name:"Album 1 · Debut", created:1, order:[], cut:[], target:12, statusV:2}, second:{name:"Album 2", created:2, order:[], cut:[], target:12, statusV:2}};
+const STATUS_LABEL = PlannerStatus.LABELS;
 
 // ---------- planner state ----------
 function loadPlan() {
@@ -39,7 +40,7 @@ function save(rerender = true) {
   persist(); if (cloud) cloud.changed(); if (rerender) render();
 }
 
-// ---------- Audio Board state (scores, status, notes) ----------
+// ---------- Audio Board state (scores, notes, and the old global flags the migration reads) ----------
 const blankAudio = s => ({ratings:{}, tracklist:[], pick:{}, custom:{}, collections:{}, v:2, ...(s || {})});
 function readAudio(key) { try { const s = JSON.parse(localStorage.getItem(key)); if (s && typeof s === "object") return s; } catch (err) {} return null; }
 let audio = AlbumSync.prepare(blankAudio(readAudio(AUDIO_KEY))), audioPrev = clone(audio), audioCloud = null;
@@ -58,15 +59,26 @@ function setRating(stem, patch) {
 }
 
 // ---------- undo ----------
-let undoSnap = null;
-function snapshot() { const {_sync, ...plan} = state; undoSnap = clone(plan); }
-function undo() { if (!undoSnap) return; Object.assign(state, clone(undoSnap)); undoSnap = null; save(); toast("Restored"); }
+let undoSnap = null, undoStem = null;
+function snapshot(stem = null) { const {_sync, ...plan} = state; undoSnap = clone(plan); undoStem = stem; }
+function undo() {
+  if (!undoSnap) { toast("Nothing to undo"); return; }
+  const stem = undoStem;
+  Object.assign(state, clone(undoSnap)); undoSnap = null;
+  save(); toast("Restored");
+  const el = stem && cardEl(stem);   // the restored take gets the ring back
+  if (el) { focusStem = stem; el.focus({preventScroll:true}); el.scrollIntoView({block:"nearest"}); }
+}
 
 // ---------- view prefs ----------
 let viewPrefs = {}; try { viewPrefs = JSON.parse(localStorage.getItem(KEY + ".view")) || {}; } catch (err) {}
-const GROUP_BYS = [["song", "Group by song"], ["album", "Group by album"], ["status", "Group by status"], ["writer", "Group by writer"]];
+const GROUP_BYS = [["none", "No grouping"], ["song", "Group by song"], ["album", "Group by album"], ["status", "Group by status"], ["writer", "Group by writer"]];
 const VIEWS = ["sort","consider","sessions","albums","cleanup"];
-const ui = {sortFilter:["todo","later","done"].includes(viewPrefs.sortFilter) ? viewPrefs.sortFilter : "todo", view:VIEWS.includes(viewPrefs.view) ? viewPrefs.view : "consider", q:"", sort:viewPrefs.sort || "title", dir:viewPrefs.dir || "", group:viewPrefs.group !== false, groupBy:GROUP_BYS.some(([k]) => k === viewPrefs.groupBy) ? viewPrefs.groupBy : "song", scope:viewPrefs.scope === "all" ? "all" : "considered", type:["Vocal", "Instrumental", "Stem", "all"].includes(viewPrefs.type) ? viewPrefs.type : "Vocal", only:null, song:"", lyricsOpen:new Set(), filter:viewPrefs.filter || "contenders", session:viewPrefs.session || "", album:viewPrefs.album || "debut", ssort:viewPrefs.ssort || "score", sdir:viewPrefs.sdir || ""};
+const BUCKETS = ["unreviewed","maybe","short","on","cut","alive"];
+const ui = {sortFilter:["todo","later","done"].includes(viewPrefs.sortFilter) ? viewPrefs.sortFilter : "todo", view:VIEWS.includes(viewPrefs.view) ? viewPrefs.view : "consider", q:"", sort:viewPrefs.sort || "title", dir:viewPrefs.dir || "",
+  groupBy:GROUP_BYS.some(([k]) => k === viewPrefs.groupBy) ? viewPrefs.groupBy : viewPrefs.group === false ? "none" : "song",
+  type:["Vocal", "Instrumental", "Stem", "all"].includes(viewPrefs.type) ? viewPrefs.type : "Vocal", only:null, song:"", lyricsOpen:new Set(), bucket:BUCKETS.includes(viewPrefs.bucket) ? viewPrefs.bucket : "unreviewed", unscored:viewPrefs.unscored === true,
+  session:viewPrefs.session || "", album:viewPrefs.album || "debut", ssort:viewPrefs.ssort || "score", sdir:viewPrefs.sdir || ""};
 let restoringNavigation = false;
 const navigation = () => ({view:ui.view, session:ui.session, album:ui.album});
 function saveView() {
@@ -81,10 +93,9 @@ const route = new URLSearchParams(location.search);
 if (VIEWS.includes(route.get("view"))) ui.view = route.get("view");
 if (route.has("session")) ui.session = route.get("session");
 if (route.has("album")) ui.album = route.get("album");
-// Links from Lyric Board and Audio Board: ?scope=all, ?take=<uuid>, ?lyrics=<lyric version>, ?q=<search>.
-if (route.get("scope") === "all") ui.scope = "all";
-if (route.has("take")) { ui.only = {take:route.get("take")}; ui.scope = "all"; }
-else if (route.has("lyrics")) { ui.only = {lyrics:route.get("lyrics")}; ui.scope = "all"; }
+// Links from Lyric Board and Audio Board: ?take=<uuid>, ?lyrics=<lyric version>, ?q=<search>.
+if (route.has("take")) ui.only = {take:route.get("take")};
+else if (route.has("lyrics")) ui.only = {lyrics:route.get("lyrics")};
 if (route.has("q")) ui.q = route.get("q").trim();
 history.replaceState({...history.state, plannerNavigation:navigation()}, "");
 window.addEventListener("popstate", e => {
@@ -98,13 +109,14 @@ const take = stem => TAKES[stem] || window.ALBUM_TRASHED_TAKES?.[stem] || {stem,
 const item = stem => state.considered[stem] || {};
 const live = () => Object.keys(state.considered).filter(s => !item(s).delDone);   // deleted on Suno = gone from the plan
 const album = () => state.albums[ui.album];
-const audioCut = stem => rating(stem).status === "cut";
-const isCut = (stem, id = ui.album) => !!state.albums[id]?.cut?.includes(stem) || audioCut(stem);
+// One status per take per album: unreviewed, maybe, short, on, cut.
+const statusOf = (stem, id = ui.album) => PlannerStatus.statusOf(state, audio.ratings, stem, id);
+const isCut = (stem, id = ui.album) => statusOf(stem, id) === "cut";
 const tagged = stem => !!item(stem).del && !item(stem).delDone;
 const eligible = stem => !item(stem).delDone && !isCut(stem) && !tagged(stem);
 const albumOf = stem => Object.entries(state.albums).find(([, a]) => a.order.includes(stem));
 const catalog = () => Object.keys(TAKES).filter(s => !item(s).delDone);
-const pool = () => ui.scope === "all" ? [...new Set([...catalog(), ...live()])] : live();
+const pool = () => ui.only ? [...new Set([...catalog(), ...live()])] : live();   // a link to one take can reach any catalogue take
 const typeOk = s => ui.type === "all" || (take(s).type || "Vocal") === ui.type;
 const ensure = stem => { if (!state.considered[stem]) state.considered[stem] = {added:Date.now()}; return state.considered[stem]; };
 const lyricHtml = text => esc(text).replace(/^(\[[^\]\n]+\])/gm, '<span class="tag">$1</span>');
@@ -116,6 +128,8 @@ function nameHtml(stem) {
   const i = item(stem), t = take(stem);
   return i.name && i.name !== t.title && !i.renameDone ? `${esc(i.name)} <span class="old">[${esc(t.title)}]</span>` : esc(nameOf(stem));
 }
+// "Two People to Mourn.M1.2" is "M1.2" wherever space is tight.
+function labelOf(stem) { const t = take(stem); return !item(stem).name && t.title.startsWith(t.baseTitle + ".") ? t.title.slice(t.baseTitle.length + 1) : nameOf(stem); }
 const dur = s => { s = Math.round(s || 0); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
 const longDur = s => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return (h ? h + "h " : "") + m + "m " + String(s % 60).padStart(2, "0") + "s"; };
 const lyricSearch = title => String(title || "").replace(/^[A-Z]-\s+/, "").replace(/(\s+(v\d+|\d+|misc|-\s*\w+))+$/i, "").trim();
@@ -135,6 +149,45 @@ function toast(msg, withUndo = false) {
 }
 async function copyText(text) { try { await navigator.clipboard.writeText(text); return true; } catch (err) { return false; } }
 
+// Track target: amber when over, red when well over. "Well over" is more than a quarter of the target (at least 3 tracks).
+function targetState(a) {
+  const n = a.order.length, target = a.target || 12, over = Math.max(0, n - target);
+  const level = !over ? "" : over > Math.max(2, Math.ceil(target * .25)) ? "bad" : "warn";
+  const total = a.order.reduce((sum, s) => sum + (take(s).duration || 0), 0);
+  return {n, target, over, level, total, text:`${n}/${target} tracks${over ? " · " + over + " over target" : ""}`};
+}
+// Songs that appear more than once on an album: baseTitle → stems.
+function dupesOn(a) {
+  const by = new Map();
+  for (const s of a.order) { const b = take(s).baseTitle; if (!by.has(b)) by.set(b, []); by.get(b).push(s); }
+  return new Map([...by].filter(([, list]) => list.length > 1));
+}
+
+// ---------- migrating to one status per take per album ----------
+// Back up first, then convert each album once. Safe to call again and across devices: an album that carries
+// statusV is skipped, and a signed-in device waits until it has loaded its account before converting anything.
+const MIGRATION_KEY = KEY + ".migration", BACKUP_KEY = KEY + ".premigration";
+const needsMigration = () => Object.values(state.albums).some(a => !PlannerStatus.isMigrated(a));
+function migrationLog() { try { const l = JSON.parse(localStorage.getItem(MIGRATION_KEY)); if (l && Array.isArray(l.runs)) return l; } catch (err) {} return {runs:[], seen:true}; }
+function ensureMigrated(force = false) {
+  normalize();
+  if (!needsMigration()) return false;
+  if (!force && state._sync.owner && !(sync.plan.synced && sync.audio.synced)) return false;
+  try {
+    if (!localStorage.getItem(BACKUP_KEY)) {
+      const {_sync, ...plan} = state;
+      localStorage.setItem(BACKUP_KEY, JSON.stringify({app:"album-planner-premigration", at:new Date().toISOString(), plan, audioFlags:Object.fromEntries(Object.entries(audio.ratings).filter(([, r]) => r?.status).map(([s, r]) => [s, r.status]))}));
+    }
+  } catch (err) {}
+  const result = PlannerStatus.migrate(state, audio.ratings, s => !!TAKES[s], s => take(s).title);
+  const log = migrationLog();
+  log.runs.push({at:new Date().toISOString(), albums:result.albums.map(id => state.albums[id].name), conflicts:result.log, pulledIn:result.pulledIn.map(s => take(s).title)});
+  log.seen = !result.log.length && !result.pulledIn.length;
+  try { localStorage.setItem(MIGRATION_KEY, JSON.stringify(log)); } catch (err) {}
+  save(false);
+  return true;
+}
+
 // ---------- actions ----------
 function consider(stems) {
   let added = 0;
@@ -145,37 +198,51 @@ function consider(stems) {
 function newAlbum() {
   const name = prompt("New album name", "Album " + (Object.keys(state.albums).length + 1));
   if (!name?.trim()) return null;
-  const id = uid("a"); state.albums[id] = {name:name.trim(), created:Date.now(), order:[], cut:[], target:12};
+  const id = uid("a"); state.albums[id] = {name:name.trim(), created:Date.now(), order:[], cut:[], target:12, statusV:PlannerStatus.VERSION};
   return id;
 }
-function placeOnAlbum(stem, albumId) {
-  const target = state.albums[albumId]; if (!target) return;
-  for (const a of Object.values(state.albums)) a.order = a.order.filter(m => m !== stem);
-  target.order.push(stem); target.cut = target.cut.filter(m => m !== stem);
-  if (!state.considered[stem]) state.considered[stem] = {added:Date.now()};
-  save(); toast(`${nameOf(stem)} → ${target.name} #${target.order.length}`);
+// Change one take's status on one album. The card collapses out of the list if it no longer belongs there.
+function setStatus(stem, status, id = ui.album) {
+  ensureMigrated(true);
+  if (!state.albums[id]) return;
+  const now = statusOf(stem, id);
+  if (status === "on") { if (now !== "on") placeTake(stem, id); return; }
+  if (now === status) return;
+  snapshot(stem);
+  PlannerStatus.set(state, stem, id, status);
+  save(false); toast(`${labelOf(stem)} → ${STATUS_LABEL[status]}`, true);
+  settle(stem);
 }
-function toggleOnAlbum(stem) {
-  ensure(stem);
-  const a = album();
-  if (a.order.includes(stem)) { a.order = a.order.filter(m => m !== stem); save(); toast("Taken off " + a.name); }
-  else placeOnAlbum(stem, ui.album);
+const toggleStatus = (stem, status) => setStatus(stem, statusOf(stem) === status ? "unreviewed" : status);
+// Putting a take on an album: one take per song, so ask before adding a second take of the same song.
+function placeTake(stem, id) {
+  ensureMigrated(true);
+  const a = state.albums[id]; if (!a || a.order.includes(stem)) return;
+  const clash = a.order.filter(m => m !== stem && take(m).baseTitle === take(stem).baseTitle);
+  if (clash.length) askReplace(stem, id, clash); else commitPlace(stem, id, []);
 }
-function toggleCut(stem) {
-  const a = album(); snapshot(); ensure(stem);
-  if (isCut(stem)) {
-    a.cut = a.cut.filter(m => m !== stem);
-    if (audioCut(stem)) setRating(stem, {status:null});
-    save(); toast("Back in contention for " + a.name); return;
-  }
-  a.cut.push(stem); a.order = a.order.filter(m => m !== stem);
-  save(); toast(`Cut from ${a.name}`, true);
+function commitPlace(stem, id, replaced) {
+  const a = state.albums[id]; snapshot(stem);
+  const index = replaced.length ? Math.min(...replaced.map(r => a.order.indexOf(r))) : -1;
+  for (const r of replaced) PlannerStatus.set(state, r, id, "short");
+  PlannerStatus.set(state, stem, id, "on", index);
+  ensure(stem); delete state.considered[stem].later;
+  save(false);
+  toast(replaced.length ? `${labelOf(stem)} replaces ${replaced.map(labelOf).join(" and ")} on ${shortName(a)}` : `${labelOf(stem)} → ${shortName(a)} #${a.order.indexOf(stem) + 1}`, true);
+  settle(stem); for (const r of replaced) settle(r);
+}
+let pendingPlace = null;
+function askReplace(stem, id, clash) {
+  const name = shortName(state.albums[id]);
+  $("replaceTitle").textContent = `Replace ${clash.map(labelOf).join(" and ")} with ${labelOf(stem)} on ${name}?`;
+  $("replaceText").textContent = `"${take(stem).baseTitle}" is already on ${name}. Replace puts ${labelOf(stem)} in the same spot and moves ${clash.length > 1 ? "the others" : labelOf(clash[0])} to Shortlist. Keep both leaves two takes of the song on the album, with a warning on each.`;
+  pendingPlace = {stem, id, clash}; $("replaceDialog").showModal();
 }
 function toggleDelete(stem) {
-  const i = ensure(stem); snapshot();
-  if (i.del) { delete i.del; save(); toast("Delete tag removed"); return; }
+  const i = ensure(stem); snapshot(stem);
+  if (i.del) { delete i.del; save(false); toast("Delete tag removed", true); settle(stem); return; }
   i.del = true; for (const a of Object.values(state.albums)) a.order = a.order.filter(m => m !== stem);
-  save(); toast("Tagged to delete on Suno. It's on the Suno cleanup list.", true);
+  save(false); toast("Tagged to delete on Suno. It's on the Suno cleanup list.", true); settle(stem);
 }
 function rename(stem) {
   const i = ensure(stem), t = take(stem);
@@ -192,94 +259,123 @@ function newSession(name, stems) {
   return id;
 }
 
-// ---------- the take card (Considered and Sessions use the same one) ----------
+// ---------- the take card (Album picks, Triage and Sessions use the same one) ----------
 function card(stem, opts = {}) {
-  const t = take(stem), r = rating(stem), a = album(), placed = albumOf(stem), cut = isCut(stem), del = tagged(stem);
+  const t = take(stem), r = rating(stem), a = album(), st = statusOf(stem), placed = albumOf(stem), del = tagged(stem), name = nameOf(stem);
   const others = Object.entries(state.albums).filter(([id]) => id !== ui.album).sort(([, x], [, y]) => x.created - y.created);
+  const twin = placed && dupesOn(placed[1]).has(t.baseTitle);
   const badges = [
-    placed ? `<button class="badge link placed" data-goto-album="${esc(placed[0])}">${esc(placed[1].name)} #${placed[1].order.indexOf(stem) + 1}</button>` : "",
-    state.albums[ui.album]?.cut.includes(stem) ? `<span class="badge cut">cut from ${esc(shortName(a))}</span>` : "",
+    placed ? `<button class="badge link placed" data-goto-album="${esc(placed[0])}" title="Open this album">${esc(placed[1].name)} #${placed[1].order.indexOf(stem) + 1}</button>` : "",
+    twin ? `<span class="badge warn" title="Two takes of this song are on ${esc(placed[1].name)}">⚠ same song twice</span>` : "",
     del ? `<span class="badge del">delete</span>` : "",
-    r.status === "cut" ? `<span class="badge cut">Audio Board: cut</span>` : "",
     ...(opts.inSession ? [] : sessionsOf(stem).map(([id, s]) => `<button class="badge link" data-goto-session="${esc(id)}">${esc(s.name)}</button>`)),
     t.missing ? `<span class="badge cut">not in snapshot</span>` : "",
   ].join("");
-  const onThis = a.order.includes(stem), lyrics = (t.suno?.lyrics ?? t.lyrics) || "";
-  return `<article class="card${cut ? " is-cut" : ""}${del ? " is-del" : ""}${onThis ? " on-album" : ""}" data-stem="${esc(stem)}">
+  const lyrics = (t.suno?.lyrics ?? t.lyrics) || "", open = ui.lyricsOpen.has(stem);
+  const seg = (k, label) => `<button class="seg s-${k}" data-status="${k}" aria-pressed="${st === k}">${label}</button>`;
+  return `<article class="card st-${st}${st === "cut" ? " is-cut" : ""}${del ? " is-del" : ""}${st === "on" ? " on-album" : ""}" data-stem="${esc(stem)}" tabindex="-1">
     <div class="card-top">
-      <input class="score-in ${scoreClass(r.score)}" type="number" min="0" max="100" step="1" inputmode="numeric" value="${r.score ?? ""}" placeholder="–" aria-label="Score for ${esc(nameOf(stem))}, 0 to 100">
+      <label class="score-box"><span>Score</span><input class="score-in ${scoreClass(r.score)}" type="number" min="0" max="100" step="1" inputmode="numeric" value="${r.score ?? ""}" placeholder="–" aria-label="Score for ${esc(name)}, 0 to 100"></label>
       <div class="t"><b title="${esc(t.title)}">${nameHtml(stem)}</b><small>${esc(takeLabel(t)) || "&nbsp;"}</small></div>
-      <button class="icon-btn" data-act="rename" title="Rename in planner" aria-label="Rename ${esc(nameOf(stem))}">✎</button>
+      <button class="icon-btn" data-act="rename" title="Rename in planner" aria-label="Rename ${esc(name)}">edit</button>
     </div>
-    ${opts.sortMode ? `<div class="card-actions buckets" role="group" aria-label="Where does ${esc(nameOf(stem))} go?">
+    <div class="badges">${badges}</div>
+    ${opts.sortMode ? `<div class="card-actions buckets" role="group" aria-label="Where does ${esc(name)} go?">
       ${Object.entries(state.albums).sort(([, x], [, y]) => x.created - y.created).map(([id, o]) => `<button class="btn small bucket${o.order.includes(stem) ? " primary" : ""}" data-bucket="${esc(id)}" aria-pressed="${o.order.includes(stem)}">${esc(shortName(o))}</button>`).join("")}
       <button class="btn small" data-bucket="__new" title="Start a new album with this take">+ Album</button>
       <button class="btn small bucket${item(stem).later ? " primary" : ""}" data-bucket="__later" aria-pressed="${!!item(stem).later}">Later</button>
-      <button class="btn small danger" data-bucket="__delete" aria-pressed="${del}">${del ? "Undelete" : "Delete"}</button>
     </div>` : ""}
-    <div class="status-row">
-      <button class="btn small s-short" data-act="short" aria-pressed="${r.status === "short"}">Shortlist</button>
-      <button class="btn small s-maybe" data-act="maybe" aria-pressed="${r.status === "maybe"}">Maybe</button>
+    <div class="status-seg" role="group" aria-label="Status of ${esc(name)} for ${esc(shortName(a))}">
+      ${seg("maybe", "Maybe")}${seg("short", "Shortlist")}${opts.sortMode ? "" : seg("on", (st === "on" ? "✓ On " : "+ ") + esc(shortName(a)))}<span class="seg-gap"></span>${seg("cut", "Cut")}
     </div>
-    <p class="decision">${del ? "Marked for deletion on Suno" : cut ? "Cut · out of contention" : onThis ? "Selected for " + esc(a.name) : "In contention"}</p>
-    <div class="badges">${badges}</div>
-    <div class="link-row">
+    <div class="media-row">
       <a class="btn small" href="${suno(stem)}" target="_blank" rel="noopener">▶ Suno</a>
-      <a class="btn small" href="${esc(boardHref(lyricHref(stem)))}" title="${t.lyricStem ? "Open the matching lyric version" : "No exact lyric match; searches Lyric Board for this song"}">${t.lyricStem ? "Lyrics" : "Find lyrics"}</a>
+      <button class="btn small" type="button" data-act="lyrics" aria-expanded="${open}">Lyrics ${open ? "▾" : "▸"}</button>
       <a class="btn small" href="${esc(boardHref(`../classic.html?take=${encodeURIComponent(stem)}`))}" title="Full detail view: voice persona, source takes, Suno fields">Details</a>
+      <span class="more">
+        <button class="icon-btn more-btn" type="button" data-act="menu" aria-haspopup="menu" aria-expanded="false" aria-label="More actions for ${esc(name)}">⋯</button>
+        <div class="menu hidden" role="menu">
+          ${others.map(([id, o]) => `<button role="menuitem" data-menu="addto" data-album="${esc(id)}">Add to ${esc(o.name)}${o.order.includes(stem) ? " ✓" : ""}</button>`).join("")}
+          <button role="menuitem" data-menu="addto" data-album="__new">Add to new album…</button>
+          ${opts.inSession ? "" : `<button role="menuitem" data-menu="compare">Compare</button>`}
+          <button role="menuitem" class="danger" data-menu="delete">${del ? "Undelete" : "Delete"}</button>
+        </div>
+      </span>
     </div>
-    <details class="card-lyrics" data-lyr="${esc(stem)}"${ui.lyricsOpen.has(stem) ? " open" : ""}><summary>Lyrics${lyrics ? "" : " (none in Suno data)"}</summary>${lyrics ? `<pre class="lyrics">${lyricHtml(lyrics)}</pre>` : `<p class="meta">Suno has no lyrics saved for this take. ${t.lyricStem ? "The Lyrics button opens the matching lyric version." : ""}</p>`}</details>
-    <textarea class="note" rows="1" placeholder="Notes" aria-label="Notes for ${esc(nameOf(stem))}">${esc(r.note || "")}</textarea>
-    <div class="card-actions${opts.sortMode ? " hidden" : ""}">
-      <button class="btn small ${onThis ? "primary" : ""}" data-act="add" aria-pressed="${onThis}">${onThis ? "✓ On " : "+ "}${esc(shortName(a))}</button>
-      <select class="add-to" aria-label="Add to another album"><option value="">Add to…</option>${others.map(([id, o]) => `<option value="${esc(id)}">${esc(o.name)}${o.order.includes(stem) ? " ✓" : ""}</option>`).join("")}<option value="__new">+ New album…</option></select>
-      ${opts.inSession ? "" : `<button class="btn small" data-act="compare">Compare</button>`}
-      <button class="btn small" data-act="cut" aria-pressed="${cut}">${cut ? "Uncut" : "Cut"}</button>
-      <button class="btn small danger" data-act="delete" aria-pressed="${del}">${del ? "Undelete" : "Delete"}</button>
+    <div class="lyrics-body"${open ? "" : " hidden"}>
+      <a class="btn small" href="${esc(boardHref(lyricHref(stem)))}" title="${t.lyricStem ? "Open the matching lyric version" : "No exact lyric match; searches Lyric Board for this song"}">${t.lyricStem ? "Open in Lyric Board ↗" : "Find lyrics ↗"}</a>
+      ${lyrics ? `<pre class="lyrics">${lyricHtml(lyrics)}</pre>` : `<p class="meta">Suno has no lyrics saved for this take.</p>`}
     </div>
+    <textarea class="note" rows="1" placeholder="Notes" aria-label="Notes for ${esc(name)}">${esc(r.note || "")}</textarea>
   </article>`;
 }
 
 // ---------- render ----------
-let pendingRender = false;
+let pendingRender = false, focusStem = null;
 const editing = () => document.activeElement?.matches?.(".score-in, .note, #sessionNote, .title-edit, #albumTarget, select, summary");
 // Replace a dropdown's options only when they actually change.
 function setOptions(el, html) { if (el.dataset.html !== html) { el.innerHTML = html; el.dataset.html = html; } }
 function requestRender() { if (editing()) pendingRender = true; else render(); }
 document.addEventListener("focusout", () => setTimeout(() => { if (pendingRender && !editing()) { pendingRender = false; render(); } }, 150));
+const cardEl = stem => document.querySelector(`.card[data-stem="${CSS.escape(stem)}"]`);
 function render() {
   normalize();
   if (!state.albums[ui.album]) ui.album = Object.entries(state.albums).sort(([, a], [, b]) => a.created - b.created)[0][0];
   const views = {sort:"Sort", consider:"Consider", sessions:"Sessions", albums:"Albums", cleanup:"Cleanup"};
   for (const [v, n] of Object.entries(views)) { $("view" + n).classList.toggle("hidden", ui.view !== v); $("tab" + n).setAttribute("aria-selected", ui.view === v); }
-  renderTarget(); renderSummary();
+  renderTarget(); renderSummary(); renderPanel(); renderNotice();
   ({sort:renderSort, consider:renderConsider, sessions:renderSessions, albums:renderAlbums, cleanup:renderCleanup})[ui.view]();
   document.querySelectorAll("textarea.note").forEach(fit);
+  if (focusStem && (!document.activeElement || document.activeElement === document.body)) cardEl(focusStem)?.focus({preventScroll:true});
 }
 function renderTarget() {
-  const albums = Object.entries(state.albums).sort(([, a], [, b]) => a.created - b.created), a = album();
+  const albums = Object.entries(state.albums).sort(([, a], [, b]) => a.created - b.created), a = album(), ts = targetState(a);
   setOptions($("targetAlbum"), albums.map(([id, x]) => `<option value="${esc(id)}">${esc(x.name)}</option>`).join("") + `<option value="__new">+ New album…</option>`);
   $("targetAlbum").value = ui.album;
-  const total = a.order.reduce((n, s) => n + (take(s).duration || 0), 0);
-  $("targetStats").textContent = `${a.order.length}/${a.target || 12} tracks · ${longDur(total)} · ${live().filter(s => isCut(s)).length} cut`;
+  $("targetStats").innerHTML = `<span class="tstat ${ts.level}">${esc(ts.text)}</span> · ${longDur(ts.total)} · ${live().filter(s => isCut(s)).length} cut`;
 }
 function renderSummary() {
   const stems = live(), a = album();
-  const contenders = stems.filter(eligible).length;
+  const counts = Object.fromEntries(PlannerStatus.STATUSES.map(k => [k, 0]));
+  for (const s of stems) if (!tagged(s)) counts[statusOf(s)]++;
   const cleanup = stems.filter(tagged).length + stems.filter(s => item(s).name && !item(s).renameDone).length;
-  $("summary").textContent = `${contenders} takes still in contention for ${a.name} · ${stems.filter(s => isCut(s)).length} cut · ${stems.filter(tagged).length} marked for deletion`;
-  $("countConsider").textContent = contenders ? `(${contenders})` : "(0)";
+  $("summary").textContent = `${counts.unreviewed} unreviewed for ${a.name} · ${counts.on} on the album · ${counts.cut} cut · ${stems.filter(tagged).length} marked for deletion`;
+  $("countConsider").textContent = `(${counts.unreviewed})`;
   $("countSort").textContent = `(${sortBuckets().todo.length})`;
   $("countSessions").textContent = Object.keys(state.sessions).length ? `(${Object.keys(state.sessions).length})` : "";
   $("countAlbums").textContent = `(${a.order.length})`;
   $("countCleanup").textContent = cleanup ? `(${cleanup})` : "";
   $("built").textContent = window.ALBUM_BUILT ? "Suno snapshot " + window.ALBUM_BUILT : "";
 }
+// Everything that shows counts or the tracklist, without touching the list of cards.
+function renderChrome() {
+  renderTarget(); renderSummary(); renderPanel();
+  if (ui.view === "consider") renderBucketTabs();
+  if (ui.view === "sort") renderSortChrome();
+}
 
-// Shared by Considered and Sessions. Each sort has a natural direction; the toggle flips it.
+// ---------- sticky tracklist panel ----------
+const PANEL_VIEWS = ["sort", "consider", "sessions"];
+function renderPanel() {
+  const show = PANEL_VIEWS.includes(ui.view), panel = $("trackPanel");
+  panel.classList.toggle("hidden", !show); document.body.classList.toggle("has-panel", show);
+  if (!show) return;
+  const a = album(), ts = targetState(a), twins = dupesOn(a);
+  $("panelBar").innerHTML = `<b>${esc(shortName(a))}</b><span class="tstat ${ts.level}">${ts.n}/${ts.target}${ts.over ? " · " + ts.over + " over" : ""}</span><span class="ptotal">${longDur(ts.total)}</span><span class="chev" aria-hidden="true">▴</span>`;
+  $("panelBody").innerHTML = `<p class="tstat-line ${ts.level}">${esc(ts.text)}${ts.level ? "" : ""}</p>
+    <ol class="ptracks">${a.order.length ? a.order.map((stem, i) => {
+      const t = take(stem), twin = twins.has(t.baseTitle);
+      return `<li class="ptrack${twin ? " twin" : ""}" draggable="true" data-stem="${esc(stem)}"><span class="grip" aria-hidden="true">⋮⋮</span><span class="n">${i + 1}</span>
+        <span class="pt"><b>${nameHtml(stem)}</b>${twin ? `<small class="warn">⚠ same song as another track</small>` : ""}</span><span class="pd">${dur(t.duration)}</span>
+        <span class="pc"><button class="icon-btn" data-move="-1" aria-label="Move ${esc(labelOf(stem))} up">↑</button><button class="icon-btn" data-move="1" aria-label="Move ${esc(labelOf(stem))} down">↓</button></span></li>`;
+    }).join("") : `<li class="empty-note">No tracks yet. Press <kbd>A</kbd> on a take to add it.</li>`}</ol>
+    <p class="ptotal-line"><span>Running total</span><b>${longDur(ts.total)}</b></p>`;
+}
+
+// Shared by Album picks and Sessions. Each sort has a natural direction; the toggle flips it.
 const SORTS = {title:["Title","asc"], score:["Rating","desc"], newest:["Date","desc"], status:["Status","asc"], length:["Length","desc"], writer:["Writer","asc"]};
-// Status order: on the album you're building, Shortlist, Maybe, unmarked, Audio Board cut.
-const statusRank = s => album().order.includes(s) ? 0 : ({short:1, maybe:2, cut:4}[rating(s).status] ?? 3);
+// Status order for the album you're building: On album, Shortlist, Maybe, Unreviewed, Cut.
+const statusRank = s => ({on:0, short:1, maybe:2, unreviewed:3, cut:4}[statusOf(s)]);
 const SORT_KEYS = {title:null, score:s => rating(s).score ?? null, newest:s => take(s).createdAt || null, status:statusRank, length:s => take(s).duration || null, writer:s => take(s).writer && take(s).writer !== "Unknown" ? take(s).writer : null};
 const dirOf = (sort, dir) => dir || SORTS[sort]?.[1] || "asc";
 const sortDir = () => dirOf(ui.sort, ui.dir);
@@ -296,24 +392,10 @@ function sortStems(stems, sort = ui.sort, dir = sortDir()) {
 }
 const sortOptions = cur => Object.entries(SORTS).map(([k, [l]]) => `<option value="${k}"${cur && k === cur ? " selected" : ""}>Sort: ${l.toLowerCase()}</option>`).join("");
 const dirLabel = dir => dir === "desc" ? "↓ Desc" : "↑ Asc";
-function filters() {
-  const a = album(), n = shortName(a);
-  return [
-    ["contenders", "In contention", eligible],
-    ["short", "Shortlist", s => eligible(s) && rating(s).status === "short"],
-    ["maybe", "Maybe", s => eligible(s) && rating(s).status === "maybe"],
-    ["unscored", "Unscored", s => rating(s).score == null && eligible(s)],
-    ["on", "On " + n, s => a.order.includes(s)],
-    ["unplaced", "Not on an album", s => !albumOf(s) && eligible(s)],
-    ["cut", "Cut from " + n, s => isCut(s)],
-    ["del", "Tagged delete", s => tagged(s)],
-    ["all", "Everything", () => true],
-  ];
-}
-// One dropdown for both the Sort and Considered lists: pick a song to see only its versions.
+// One dropdown for both Triage and Album picks: pick a song to see only its versions.
 function songOptions() {
   const counts = new Map();
-  for (const s of pool().filter(typeOk)) { const b = take(s).baseTitle; counts.set(b, (counts.get(b) || 0) + 1); }
+  for (const s of (ui.view === "sort" ? catalog() : pool()).filter(typeOk)) { const b = take(s).baseTitle; counts.set(b, (counts.get(b) || 0) + 1); }
   if (ui.song && !counts.has(ui.song)) counts.set(ui.song, 0);
   const html = `<option value="">All songs</option>` + [...counts].sort(([a], [b]) => a.localeCompare(b, undefined, {numeric:true})).map(([b, n]) => `<option value="${esc(b)}">${esc(b)} (${n})</option>`).join("");
   for (const id of ["songFilter", "sortSong"]) { setOptions($(id), html); $(id).value = ui.song; }
@@ -324,10 +406,11 @@ function matchesQuery(stem) {
   const t = take(stem), q = ui.q.toLowerCase();
   return [nameOf(stem), t.title, t.baseTitle, t.writer, t.lyrics, t.oldTitle, rating(stem).note].some(x => String(x || "").toLowerCase().includes(q));
 }
-// ---------- Sort: one decision per take (album bucket, save for later, or delete) ----------
+
+// ---------- Triage: one decision per take (album bucket or save for later) ----------
 const decided = s => !!albumOf(s);
 function sortBuckets() {
-  const base = catalog().filter(s => typeOk(s) && !tagged(s) && !audioCut(s));
+  const base = catalog().filter(s => typeOk(s) && !tagged(s) && !isCut(s));
   return {
     todo: base.filter(s => !decided(s) && !item(s).later),
     later: base.filter(s => !decided(s) && item(s).later),
@@ -335,68 +418,123 @@ function sortBuckets() {
   };
 }
 function bucket(stem, kind) {
-  snapshot(); const i = ensure(stem);
-  if (kind === "__delete") {
-    if (i.del) { delete i.del; save(); toast("Delete tag removed"); return; }
-    i.del = true; delete i.later; for (const a of Object.values(state.albums)) a.order = a.order.filter(m => m !== stem);
-    save(); toast("Tagged to delete on Suno. It's on the Suno cleanup list.", true); return;
-  }
+  ensureMigrated(true);
+  const i = ensure(stem);
   if (kind === "__later") {
-    if (i.later) { delete i.later; save(); toast("Back in To sort", true); return; }
-    i.later = true; for (const a of Object.values(state.albums)) a.order = a.order.filter(m => m !== stem);
-    save(); toast("Saved for later", true); return;
+    snapshot(stem);
+    if (i.later) { delete i.later; save(false); toast("Back in To sort", true); }
+    else { i.later = true; for (const a of Object.values(state.albums)) a.order = a.order.filter(m => m !== stem); save(false); toast("Saved for later", true); }
+    settle(stem); return;
   }
   let id = kind;
   if (id === "__new") { id = newAlbum(); if (!id) return; }
   const target = state.albums[id]; if (!target) return;
-  if (target.order.includes(stem)) { target.order = target.order.filter(m => m !== stem); save(); toast("Taken off " + target.name + ". Back in To sort.", true); return; }
-  for (const a of Object.values(state.albums)) a.order = a.order.filter(m => m !== stem);
-  target.order.push(stem); target.cut = target.cut.filter(m => m !== stem); delete i.later;
-  save(); toast(`${nameOf(stem)} → ${target.name} #${target.order.length}`, true);
+  if (target.order.includes(stem)) { snapshot(stem); target.order = target.order.filter(m => m !== stem); save(false); toast("Taken off " + target.name + ". Back in To sort.", true); settle(stem); return; }
+  placeTake(stem, id);
+}
+function renderSortChrome() {
+  const b = sortBuckets();
+  $("sortChips").innerHTML = [["todo", "To sort"], ["later", "Saved for later"], ["done", "On an album"]].map(([k, l]) => `<button class="chip" data-sf="${k}" aria-pressed="${ui.sortFilter === k}">${l} <small>${b[k].length}</small></button>`).join("");
+  const albums = Object.values(state.albums).sort((x, y) => x.created - y.created);
+  $("sortStats").textContent = albums.map(o => `${shortName(o)}: ${o.order.length}`).join(" · ") + ` · ${Object.keys(state.considered).filter(tagged).length} tagged delete`;
 }
 function renderSort() {
   songOptions();
-  const b = sortBuckets(), a = album();
+  const b = sortBuckets();
   $("sortQ").value = ui.q;
   setOptions($("sortSort"), sortOptions()); $("sortSort").value = ui.sort;
   $("sortSortDir").textContent = dirLabel(sortDir());
   setOptions($("sortType"), [["Vocal", "Vocals"], ["Instrumental", "Instrumentals"], ["Stem", "Stems"], ["all", "All types"]].map(([k, l]) => `<option value="${k}">${l}</option>`).join("")); $("sortType").value = ui.type;
-  $("sortChips").innerHTML = [["todo", "To sort"], ["later", "Saved for later"], ["done", "On an album"]].map(([k, l]) => `<button class="chip" data-sf="${k}" aria-pressed="${ui.sortFilter === k}">${l} <small>${b[k].length}</small></button>`).join("");
-  const albums = Object.values(state.albums).sort((x, y) => x.created - y.created);
-  $("sortStats").textContent = albums.map(o => `${shortName(o)}: ${o.order.length}`).join(" · ") + ` · ${Object.keys(state.considered).filter(tagged).length} tagged delete`;
+  renderSortChrome();
   const stems = sortStems(b[ui.sortFilter].filter(matchesQuery));
   const empty = {todo:"Nothing left to sort here. Switch the type filter, or check Saved for later.", later:"Nothing saved for later.", done:"Nothing on an album yet."}[ui.sortFilter];
-  $("sortList").innerHTML = stems.length ? `<div class="cards">${stems.map(s => card(s, {sortMode:true})).join("")}</div>` : `<p class="empty-note big">${stems.length || b[ui.sortFilter].length ? "No takes match the search." : empty}</p>`;
+  $("sortList").innerHTML = stems.length ? `<div class="cards single">${stems.map(s => card(s, {sortMode:true})).join("")}</div>` : `<p class="empty-note big">${stems.length || b[ui.sortFilter].length ? "No takes match the search." : empty}</p>`;
   document.querySelectorAll("textarea.note").forEach(fit);
+}
+
+// ---------- Album picks: one bucket per status ----------
+const eligibleBase = s => !item(s).delDone && !tagged(s);
+const bucketPool = () => pool().filter(s => typeOk(s) && eligibleBase(s));
+const inBucket = s => (ui.bucket === "alive" ? statusOf(s) !== "cut" : statusOf(s) === ui.bucket) && (!ui.unscored || rating(s).score == null);
+function renderBucketTabs() {
+  const base = bucketPool(), counts = Object.fromEntries(PlannerStatus.STATUSES.map(k => [k, 0]));
+  for (const s of base) counts[statusOf(s)]++;
+  const tab = (k, label, n) => `<button class="bucket-tab s-${k}" role="tab" data-bucket-tab="${k}" aria-selected="${ui.bucket === k}">${label} <small>${n}</small></button>`;
+  $("bucketTabs").innerHTML = ["unreviewed", "maybe", "short", "on", "cut"].map(k => tab(k, STATUS_LABEL[k], counts[k])).join("")
+    + `<span class="bucket-total" title="The five counts add up to this">= ${base.length}</span><span class="bucket-sep"></span>`
+    + tab("alive", "All alive", base.length - counts.cut);
+}
+// The status of a song across its group: which take, if any, is on the album.
+function songNote(base) {
+  const onIt = album().order.filter(s => take(s).baseTitle === base);
+  return !onIt.length ? "" : onIt.length === 1 ? ` · on album via ${esc(labelOf(onIt[0]))}` : ` · <span class="warn">⚠ ${onIt.length} takes on album</span>`;
+}
+function groupHead(name, list) {
+  const bySong = ui.groupBy === "song", inOne = bySong && list.length > 1 && Object.entries(state.sessions).find(([, s]) => list.every(m => s.members.includes(m)));
+  return `<h3>${esc(name)} <small>${list.length} take${list.length > 1 ? "s" : ""}${bySong ? songNote(name) : ""}</small></h3>${!bySong ? "" : list.length > 1 && !inOne ? `<button class="btn small" data-compare-group="${esc(name)}">Compare all ${list.length}</button>` : inOne ? `<button class="btn small" data-goto-session="${esc(inOne[0])}">Open session</button>` : ""}`;
+}
+function refreshHeaders() {
+  document.querySelectorAll("#considerList .group").forEach(sec => sec.querySelector("header").innerHTML = groupHead(sec.dataset.group, [...sec.querySelectorAll(".card:not(.leaving)")].map(c => c.dataset.stem)));
 }
 function renderConsider() {
   songOptions();
   setOptions($("sort"), sortOptions()); $("sort").value = ui.sort;
   $("sortDir").textContent = dirLabel(sortDir()); $("sortDir").setAttribute("aria-label", "Sort direction " + (sortDir() === "desc" ? "descending" : "ascending"));
-  $("groupToggle").setAttribute("aria-pressed", ui.group);
-  setOptions($("groupBy"), GROUP_BYS.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")); $("groupBy").value = ui.groupBy; $("groupBy").disabled = !ui.group;
-  $("scopeChips").innerHTML = [["considered", `Considered (${live().length})`], ["all", `All takes (${catalog().length})`]].map(([k, l]) => `<button class="chip" data-scope="${k}" aria-pressed="${ui.scope === k}">${l}</button>`).join("");
+  setOptions($("groupBy"), GROUP_BYS.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")); $("groupBy").value = ui.groupBy;
   setOptions($("typeFilter"), [["Vocal", "Vocals"], ["Instrumental", "Instrumentals"], ["Stem", "Stems"], ["all", "All types"]].map(([k, l]) => `<option value="${k}">${l}</option>`).join("")); $("typeFilter").value = ui.type;
-  $("typeFilter").classList.remove("hidden");
+  $("unscoredChip").setAttribute("aria-pressed", ui.unscored);
+  $("q").value = ui.q;
   $("onlyBanner").classList.toggle("hidden", !ui.only);
   if (ui.only) $("onlyText").textContent = ui.only.take ? "Showing one take." : "Showing the takes for one lyric version.";
-  const all = pool().filter(typeOk), fs = filters();
-  if (!fs.some(([k]) => k === ui.filter)) ui.filter = "contenders";
-  $("filterChips").innerHTML = fs.map(([k, l, f]) => `<button class="chip" data-f="${k}" aria-pressed="${ui.filter === k}">${esc(l)} <small>${all.filter(f).length}</small></button>`).join("");
+  renderBucketTabs();
   const onlyOk = s => !ui.only || (ui.only.take ? s === ui.only.take : take(s).lyricStem === ui.only.lyrics);
-  const test = ui.only ? () => true : fs.find(([k]) => k === ui.filter)[2];
-  const stems = sortStems(pool().filter(s => (ui.only || typeOk(s)) && onlyOk(s) && test(s) && matchesQuery(s)));
+  const stems = sortStems(pool().filter(s => (ui.only || (typeOk(s) && eligibleBase(s))) && onlyOk(s) && (ui.only || inBucket(s)) && matchesQuery(s)));
   const box = $("considerList");
-  if (!all.length) { box.innerHTML = `<div class="empty-note big"><b>Nothing considered yet.</b><br>Use <b>+ Add takes</b> to pull in the Audio Board session holding your album candidates, paste Suno links, or search the catalogue.</div>`; return; }
-  if (!stems.length) { box.innerHTML = `<p class="empty-note">No takes match.</p>`; return; }
-  if (!ui.group) { box.innerHTML = `<div class="cards">${stems.map(s => card(s)).join("")}</div>`; return; }
+  if (!pool().length) { box.innerHTML = `<div class="empty-note big"><b>Nothing here yet.</b><br>Use <b>+ Add takes</b> to pull in the Audio Board session holding your album candidates, paste Suno links, or search the catalogue. Or start in <b>Triage</b>.</div>`; return; }
+  if (!stems.length) { box.innerHTML = `<p class="empty-note">${ui.q || ui.song || ui.unscored ? "No takes match." : ui.bucket === "unreviewed" ? "Inbox empty. Nothing left unreviewed for " + esc(album().name) + "." : "Nothing here."}</p>`; return; }
+  if (ui.groupBy === "none") { box.innerHTML = `<div class="cards single">${stems.map(s => card(s)).join("")}</div>`; return; }
   const groups = new Map();
-  const keyOf = s => ui.groupBy === "album" ? (albumOf(s)?.[1].name || "Not on an album") : ui.groupBy === "status" ? ({short:"Shortlist", maybe:"Maybe", cut:"Cut"}[rating(s).status] || "No status") : ui.groupBy === "writer" ? (take(s).writer && take(s).writer !== "Unknown" ? take(s).writer : "Unknown writer") : take(s).baseTitle;
+  const keyOf = s => ui.groupBy === "album" ? (albumOf(s)?.[1].name || "Not on an album") : ui.groupBy === "status" ? STATUS_LABEL[statusOf(s)] : ui.groupBy === "writer" ? (take(s).writer && take(s).writer !== "Unknown" ? take(s).writer : "Unknown writer") : take(s).baseTitle;
   for (const s of stems) { const g = keyOf(s); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(s); }
-  box.innerHTML = [...groups].map(([name, list]) => {
-    const bySong = ui.groupBy === "song", inOne = bySong && list.length > 1 && Object.entries(state.sessions).find(([, s]) => list.every(m => s.members.includes(m)));
-    return `<section class="group"><header><h3>${esc(name)} <small>${list.length} take${list.length > 1 ? "s" : ""}</small></h3>${!bySong ? "" : list.length > 1 && !inOne ? `<button class="btn small" data-compare-group="${esc(name)}">Compare all ${list.length}</button>` : inOne ? `<button class="btn small" data-goto-session="${esc(inOne[0])}">Open session</button>` : ""}</header><div class="cards">${list.map(s => card(s)).join("")}</div></section>`;
-  }).join("");
+  box.innerHTML = [...groups].map(([name, list]) => `<section class="group" data-group="${esc(name)}"><header>${groupHead(name, list)}</header><div class="cards single">${list.map(s => card(s)).join("")}</div></section>`).join("");
+}
+
+// ---------- a status change moves the card out of the way instead of redrawing the list ----------
+function belongsHere(stem) {
+  if (ui.view === "consider") return !!ui.only || (eligibleBase(stem) && typeOk(stem) && inBucket(stem));
+  if (ui.view === "sort") return sortBuckets()[ui.sortFilter].includes(stem) && matchesQuery(stem);
+  return true;
+}
+function settle(stem) {
+  renderChrome();
+  const box = ui.view === "consider" ? $("considerList") : ui.view === "sort" ? $("sortList") : null;
+  const el = box && [...box.querySelectorAll(".card")].find(c => c.dataset.stem === stem);
+  if (!el) { render(); return; }
+  if (belongsHere(stem)) {
+    const hadFocus = el.contains(document.activeElement) || document.activeElement === el;
+    const tmp = document.createElement("div"); tmp.innerHTML = card(stem, {sortMode:ui.view === "sort"});
+    el.replaceWith(tmp.firstElementChild);
+    const fresh = cardEl(stem); fit(fresh.querySelector("textarea.note"));
+    if (hadFocus) { fresh.focus({preventScroll:true}); focusStem = stem; }
+    if (ui.view === "consider") refreshHeaders();
+    return;
+  }
+  collapseCard(el, box);
+}
+const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+function collapseCard(el, box) {
+  const cards = [...box.querySelectorAll(".card:not(.leaving)")], i = cards.indexOf(el), next = cards[i + 1] || cards[i - 1] || null;
+  if (next) { focusStem = next.dataset.stem; next.focus({preventScroll:true}); next.scrollIntoView({block:"nearest", behavior:reducedMotion() ? "auto" : "smooth"}); }
+  else { focusStem = null; document.activeElement?.blur?.(); }
+  const done = () => {
+    const sec = el.closest(".group"); el.remove(); if (sec && !sec.querySelector(".card")) sec.remove();
+    if (ui.view === "consider") refreshHeaders();
+    if (!box.querySelector(".card")) { if (ui.view === "consider") renderConsider(); else renderSort(); }
+  };
+  if (reducedMotion()) { done(); return; }
+  el.style.height = el.offsetHeight + "px"; el.getBoundingClientRect();
+  el.classList.add("leaving"); el.setAttribute("aria-hidden", "true"); el.style.height = "0px";
+  setTimeout(done, 280);
 }
 
 function sessionStats(s) {
@@ -409,7 +547,7 @@ function renderSessions() {
     .sort(([, x, sx], [, y, sy]) => (!!sx.on - !!sy.on) || x.name.localeCompare(y.name));
   if (ui.session && !state.sessions[ui.session]) ui.session = "";
   $("sessionList").innerHTML = (entries.length ? entries.map(([id, s, st]) => `<button class="session-row${ui.session === id ? " active" : ""}${st.on ? " decided" : ""}" data-session="${esc(id)}"><b>${esc(s.name)}</b><small>${st.members.length} takes${st.on ? ` · ${st.on} on ${esc(shortName(a))}` : ""}${st.cut ? ` · ${st.cut} cut` : ""}${st.open && !st.on ? ` · ${st.open} open` : ""}</small></button>`).join("")
-    : `<p class="empty-note">No sessions yet. Hit <b>Compare</b> on a take, or <b>Auto-build sessions</b> on Considered.</p>`) + `<button class="btn small" id="newEmptySession">+ New session</button>`;
+    : `<p class="empty-note">No sessions yet. Hit <b>Compare</b> in a take's ⋯ menu, or <b>Auto-build sessions</b> on Album picks.</p>`) + `<button class="btn small" id="newEmptySession">+ New session</button>`;
   const d = $("sessionDetail"), s = state.sessions[ui.session];
   if (!s) { d.className = "detail empty"; d.innerHTML = "Pick a session to compare its takes."; return; }
   const st = sessionStats(s);
@@ -424,49 +562,47 @@ function renderSessions() {
     <div class="compare-grid">${order.map(m => card(m, {inSession:true})).join("") || `<p class="empty-note">No takes in this session.</p>`}</div>
     <label class="sub" for="sessionNote">Session notes</label>
     <textarea id="sessionNote" placeholder="Which verse hits harder, what to fix…">${esc(s.note || "")}</textarea>
-    <div class="scope-tools"><button class="btn small" id="sessionAddMore">+ Add considered takes</button></div>
+    <div class="scope-tools"><button class="btn small" id="sessionAddMore">+ Add takes from Album picks</button></div>
     <div id="sessionAdder" class="session-options hidden"></div>`;
 }
 
 function renderAlbums() {
-  const albums = Object.entries(state.albums).sort(([, a], [, b]) => a.created - b.created), a = album();
-  const total = a.order.reduce((n, s) => n + (take(s).duration || 0), 0);
+  const albums = Object.entries(state.albums).sort(([, a], [, b]) => a.created - b.created), a = album(), ts = targetState(a), twins = dupesOn(a);
   $("albumHead").innerHTML = `<div class="field-head"><input class="title-edit" id="albumName" value="${esc(a.name)}" aria-label="Album name">
       <span class="tools-inline"><label class="meta">Target <input type="number" id="albumTarget" min="1" max="40" value="${a.target || 12}"> tracks</label>
       <button class="btn small" id="copyAlbum">Copy tracklist</button>${albums.length > 1 ? `<button class="btn small danger" id="deleteAlbum">Delete album</button>` : ""}</span></div>
-    <div class="runtime"><b>${a.order.length}</b> / ${a.target || 12} tracks · <b>${longDur(total)}</b> runtime<div class="bar"><span style="width:${Math.min(100, a.order.length / (a.target || 12) * 100)}%"></span></div></div>`;
+    <div class="runtime"><b>${a.order.length}</b> / ${ts.target} tracks${ts.over ? ` · <span class="tstat ${ts.level}">${ts.over} over target</span>` : ""} · <b>${longDur(ts.total)}</b> runtime<div class="bar ${ts.level}"><span style="width:${Math.min(100, a.order.length / ts.target * 100)}%"></span></div></div>`;
   const others = albums.filter(([id]) => id !== ui.album);
   $("albumTracks").innerHTML = a.order.length ? a.order.map((stem, i) => {
-    const t = take(stem), r = rating(stem);
-    return `<li class="track" draggable="true" data-stem="${esc(stem)}"><span class="grip" aria-hidden="true">⋮⋮</span><span class="n">${i + 1}</span>
+    const t = take(stem), r = rating(stem), twin = twins.has(t.baseTitle);
+    return `<li class="track${twin ? " twin" : ""}" draggable="true" data-stem="${esc(stem)}"><span class="grip" aria-hidden="true">⋮⋮</span><span class="n">${i + 1}</span>
       <input class="score-in ${scoreClass(r.score)}" type="number" min="0" max="100" inputmode="numeric" value="${r.score ?? ""}" placeholder="–" aria-label="Score">
-      <div class="t"><b>${nameHtml(stem)}</b><small>${esc(takeLabel(t))}${r.note ? " · " + esc(r.note.slice(0, 80)) : ""}</small></div>
+      <div class="t"><b>${nameHtml(stem)}</b>${twin ? ` <span class="badge warn">⚠ same song twice</span>` : ""}<small>${esc(takeLabel(t))}${r.note ? " · " + esc(r.note.slice(0, 80)) : ""}</small></div>
       <div class="ctl"><a class="btn small" href="${suno(stem)}" target="_blank" rel="noopener" aria-label="Play on Suno">▶</a><button class="btn small" data-move="-1" aria-label="Move up">↑</button><button class="btn small" data-move="1" aria-label="Move down">↓</button>
       ${others.length ? `<select class="add-to" aria-label="Move to another album"><option value="">Move to…</option>${others.map(([id, o]) => `<option value="${esc(id)}">${esc(o.name)}</option>`).join("")}</select>` : ""}
       <button class="btn small" data-unplace aria-label="Take off this album">✕</button></div></li>`;
   }).join("") : `<li class="empty-note">No tracks yet. Use <b>+ ${esc(shortName(a))}</b> on any take, or place from below.</li>`;
-  const pool = live().filter(s => ["short", "maybe"].includes(rating(s).status) && !albumOf(s) && eligible(s))
-    .sort((x, y) => (rating(x).status === "short" ? 0 : 1) - (rating(y).status === "short" ? 0 : 1) || (rating(y).score ?? -1) - (rating(x).score ?? -1));
+  const pool = live().filter(s => ["short", "maybe"].includes(statusOf(s)) && !albumOf(s) && eligible(s))
+    .sort((x, y) => (statusOf(x) === "short" ? 0 : 1) - (statusOf(y) === "short" ? 0 : 1) || (rating(y).score ?? -1) - (rating(x).score ?? -1));
   $("pool").innerHTML = pool.length ? `<div class="pool">${pool.map(stem => {
     const t = take(stem), r = rating(stem);
-    return `<div class="pool-row" data-stem="${esc(stem)}"><span class="score ${scoreClass(r.score)}">${r.score ?? "–"}</span><div class="t"><b>${nameHtml(stem)}</b><small>${r.status === "short" ? "Shortlist" : "Maybe"} · ${esc(takeLabel(t))}</small></div><button class="btn small primary" data-place="${esc(ui.album)}">+ ${esc(shortName(a))}</button></div>`;
+    return `<div class="pool-row" data-stem="${esc(stem)}"><span class="score ${scoreClass(r.score)}">${r.score ?? "–"}</span><div class="t"><b>${nameHtml(stem)}</b><small>${STATUS_LABEL[statusOf(stem)]} · ${esc(takeLabel(t))}</small></div><button class="btn small primary" data-place="${esc(ui.album)}">+ ${esc(shortName(a))}</button></div>`;
   }).join("")}</div>` : `<p class="empty-note">Nothing waiting. Mark takes Shortlist or Maybe to see them here.</p>`;
   renderMissing(a, albums);
 }
 function renderMissing(a, albums) {
-  const items = [], target = a.target || 12, total = a.order.reduce((n, s) => n + (take(s).duration || 0), 0);
+  const items = [], ts = targetState(a), target = ts.target, total = ts.total;
   if (a.order.length < target) items.push(["warn", `${target - a.order.length} more track${target - a.order.length > 1 ? "s" : ""} to reach ${target}.`]);
-  if (a.order.length > target) items.push(["warn", `${a.order.length - target} over the ${target}-track target.`]);
+  if (ts.over) items.push([ts.level === "bad" ? "bad" : "warn", `${ts.over} over target (${a.order.length}/${target} tracks).`]);
   if (a.order.length && total < 35 * 60) items.push(["info", `Runtime ${longDur(total)}. Most full-length rap albums land between 40 and 60 minutes.`]);
   if (total > 70 * 60) items.push(["warn", `Runtime ${longDur(total)} runs long. Consider moving tracks to another album.`]);
-  const titles = new Map(); for (const s of a.order) { const b = take(s).baseTitle; titles.set(b, (titles.get(b) || 0) + 1); }
-  for (const [b, n] of titles) if (n > 1) items.push(["bad", `"${b}" is on here ${n} times.`]);
+  for (const [b, list] of dupesOn(a)) items.push(["bad", `"${b}" is on here ${list.length} times: ${list.map(labelOf).join(", ")}.`]);
   const unscored = a.order.filter(s => rating(s).score == null);
   if (unscored.length) items.push(["info", `No score yet: ${unscored.map(nameOf).join(", ")}.`]);
   const nonVocal = a.order.filter(s => take(s).type && take(s).type !== "Vocal");
   if (nonVocal.length) items.push(["warn", `Not a vocal take: ${nonVocal.map(s => nameOf(s) + " (" + take(s).type + ")").join(", ")}.`]);
   const open = Object.entries(state.sessions).map(([id, s]) => [id, s, sessionStats(s)]).filter(([, , st]) => !st.on && st.open);
-  const short = live().filter(s => rating(s).status === "short" && !albumOf(s) && eligible(s));
+  const short = live().filter(s => statusOf(s) === "short" && !albumOf(s) && eligible(s));
   const unscoredAll = live().filter(s => rating(s).score == null && eligible(s));
   const where = new Map(); for (const [id, al] of albums) for (const s of al.order) { const b = take(s).baseTitle; if (!where.has(b)) where.set(b, new Set()); where.get(b).add(id); }
   const split = [...where].filter(([, ids]) => ids.size > 1).map(([b]) => b);
@@ -490,13 +626,39 @@ function renderCleanup() {
   const delTodo = dels.filter(s => !item(s).delDone), renTodo = renames.filter(s => !item(s).renameDone);
   $("cleanup").innerHTML = `<div class="cleanup-grid">
     <section><div class="field-head"><h3>Delete on Suno <small>${delTodo.length} to do</small></h3>${delTodo.length ? `<button class="btn small" id="copyDeletes">Copy links</button>` : ""}</div>
-      <p class="meta">Tick a take once it's deleted on Suno. Ticked takes leave the planner; untick to bring one back.</p>
-      ${dels.length ? dels.map(s => `<label class="clean-row${item(s).delDone ? " done" : ""}" data-stem="${esc(s)}"><input type="checkbox" data-del-done ${item(s).delDone ? "checked" : ""}><span class="t"><b>${esc(take(s).title)}</b><small>${esc(takeLabel(take(s)))}</small></span><a class="btn small" href="${suno(s)}" target="_blank" rel="noopener">Open on Suno</a></label>`).join("") : `<p class="empty-note">Nothing tagged. Use <b>Delete</b> on a take.</p>`}
+      <p class="meta">Tick a take once it's deleted on Suno. Ticked takes leave the planner; untick to bring one back. <b>Keep</b> removes the delete tag so the take comes back to Album picks.</p>
+      ${dels.length ? dels.map(s => `<label class="clean-row${item(s).delDone ? " done" : ""}" data-stem="${esc(s)}"><input type="checkbox" data-del-done ${item(s).delDone ? "checked" : ""}><span class="t"><b>${esc(take(s).title)}</b><small>${esc(takeLabel(take(s)))}</small></span>${item(s).delDone ? "" : `<button class="btn small" type="button" data-untag>Keep</button>`}<a class="btn small" href="${suno(s)}" target="_blank" rel="noopener">Open on Suno</a></label>`).join("") : `<p class="empty-note">Nothing tagged. Use <b>Delete</b> in a take's ⋯ menu.</p>`}
     </section>
     <section><div class="field-head"><h3>Rename on Suno <small>${renTodo.length} to do</small></h3></div>
       <p class="meta">Copy the new name, rename on Suno, then tick it. The bracketed old name disappears once ticked.</p>
-      ${renames.length ? renames.map(s => `<div class="clean-row${item(s).renameDone ? " done" : ""}" data-stem="${esc(s)}"><input type="checkbox" data-rename-done ${item(s).renameDone ? "checked" : ""} aria-label="Renamed on Suno"><span class="t"><b>${esc(item(s).name)}</b><small>was ${esc(take(s).title)}</small></span><button class="btn small" data-copy-name>Copy name</button><a class="btn small" href="${suno(s)}" target="_blank" rel="noopener">Open on Suno</a></div>`).join("") : `<p class="empty-note">No renames yet. Use ✎ on a take.</p>`}
+      ${renames.length ? renames.map(s => `<div class="clean-row${item(s).renameDone ? " done" : ""}" data-stem="${esc(s)}"><input type="checkbox" data-rename-done ${item(s).renameDone ? "checked" : ""} aria-label="Renamed on Suno"><span class="t"><b>${esc(item(s).name)}</b><small>was ${esc(take(s).title)}</small></span><button class="btn small" data-copy-name>Copy name</button><a class="btn small" href="${suno(s)}" target="_blank" rel="noopener">Open on Suno</a></div>`).join("") : `<p class="empty-note">No renames yet. Use <b>edit</b> on a take.</p>`}
     </section></div>`;
+}
+
+// ---------- migration notice and log ----------
+function renderNotice() {
+  const log = migrationLog(), run = log.runs[log.runs.length - 1], box = $("migrationNotice");
+  const show = run && !log.seen;
+  box.classList.toggle("hidden", !show);
+  if (!show) return;
+  box.innerHTML = `<span><b>Album picks now keep one status per take.</b> ${run.conflicts.length} take${run.conflicts.length === 1 ? "" : "s"} had overlapping flags${run.pulledIn.length ? `, and ${run.pulledIn.length} Audio Board Shortlist/Maybe take${run.pulledIn.length === 1 ? " was" : "s were"} added to the planner` : ""}. Your data was backed up first.</span>
+    <button class="btn small" id="noticeReview">Review</button><button class="btn small" id="noticeDismiss">Dismiss</button>`;
+}
+function logText() {
+  const log = migrationLog();
+  if (!log.runs.length) return "No status migration has run on this device.";
+  return log.runs.map(run => `Status migration ${run.at}\nAlbums: ${run.albums.join(", ")}\n\nConflicts (${run.conflicts.length}), first matching rule wins:\n${run.conflicts.map(c => `- ${c.title} · ${c.albumName}: ${c.flags.join(" + ")} → ${c.result}`).join("\n") || "(none)"}\n\nPulled into the planner because Audio Board had them as Shortlist/Maybe (${run.pulledIn.length}):\n${run.pulledIn.map(t => "- " + t).join("\n") || "(none)"}`).join("\n\n");
+}
+function openLog() {
+  const log = migrationLog();
+  $("logBody").innerHTML = !log.runs.length ? `<p class="meta">No status migration has run on this device. If you use the planner on another device, its log is kept there.</p>` : log.runs.map(run => `
+    <h3 class="sub">${esc(new Date(run.at).toLocaleString())} · ${esc(run.albums.join(", "))}</h3>
+    <p class="meta">${run.conflicts.length} conflict${run.conflicts.length === 1 ? "" : "s"}. A conflict is a take that carried more than one of: On album, Cut, Shortlist, Maybe. The first matching rule won (On album, then Cut, then Shortlist, then Maybe).</p>
+    ${run.conflicts.length ? `<table class="log"><thead><tr><th>Take</th><th>Album</th><th>It had</th><th>Now</th></tr></thead><tbody>${run.conflicts.map(c => `<tr><td>${esc(c.title)}</td><td>${esc(c.albumName)}</td><td>${esc(c.flags.join(" + "))}</td><td>${esc(c.result)}</td></tr>`).join("")}</tbody></table>` : ""}
+    ${run.pulledIn.length ? `<p class="meta">Added to the planner (Shortlist/Maybe on Audio Board only): ${esc(run.pulledIn.join(", "))}</p>` : ""}`).join("");
+  $("logBackup").disabled = !localStorage.getItem(BACKUP_KEY);
+  $("logDialog").showModal();
+  if (!log.seen) { log.seen = true; try { localStorage.setItem(MIGRATION_KEY, JSON.stringify(log)); } catch (err) {} renderNotice(); }
 }
 
 // ---------- dialogs ----------
@@ -542,7 +704,8 @@ $("q").oninput = e => { ui.q = e.target.value.trim(); renderConsider(); };
 $("q").value = ui.q;
 $("sort").onchange = e => { ui.sort = e.target.value; ui.dir = ""; saveView(); renderConsider(); };
 $("sortDir").onclick = () => { ui.dir = sortDir() === "desc" ? "asc" : "desc"; saveView(); renderConsider(); };
-$("groupToggle").onclick = () => { ui.group = !ui.group; saveView(); renderConsider(); };
+$("bucketTabs").onclick = e => { const b = e.target.closest("[data-bucket-tab]"); if (b) { ui.bucket = b.dataset.bucketTab; saveView(); renderConsider(); } };
+$("unscoredChip").onclick = () => { ui.unscored = !ui.unscored; saveView(); renderConsider(); };
 $("sortChips").onclick = e => { const b = e.target.closest("[data-sf]"); if (b) { ui.sortFilter = b.dataset.sf; saveView(); renderSort(); } };
 $("songFilter").onchange = $("sortSong").onchange = e => { ui.song = e.target.value; render(); };
 $("sortQ").oninput = e => { ui.q = e.target.value.trim(); renderSort(); };
@@ -552,32 +715,46 @@ $("sortType").onchange = e => { ui.type = e.target.value; saveView(); renderSort
 document.addEventListener("click", e => { const b = e.target.closest(".card [data-bucket]"); if (b) bucket(b.closest("[data-stem]").dataset.stem, b.dataset.bucket); });
 $("groupBy").onchange = e => { ui.groupBy = e.target.value; saveView(); renderConsider(); };
 $("typeFilter").onchange = e => { ui.type = e.target.value; saveView(); renderConsider(); };
-$("scopeChips").onclick = e => { const b = e.target.closest("[data-scope]"); if (b) { ui.scope = b.dataset.scope; saveView(); renderConsider(); } };
-$("clearOnly").onclick = () => { ui.only = null; history.replaceState(history.state, "", location.pathname); renderConsider(); };
-// Lyrics dropdowns keep their state through redraws (toggle events do not bubble, so listen while capturing).
-document.addEventListener("toggle", e => { const d = e.target; if (d.matches?.("details.card-lyrics")) { if (d.open) ui.lyricsOpen.add(d.dataset.lyr); else ui.lyricsOpen.delete(d.dataset.lyr); } }, true);
-$("filterChips").onclick = e => { const b = e.target.closest("[data-f]"); if (b) { ui.filter = b.dataset.f; saveView(); renderConsider(); } };
+$("clearOnly").onclick = () => { ui.only = null; history.replaceState(history.state, "", location.pathname); renderConsider(); renderChrome(); };
 $("toastUndo").onclick = undo;
 function gotoSession(id) { ui.view = "sessions"; ui.session = id; saveView(); render(); if (innerWidth < 820) $("sessionDetail").scrollIntoView(); }
 
+// The ⋯ menu: Add to…, Compare, Delete.
+function closeMenus(except = null) {
+  document.querySelectorAll(".menu:not(.hidden)").forEach(m => { if (m === except) return; m.classList.add("hidden"); m.parentElement.querySelector("[data-act=menu]")?.setAttribute("aria-expanded", "false"); });
+}
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeMenus(); });
 // Every take control works the same wherever the card appears.
 document.addEventListener("click", e => {
+  const menuBtn = e.target.closest(".card [data-act=menu]");
+  if (menuBtn) { const m = menuBtn.parentElement.querySelector(".menu"); closeMenus(m); const open = m.classList.toggle("hidden") === false; menuBtn.setAttribute("aria-expanded", open); if (open) m.querySelector("button")?.focus({preventScroll:true}); return; }
+  if (!e.target.closest(".menu")) closeMenus();
   const gs = e.target.closest("[data-goto-session]"); if (gs) { document.querySelectorAll("dialog[open]").forEach(d => d.close()); gotoSession(gs.dataset.gotoSession); return; }
   const ga = e.target.closest("[data-goto-album]"); if (ga) { ui.view = "albums"; ui.album = ga.dataset.gotoAlbum; saveView(); render(); return; }
+  const mi = e.target.closest(".card [data-menu]");
+  if (mi) {
+    const stem = mi.closest("[data-stem]").dataset.stem, kind = mi.dataset.menu; closeMenus();
+    if (kind === "compare") openCompare(stem);
+    if (kind === "delete") toggleDelete(stem);
+    if (kind === "addto") { let id = mi.dataset.album; if (id === "__new") { id = newAlbum(); if (!id) return; } placeTake(stem, id); }
+    return;
+  }
+  const seg = e.target.closest(".card [data-status]"); if (seg) { toggleStatus(seg.closest("[data-stem]").dataset.stem, seg.dataset.status); return; }
   const b = e.target.closest(".card [data-act]"); if (!b) return;
   const stem = b.closest("[data-stem]").dataset.stem, act = b.dataset.act;
-  if (act === "short" || act === "maybe") { setRating(stem, {status:rating(stem).status === act ? null : act}); render(); }
-  if (act === "add") toggleOnAlbum(stem);
-  if (act === "cut") toggleCut(stem);
-  if (act === "delete") toggleDelete(stem);
   if (act === "rename") rename(stem);
-  if (act === "compare") openCompare(stem);
+  if (act === "lyrics") {
+    const body = b.closest(".card").querySelector(".lyrics-body"), open = body.hidden;
+    body.hidden = !open; b.setAttribute("aria-expanded", open); b.textContent = "Lyrics " + (open ? "▾" : "▸");
+    if (open) ui.lyricsOpen.add(stem); else ui.lyricsOpen.delete(stem);
+  }
 });
+document.addEventListener("focusin", e => { const c = e.target.closest?.(".card"); if (c) focusStem = c.dataset.stem; });
 document.addEventListener("change", e => {
   const sel = e.target.closest("select.add-to"); if (!sel || !sel.value) return;
   const stem = sel.closest("[data-stem]").dataset.stem;
   let id = sel.value; if (id === "__new") { id = newAlbum(); if (!id) { sel.value = ""; return; } }
-  placeOnAlbum(stem, id);
+  placeTake(stem, id);
 });
 // Score box: commit on change, Enter jumps to the next take's box.
 function commitScore(input) {
@@ -593,11 +770,11 @@ document.addEventListener("change", e => { if (e.target.matches(".score-in")) co
 document.addEventListener("keydown", e => {
   if (!e.target.matches?.(".score-in") || e.key !== "Enter") return;
   e.preventDefault(); commitScore(e.target);
-  const boxes = [...document.querySelectorAll(".score-in")], next = boxes[boxes.indexOf(e.target) + (e.shiftKey ? -1 : 1)];
+  const boxes = [...document.querySelectorAll(".score-in")].filter(x => x.offsetParent), next = boxes[boxes.indexOf(e.target) + (e.shiftKey ? -1 : 1)];
   if (next) { next.focus(); next.select(); next.scrollIntoView({block:"nearest"}); } else e.target.blur();
 });
 // Notes save as you type (debounced) into the Audio Board note.
-function fit(t) { t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight + 2, document.activeElement === t ? 600 : 120) + "px"; }
+function fit(t) { if (!t) return; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight + 2, document.activeElement === t ? 600 : 120) + "px"; }
 const noteTimers = {};
 document.addEventListener("input", e => {
   if (!e.target.matches("textarea.note")) return;
@@ -610,6 +787,46 @@ document.addEventListener("focusout", e => {
   const stem = e.target.closest("[data-stem]").dataset.stem;
   if (noteTimers[stem]) { clearTimeout(noteTimers[stem]); delete noteTimers[stem]; if ((rating(stem).note || "") !== e.target.value) setRating(stem, {note:e.target.value}); }
   setTimeout(() => fit(e.target), 0);
+});
+
+// ---------- keyboard triage ----------
+const typingIn = el => el?.closest?.("input, textarea, select, [contenteditable]:not([contenteditable=false])");
+function visibleCards() { return [...document.querySelectorAll(`#view${{sort:"Sort", consider:"Consider", sessions:"Sessions"}[ui.view] || "None"} .card:not(.leaving)`)]; }
+function focusCard(el) { if (!el) return; focusStem = el.dataset.stem; el.focus({preventScroll:true}); el.scrollIntoView({block:"nearest", behavior:reducedMotion() ? "auto" : "smooth"}); }
+document.addEventListener("keydown", e => {
+  if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || typingIn(e.target) || document.querySelector("dialog[open]")) return;
+  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (key === "?") { e.preventDefault(); $("keysDialog").showModal(); return; }
+  if (key === "z") { e.preventDefault(); undo(); return; }
+  if (!PANEL_VIEWS.includes(ui.view)) return;
+  const cards = visibleCards(), at = e.target.closest?.(".card") || (focusStem && cardEl(focusStem)) || null, i = cards.indexOf(at);
+  if (key === "j") { e.preventDefault(); focusCard(cards[i + 1] || (i < 0 ? cards[0] : null)); return; }
+  if (key === "k") { e.preventDefault(); focusCard(i > 0 ? cards[i - 1] : i < 0 ? cards[0] : null); return; }
+  const acts = {s:"short", m:"maybe", a:"on", c:"cut", u:"unreviewed"};
+  if (!acts[key] && key !== " ") return;
+  if (!at) { if (cards[0] && !e.target.closest("button, a, summary")) { e.preventDefault(); focusCard(cards[0]); } return; }   // first key press shows which card the keys act on
+  const stem = at.dataset.stem;
+  if (acts[key]) { e.preventDefault(); setStatus(stem, acts[key]); return; }
+  if (!e.target.closest("button, a, summary")) { e.preventDefault(); window.open(suno(stem), "_blank", "noopener"); }
+});
+$("keysClose").onclick = () => $("keysDialog").close();
+
+// ---------- tracklist panel, replace dialog, migration log ----------
+$("panelBar").onclick = () => { const open = $("trackPanel").classList.toggle("open"); $("panelBar").setAttribute("aria-expanded", open); };
+$("replaceYes").onclick = () => { const p = pendingPlace; pendingPlace = null; $("replaceDialog").close(); if (p) commitPlace(p.stem, p.id, p.clash); };
+$("replaceBoth").onclick = () => { const p = pendingPlace; pendingPlace = null; $("replaceDialog").close(); if (p) commitPlace(p.stem, p.id, []); };
+$("replaceCancel").onclick = () => $("replaceDialog").close();
+$("replaceDialog").addEventListener("close", () => { pendingPlace = null; });
+$("logBtn").onclick = openLog;
+$("logClose").onclick = () => $("logDialog").close();
+$("logCopy").onclick = async () => toast(await copyText(logText()) ? "Log copied" : "Copy failed");
+$("logBackup").onclick = () => {
+  const blob = new Blob([localStorage.getItem(BACKUP_KEY) || "{}"], {type:"application/json"});
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "album-plan-before-status-migration.json"; a.click(); URL.revokeObjectURL(a.href);
+};
+document.addEventListener("click", e => {
+  if (e.target.closest("#noticeReview")) openLog();
+  if (e.target.closest("#noticeDismiss")) { const log = migrationLog(); log.seen = true; try { localStorage.setItem(MIGRATION_KEY, JSON.stringify(log)); } catch (err) {} renderNotice(); }
 });
 
 $("considerList").addEventListener("click", e => {
@@ -665,7 +882,7 @@ $("sessionDetail").addEventListener("click", e => {
   if (e.target.closest("#sessionAddMore")) {
     const box = $("sessionAdder"); box.classList.toggle("hidden");
     const options = live().filter(m => !s.members.includes(m)).sort((a, b) => nameOf(a).localeCompare(nameOf(b), undefined, {numeric:true}));
-    box.innerHTML = options.map(m => `<label class="session-option"><input type="checkbox" data-add-member="${esc(m)}"><span>${esc(nameOf(m))} · ${esc(takeLabel(take(m)))}</span></label>`).join("") || `<p class="meta">Every considered take is already here.</p>`;
+    box.innerHTML = options.map(m => `<label class="session-option"><input type="checkbox" data-add-member="${esc(m)}"><span>${esc(nameOf(m))} · ${esc(takeLabel(take(m)))}</span></label>`).join("") || `<p class="meta">Every take in Album picks is already here.</p>`;
   }
 });
 $("sessionDetail").addEventListener("change", e => {
@@ -687,25 +904,29 @@ $("albumHead").addEventListener("change", e => {
   if (e.target.id === "albumName" && e.target.value.trim()) { a.name = e.target.value.trim(); save(); }
   if (e.target.id === "albumTarget") { a.target = Math.max(1, Math.min(40, Number(e.target.value) || 12)); save(); }
 });
-$("albumTracks").addEventListener("click", e => {
-  const li = e.target.closest("[data-stem]"); if (!li) return;
-  const a = album(), i = a.order.indexOf(li.dataset.stem);
-  const mv = e.target.closest("[data-move]");
-  if (mv) { const j = i + Number(mv.dataset.move); if (j < 0 || j >= a.order.length) return; [a.order[i], a.order[j]] = [a.order[j], a.order[i]]; save(); return; }
-  if (e.target.closest("[data-unplace]")) { a.order.splice(i, 1); save(); }
-});
+// The Album tab and the side panel share the same tracklist behaviour: move buttons, take off, drag to reorder.
 let dragStem = null;
-$("albumTracks").addEventListener("dragstart", e => { if (e.target.matches?.("input,select")) return; const li = e.target.closest("[data-stem]"); if (li) { dragStem = li.dataset.stem; li.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; } });
-$("albumTracks").addEventListener("dragover", e => { if (dragStem) e.preventDefault(); });
-$("albumTracks").addEventListener("drop", e => {
-  e.preventDefault(); const li = e.target.closest("[data-stem]"), a = album();
-  if (!dragStem || !li || li.dataset.stem === dragStem) return;
-  a.order.splice(a.order.indexOf(dragStem), 1);
-  const rect = li.getBoundingClientRect(), to = a.order.indexOf(li.dataset.stem) + (e.clientY > rect.top + rect.height / 2 ? 1 : 0);
-  a.order.splice(to, 0, dragStem); dragStem = null; save();
-});
-$("albumTracks").addEventListener("dragend", () => { dragStem = null; document.querySelectorAll(".dragging").forEach(x => x.classList.remove("dragging")); });
-$("pool").addEventListener("click", e => { const b = e.target.closest("[data-place]"); if (b) placeOnAlbum(b.closest("[data-stem]").dataset.stem, b.dataset.place); });
+for (const list of [$("albumTracks"), $("panelBody")]) {
+  list.addEventListener("click", e => {
+    const li = e.target.closest("[data-stem]"); if (!li || !li.matches("li.track, li.ptrack")) return;
+    const a = album(), i = a.order.indexOf(li.dataset.stem);
+    const mv = e.target.closest("[data-move]");
+    if (mv) { const j = i + Number(mv.dataset.move); if (j < 0 || j >= a.order.length) return; [a.order[i], a.order[j]] = [a.order[j], a.order[i]]; save(); return; }
+    if (e.target.closest("[data-unplace]")) { snapshot(li.dataset.stem); a.order.splice(i, 1); save(); toast(`${labelOf(li.dataset.stem)} → Unreviewed`, true); }
+  });
+  list.addEventListener("dragstart", e => { if (e.target.matches?.("input,select")) return; const li = e.target.closest?.("[data-stem]"); if (li?.matches("li.track, li.ptrack")) { dragStem = li.dataset.stem; li.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", dragStem); } });
+  list.addEventListener("dragover", e => { if (dragStem) e.preventDefault(); });
+  list.addEventListener("drop", e => {
+    e.preventDefault(); const li = e.target.closest("[data-stem]"), a = album();
+    if (!dragStem || !li || li.dataset.stem === dragStem) return;
+    snapshot(dragStem);
+    a.order.splice(a.order.indexOf(dragStem), 1);
+    const rect = li.getBoundingClientRect(), to = a.order.indexOf(li.dataset.stem) + (e.clientY > rect.top + rect.height / 2 ? 1 : 0);
+    a.order.splice(to, 0, dragStem); dragStem = null; save();
+  });
+  list.addEventListener("dragend", () => { dragStem = null; document.querySelectorAll(".dragging").forEach(x => x.classList.remove("dragging")); });
+}
+$("pool").addEventListener("click", e => { const b = e.target.closest("[data-place]"); if (b) placeTake(b.closest("[data-stem]").dataset.stem, b.dataset.place); });
 
 $("cleanup").addEventListener("change", e => {
   const row = e.target.closest("[data-stem]"); if (!row) return; const i = state.considered[row.dataset.stem];
@@ -719,6 +940,8 @@ $("cleanup").addEventListener("change", e => {
 $("cleanup").addEventListener("click", async e => {
   if (e.target.closest("#copyDeletes")) { const list = Object.keys(state.considered).filter(tagged).map(s => `${take(s).title}  ${suno(s)}`).join("\n"); toast(await copyText(list) ? "Delete list copied" : "Copy failed"); }
   const c = e.target.closest("[data-copy-name]"); if (c) toast(await copyText(item(c.closest("[data-stem]").dataset.stem).name) ? "Name copied" : "Copy failed");
+  const k = e.target.closest("[data-untag]");
+  if (k) { e.preventDefault(); const stem = k.closest("[data-stem]").dataset.stem; snapshot(stem); delete state.considered[stem].del; save(); toast("Delete tag removed. Back in Album picks.", true); }
 });
 
 $("exportBtn").onclick = () => {
@@ -731,22 +954,24 @@ $("importFile").onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
   try {
     const d = JSON.parse(await f.text()); if (d?.app !== "album-planner") throw Error("not an Album Planner export");
-    snapshot(); state.considered = d.considered || {}; state.sessions = d.sessions || {}; state.albums = d.albums || {}; save(); toast("Imported", true);
+    snapshot(); state.considered = d.considered || {}; state.sessions = d.sessions || {}; state.albums = d.albums || {}; normalize(); ensureMigrated(true); save(); toast("Imported", true);
   } catch (err) { toast("Import failed: " + err.message); }
   e.target.value = "";
 };
 
 // ---------- sync: planner records + Audio Board scores, one sign-in ----------
-const sync = {plan:{text:"", failed:false}, audio:{text:"", failed:false}};
+const sync = {plan:{text:"", failed:false, synced:false}, audio:{text:"", failed:false, synced:false}};
 function showStatus() {
   const p = sync.plan, a = sync.audio;
   const text = p.failed ? p.text : a.failed ? "Scores: " + a.text : /Saving/.test(a.text) && !/Saving/.test(p.text) ? a.text : p.text;
   $("syncStatus").textContent = text; $("syncStatus").classList.toggle("failed", p.failed || a.failed);
   $("retrySyncBtn").hidden = !(p.failed || a.failed) || !cloud;
+  // A signed-in device converts to the new statuses only once both stores have loaded and match the account.
+  if (p.synced && a.synced && ensureMigrated()) render();
 }
 const account = (user, busy) => { $("accountWho").textContent = user ? (user.email || user.displayName || "") : ""; $("signInBtn").hidden = !!user || busy; $("signOutBtn").hidden = !user; };
 function initSync() {
-  if (typeof firebase === "undefined" || !firebase.auth || !firebase.database) { sync.plan = {text:"Saved on this device. Connect to the internet and reload to sign in."}; showStatus(); return; }
+  if (typeof firebase === "undefined" || !firebase.auth || !firebase.database) { sync.plan = {text:"Saved on this device. Connect to the internet and reload to sign in.", failed:false, synced:false}; showStatus(); return; }
   try {
     if (!firebase.apps.length) firebase.initializeApp({apiKey:"AIzaSyDTcQiFsjhSzlsEl7uPJvTtsxp798XOqIQ", authDomain:"family-planner-ccafc.firebaseapp.com", databaseURL:"https://family-planner-ccafc-default-rtdb.firebaseio.com", projectId:"family-planner-ccafc"});
     cloud = PlannerSync.create({firebase, read:() => state,
@@ -758,7 +983,7 @@ function initSync() {
         state = cached?._sync?.owner === owner ? PlannerSync.prepare(cached) : state._sync.owner ? PlannerSync.prepare(PlannerSync.empty()) : state;
         previous = clone(state); persist();
       },
-      status:(text, failed = false) => { sync.plan = {text, failed}; showStatus(); }, account});
+      status:(text, failed = false) => { sync.plan = {text, failed, synced:/^Synced across devices/.test(text)}; showStatus(); }, account});
     audioCloud = AlbumSync.create({firebase, board:"audio", read:() => audio,
       replace:next => { audio = next; audioPrev = clone(audio); persistAudio(); requestRender(); },
       selectAccount:owner => {
@@ -767,14 +992,15 @@ function initSync() {
         audio = cached?._sync?.owner === owner ? AlbumSync.prepare(blankAudio(cached)) : audio._sync.owner ? AlbumSync.prepare(blankAudio()) : audio;
         audioPrev = clone(audio); persistAudio();
       },
-      status:(text, failed = false) => { sync.audio = {text, failed}; showStatus(); }, account});
+      status:(text, failed = false) => { sync.audio = {text, failed, synced:/^Synced across devices/.test(text)}; showStatus(); }, account});
     $("signInBtn").onclick = () => cloud.signIn();
     $("signOutBtn").onclick = () => cloud.signOut();
     $("retrySyncBtn").onclick = () => { cloud.retry(); audioCloud.retry(); };
-  } catch (err) { sync.plan = {text:"Account sync could not start. Your plan is saved on this device.", failed:true}; showStatus(); }
+  } catch (err) { sync.plan = {text:"Account sync could not start. Your plan is saved on this device.", failed:true, synced:false}; showStatus(); }
 }
 
 if (!Object.keys(state.albums).length || Object.values(state.albums).some(a => !a.cut)) save(false);
+ensureMigrated();   // signed-out devices convert now; signed-in devices wait for their account (see showStatus)
 render();
 initSync();
 // Signed out, pick up scores another tab (Audio Board) saved on this device.

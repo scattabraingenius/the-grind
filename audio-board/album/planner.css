@@ -148,3 +148,125 @@ details.card-lyrics p.meta { margin:6px 0 0; font-size:12px; }
 .buckets [data-bucket="__later"].primary { background:var(--star); border-color:var(--star); color:#0C0812; }
 .btn[aria-pressed="true"][data-bucket="__delete"] { background:var(--alarm); border-color:var(--alarm); color:#fff; }
 #songFilter, #sortSong { max-width:100%; min-width:0; }
+
+/* ---------- one status per take: buckets, the new card, the tracklist panel ---------- */
+.wrap { max-width:1360px; }
+.layout { display:grid; grid-template-columns:minmax(0, 1fr) 300px; gap:18px; align-items:start; }
+body:not(.has-panel) .layout { grid-template-columns:minmax(0, 1fr); }
+.main { min-width:0; }
+.sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+kbd { font-family:var(--mono); font-size:11px; background:var(--surface-2); border:1px solid var(--line); border-bottom-width:2px; border-radius:5px; padding:1px 5px; color:var(--ink); }
+.keyhint { font-family:var(--mono); color:var(--muted-2); }
+
+/* Bucket tabs: Unreviewed · Maybe · Shortlist · On album · Cut = total, then All alive */
+.bucket-tabs { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:0 0 12px; }
+.bucket-tab { background:var(--card); border:1px solid var(--line); border-radius:999px; padding:7px 13px; font-size:14px; font-weight:700; color:var(--muted); cursor:pointer; }
+.bucket-tab small { font-family:var(--mono); font-size:12px; opacity:.85; margin-left:2px; }
+.bucket-tab[aria-selected="true"] { color:var(--ink); background:var(--surface-2); border-color:var(--signal); }
+.bucket-tab.s-maybe[aria-selected="true"] { border-color:var(--star); }
+.bucket-tab.s-short[aria-selected="true"] { border-color:var(--signal-dim); }
+.bucket-tab.s-on[aria-selected="true"] { border-color:var(--ok); }
+.bucket-tab.s-cut[aria-selected="true"] { border-color:var(--alarm); }
+.bucket-total { font-family:var(--mono); font-size:12px; color:var(--muted-2); margin:0 2px; }
+.bucket-sep { flex:1 1 8px; }
+.bucket-tab.alive { background:transparent; border-style:dashed; }
+#unscoredChip { align-self:center; }
+
+/* Cards: one column so a card can fold away without the rest jumping sideways */
+.cards.single { grid-template-columns:minmax(0, 1fr); max-width:760px; }
+.card { transition:height .26s ease, opacity .2s ease, margin .26s ease, padding .26s ease, border-width .26s ease; position:relative; }
+.card:focus, .card:focus-within { outline:2px solid var(--signal-dim); outline-offset:2px; }
+.card.leaving { opacity:0; overflow:hidden; padding-top:0; padding-bottom:0; border-top-width:0; border-bottom-width:0; margin-bottom:-8px; pointer-events:none; }
+@media (prefers-reduced-motion: reduce) { .card { transition:none; } }
+.card.st-maybe { border-left-color:var(--star); }
+.card.st-short { border-left-color:var(--signal-dim); }
+.card.st-on { border-left-color:var(--ok); }
+.card.st-cut { border-left-color:var(--alarm); }
+.card-top { align-items:flex-start; }
+.score-box { display:flex; flex-direction:column; align-items:center; gap:2px; flex-shrink:0; }
+.score-box > span { font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted-2); }
+.icon-btn[data-act="rename"] { font-size:12px; padding:3px 8px; }
+.badge.warn { border-color:var(--star); color:var(--star); }
+.status-seg { display:flex; gap:4px; }
+.status-seg .seg { flex:1 1 auto; background:var(--surface-2); border:1px solid var(--line); border-radius:10px; padding:8px 10px; min-height:38px; font-size:13px; font-weight:700; cursor:pointer; color:var(--ink); }
+.status-seg .seg:hover { border-color:var(--signal); }
+.status-seg .seg-gap { flex:0 0 14px; }
+.status-seg .seg[aria-pressed="true"].s-maybe { background:var(--star); border-color:var(--star); color:#0C0812; }
+.status-seg .seg[aria-pressed="true"].s-short { background:var(--signal); border-color:var(--signal); color:#fff; }
+.status-seg .seg[aria-pressed="true"].s-on { background:var(--ok); border-color:var(--ok); color:#0C0812; }
+.status-seg .seg[aria-pressed="true"].s-cut { background:var(--alarm); border-color:var(--alarm); color:#fff; }
+.media-row { display:flex; gap:4px; align-items:center; flex-wrap:wrap; }
+.media-row > .btn { flex:0 1 auto; }
+.more { margin-left:auto; position:relative; }
+.more-btn { font-size:20px; line-height:1; padding:3px 10px; border-color:var(--line); }
+.menu { position:absolute; right:0; top:calc(100% + 4px); min-width:190px; z-index:12; display:flex; flex-direction:column; background:var(--surface-2); border:1px solid var(--signal); border-radius:10px; padding:4px; box-shadow:var(--shadow); }
+.menu.hidden { display:none; }
+.menu button { background:transparent; border:0; text-align:left; padding:9px 10px; border-radius:7px; font-size:14px; cursor:pointer; color:var(--ink); }
+.menu button:hover, .menu button:focus { background:var(--card); outline:none; }
+.menu button.danger { color:var(--alarm); border-top:1px solid var(--line); border-radius:0 0 7px 7px; margin-top:4px; }
+.lyrics-body { display:flex; flex-direction:column; align-items:flex-start; gap:8px; }
+.lyrics-body[hidden] { display:none; }
+.lyrics-body pre.lyrics { margin:0; max-height:360px; overflow:auto; font-size:13.5px; align-self:stretch; }
+.lyrics-body p.meta { margin:0; font-size:12px; }
+.compare-grid .card { transition:none; }
+
+/* Over target / warnings */
+.tstat.warn { color:var(--star); font-weight:800; }
+.tstat.bad { color:var(--alarm); font-weight:800; }
+.bar.warn span { background:var(--star); }
+.bar.bad span { background:var(--alarm); }
+.group h3 .warn, .ptrack .warn, .track .badge.warn { color:var(--star); }
+.track.twin, .ptrack.twin { border-color:var(--star); }
+
+/* Sticky tracklist panel */
+.track-panel { position:sticky; top:56px; max-height:calc(100vh - 70px); overflow:auto; background:var(--card); border:1px solid var(--line); border-radius:var(--radius); }
+.track-panel.hidden { display:none; }
+.panel-bar { display:flex; align-items:center; gap:8px; width:100%; border:0; border-bottom:1px solid var(--line); padding:11px 12px; color:var(--ink); font:inherit; font-size:14px; cursor:default; text-align:left; position:sticky; top:0; background:var(--card); z-index:1; }
+.panel-bar .tstat { font-family:var(--mono); font-size:13px; }
+.panel-bar .ptotal { font-family:var(--mono); font-size:12px; color:var(--muted); margin-left:auto; }
+.panel-bar .chev { display:none; color:var(--muted); }
+.panel-body { padding:8px 10px 12px; }
+.tstat-line { margin:2px 0 8px; font-size:13px; color:var(--muted); }
+.tstat-line.warn { color:var(--star); font-weight:700; } .tstat-line.bad { color:var(--alarm); font-weight:700; }
+.ptracks { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; }
+.ptrack { display:flex; align-items:center; gap:6px; background:var(--input-bg); border:1px solid var(--line); border-radius:9px; padding:6px 8px; font-size:13px; cursor:grab; }
+.ptrack.dragging { opacity:.4; }
+.ptrack .n { font-family:var(--mono); color:var(--muted-2); min-width:18px; text-align:right; }
+.ptrack .pt { flex:1; min-width:0; }
+.ptrack .pt b { display:block; overflow-wrap:anywhere; font-weight:600; }
+.ptrack .pt small { font-size:11px; }
+.ptrack .pd { font-family:var(--mono); font-size:12px; color:var(--muted); }
+.ptrack .pc { display:flex; }
+.ptrack .pc .icon-btn { padding:1px 5px; font-size:13px; }
+.ptotal-line { display:flex; justify-content:space-between; margin:10px 2px 0; font-size:13px; color:var(--muted); }
+.ptotal-line b { font-family:var(--mono); color:var(--ink); }
+
+/* Migration notice, dialogs */
+.notice { display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:var(--surface-2); border:1px solid var(--signal); border-radius:10px; padding:8px 12px; margin:0 0 10px; font-size:13px; }
+.notice.hidden { display:none; }
+.notice span { flex:1 1 260px; }
+dl.keys { display:grid; grid-template-columns:auto 1fr; gap:6px 14px; margin:10px 0; align-items:center; }
+dl.keys dt { white-space:nowrap; } dl.keys dd { margin:0; font-size:14px; }
+table.log { width:100%; border-collapse:collapse; font-size:13px; margin:6px 0 10px; }
+table.log th, table.log td { text-align:left; border-bottom:1px solid var(--line); padding:5px 8px 5px 0; overflow-wrap:anywhere; }
+#logDialog { max-width:min(760px, 94vw); }
+
+/* Phone: the tracklist becomes a bottom bar that opens when tapped */
+@media (max-width:900px) {
+  .layout { grid-template-columns:minmax(0, 1fr); }
+  body.has-panel .wrap { padding-bottom:84px; }
+  .track-panel { position:fixed; left:0; right:0; bottom:0; top:auto; z-index:15; max-height:70vh; border-radius:14px 14px 0 0; border-bottom:0; box-shadow:0 -6px 24px rgba(0,0,0,.45); padding-bottom:env(safe-area-inset-bottom); display:flex; flex-direction:column; }
+  .track-panel.hidden { display:none; }
+  .panel-bar { cursor:pointer; min-height:52px; border-bottom:0; flex:0 0 auto; }
+  .panel-bar .chev { display:inline; }
+  .track-panel.open .panel-bar { border-bottom:1px solid var(--line); }
+  .track-panel.open .panel-bar .chev { transform:rotate(180deg); }
+  .panel-body { display:none; overflow:auto; flex:1 1 auto; }
+  .track-panel.open .panel-body { display:block; }
+  .ptrack .pc .icon-btn { padding:6px 9px; }
+  body.has-panel .toast { bottom:calc(66px + env(safe-area-inset-bottom)); max-width:92vw; }
+  .cards.single { max-width:none; }
+  .bucket-tab { padding:7px 10px; font-size:13px; }
+  .status-seg .seg { padding:8px 4px; }
+}
+@media (max-width:420px) { .status-seg .seg-gap { flex:0 0 6px; } .status-seg .seg { font-size:12px; } }

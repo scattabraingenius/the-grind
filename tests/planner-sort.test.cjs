@@ -34,6 +34,7 @@ const SONGS=ctx.window.ALBUM_SONGS,count=type=>SONGS.filter(s=>s.versions[0].typ
     const total=count('Vocal');
     const first=await cards.nth(0).getAttribute('data-stem');
     await cards.nth(0).locator('[data-bucket="debut"]').click();
+    await page.waitForTimeout(450);
     assert.equal(await cards.count(),total-1);
     assert.equal(await page.locator(`.card[data-stem="${first}"]`).count(),0,'a sorted take leaves the list');
     assert.deepEqual((await plan()).albums.debut.order,[first]);
@@ -44,19 +45,23 @@ const SONGS=ctx.window.ALBUM_SONGS,count=type=>SONGS.filter(s=>s.versions[0].typ
     await chip('todo').click();
     const second=await cards.nth(0).getAttribute('data-stem');
     await cards.nth(0).locator('[data-bucket="__later"]').click();
+    await page.waitForTimeout(450);
     await chip('later').click();
     assert.equal(await cards.count(),1);assert.equal(await cards.nth(0).getAttribute('data-stem'),second);
     assert.equal((await plan()).considered[second].later,true);
     await chip('todo').click();
     const third=await cards.nth(0).getAttribute('data-stem');
-    await cards.nth(0).locator('[data-bucket="__delete"]').click();
+    await cards.nth(0).locator('[data-act="menu"]').click();
+    await cards.nth(0).locator('[data-menu="delete"]').click();
+    await page.waitForTimeout(450);
     assert.equal(await page.locator(`#sortList .card[data-stem="${third}"]`).count(),0);
     assert.equal((await plan()).considered[third].del,true);
-    checked('Later and Delete park a take outside To sort');
+    checked('Later and Delete (from the ⋯ menu) park a take outside To sort');
 
     await page.click('#toastUndo');
     assert.equal(await page.locator(`#sortList .card[data-stem="${third}"]`).count(),1,'Undo puts the deleted take back');
     await cards.nth(0).locator('[data-bucket="second"]').click();
+    await page.waitForTimeout(450);
     await chip('done').click();
     await page.locator(`#sortList .card[data-stem="${first}"] [data-bucket="debut"]`).click();
     await chip('todo').click();

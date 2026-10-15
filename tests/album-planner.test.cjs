@@ -55,7 +55,8 @@ const pass = m => console.log('PASS ' + m);
     pass('110 takes imported and all visible at once');
 
     // Inline score: type, Enter jumps to next box; score lands in Audio Board's records.
-    await page.click('#groupToggle');
+    await page.selectOption('#groupBy', 'none');
+    await page.click('[data-bucket-tab="alive"]');
     const boxes = page.locator('#considerList .score-in');
     await boxes.nth(0).fill('87'); await boxes.nth(0).press('Enter');
     assert.equal(await page.evaluate(() => document.activeElement.closest('[data-stem]')?.dataset.stem), await boxes.nth(1).evaluate(e => e.closest('[data-stem]').dataset.stem), 'focus moved to next take');
@@ -66,36 +67,39 @@ const pass = m => console.log('PASS ' + m);
     assert.equal(stored, 87);
     pass('Score box saves 0-100, clamps, and Enter jumps to the next take');
 
-    // Shortlist / Maybe / notes shared with Audio Board.
+    // Score and notes are shared with Audio Board; Shortlist/Maybe/Cut are per album and stay in the planner.
     const c0 = page.locator(`.card[data-stem="${stem0}"]`);
-    await c0.locator('[data-act="short"]').click();
+    await c0.locator('[data-status="short"]').click();
+    assert.equal(await page.locator(`.card[data-stem="${stem0}"] [data-status="short"]`).getAttribute('aria-pressed'), 'true');
     await c0.locator('textarea.note').fill('Hook needs a harder landing');
     await c0.locator('textarea.note').blur();
     await page.goto(BASE + '/audio-board/classic.html?take=' + stem0);
     const detail = await page.textContent('#detail');
     assert.equal(await page.inputValue('#scoreNum'), '87'); assert.equal(await page.inputValue('#note'), 'Hook needs a harder landing');
-    assert.equal(await page.locator('#detail [data-status="short"][aria-pressed="true"]').count(), 1);
-    pass('Score, Shortlist and notes from the planner show in Audio Board');
+    pass('Score and notes from the planner show in Audio Board');
 
     // Add to current album, Add to another album, new album from the dropdown.
     await page.goto(BASE + '/audio-board/album/');
+    await page.selectOption('#groupBy', 'none'); await page.click('[data-bucket-tab="alive"]');
     const cards = page.locator('#considerList .card');
     const s1 = await cards.nth(1).getAttribute('data-stem'), s2 = await cards.nth(2).getAttribute('data-stem'), s3 = await cards.nth(3).getAttribute('data-stem');
-    await page.locator(`.card[data-stem="${s1}"] [data-act="add"]`).click();
-    assert.match(await page.locator(`.card[data-stem="${s1}"] [data-act="add"]`).textContent(), /✓ On Album 1/);
-    await page.locator(`.card[data-stem="${s2}"] select.add-to`).selectOption('second');
+    await page.locator(`.card[data-stem="${s1}"] [data-status="on"]`).click();
+    assert.match(await page.locator(`.card[data-stem="${s1}"] [data-status="on"]`).textContent(), /✓ On Album 1/);
+    await page.locator(`.card[data-stem="${s2}"] [data-act="menu"]`).click();
+    await page.locator(`.card[data-stem="${s2}"] [data-menu="addto"][data-album="second"]`).click();
     promptAnswer = 'Theme Album';
-    await page.locator(`.card[data-stem="${s3}"] select.add-to`).selectOption('__new');
+    await page.locator(`.card[data-stem="${s3}"] [data-act="menu"]`).click();
+    await page.locator(`.card[data-stem="${s3}"] [data-menu="addto"][data-album="__new"]`).click();
     assert.equal(await page.locator('#targetAlbum option', {hasText:'Theme Album'}).count(), 1);
     assert.match(await page.locator(`.card[data-stem="${s3}"] .badges`).textContent(), /Theme Album #1/);
-    pass('Add to album uses the Adding-to album; Add to… places on others and creates a new album');
+    pass('Add to album uses the Adding-to album; the ⋯ menu places on others and creates a new album');
 
     // Cut: per album only.
-    await page.locator(`.card[data-stem="${s2}"] [data-act="cut"]`).click();
-    assert.equal(await page.locator(`.card[data-stem="${s2}"]`).count(), 0, 'cut hidden from contenders');
-    await page.click('[data-f="cut"]'); assert.equal(await page.locator(`.card[data-stem="${s2}"]`).count(), 1);
+    await page.locator(`.card[data-stem="${s2}"] [data-status="cut"]`).click(); await page.waitForTimeout(450);
+    assert.equal(await page.locator(`.card[data-stem="${s2}"]`).count(), 0, 'cut hidden from All alive');
+    await page.click('[data-bucket-tab="cut"]'); assert.equal(await page.locator(`.card[data-stem="${s2}"]`).count(), 1);
     await page.selectOption('#targetAlbum', 'second');
-    await page.click('[data-f="contenders"]'); assert.equal(await page.locator(`.card[data-stem="${s2}"]`).count(), 1, 'still a contender for Album 2');
+    await page.click('[data-bucket-tab="alive"]'); assert.equal(await page.locator(`.card[data-stem="${s2}"]`).count(), 1, 'still alive for Album 2');
     await page.selectOption('#targetAlbum', 'debut');
     pass('Cut removes a take from the current album only; it stays in the planner');
 
@@ -109,29 +113,32 @@ const pass = m => console.log('PASS ' + m);
 
     // Delete tag -> cleanup list -> done removes it from the planner.
     const s5 = await page.locator('#considerList .card').nth(5).getAttribute('data-stem');
-    await page.locator(`.card[data-stem="${s5}"] [data-act="delete"]`).click();
-    await page.click('[data-f="del"]'); assert.equal(await page.locator(`.card[data-stem="${s5}"] .badge.del`).count(), 1);
+    await page.locator(`.card[data-stem="${s5}"] [data-act="menu"]`).click();
+    await page.locator(`.card[data-stem="${s5}"] [data-menu="delete"]`).click(); await page.waitForTimeout(450);
+    assert.equal(await page.locator(`.card[data-stem="${s5}"]`).count(), 0, 'tagged take leaves the buckets');
     await page.click('#tabCleanup');
     assert.equal(await page.locator('.clean-row').count(), 2, 'one delete + one rename');
     await page.locator(`.clean-row[data-stem="${s5}"] [data-del-done]`).check();
     await page.screenshot({path:path.join(OUT, 'cleanup.png')});
-    await page.click('#tabConsider'); await page.click('[data-f="all"]');
+    await page.click('#tabConsider'); await page.click('[data-bucket-tab="alive"]');
     assert.equal(await page.locator(`.card[data-stem="${s5}"]`).count(), 0, 'deleted-on-Suno take leaves the planner');
     pass('Delete tags for the Suno cleanup list; ticking it done removes the take');
 
     // Sessions: same controls, cut sinks and dims.
-    await page.click('[data-f="contenders"]');
+    await page.click('[data-bucket-tab="alive"]');
     await page.click('#autoGroup');
-    await page.locator('#sessionList .session-row').first().click();
+    await page.locator('#sessionList .session-row', {hasText:'Dead Souls'}).click();
     const sc = page.locator('#sessionDetail .card');
     assert(await sc.count() >= 2);
     const firstStem = await sc.first().getAttribute('data-stem');
-    await sc.first().locator('[data-act="cut"]').click();
+    await sc.first().locator('[data-status="cut"]').click();
+    await page.check('#showExcluded');   // cut takes are hidden unless asked for
     assert.equal(await page.locator('#sessionDetail .card').last().getAttribute('data-stem'), firstStem, 'cut take sinks to the bottom');
     assert.equal(await page.locator('#sessionDetail .card.is-cut').count(), 1);
-    await page.locator('#sessionDetail .card').first().locator('.score-in').fill('77');
-    await page.locator('#sessionDetail .card').first().locator('.score-in').press('Enter');
-    await page.locator('#sessionDetail .card').first().locator('[data-act="add"]').click();
+    await page.locator('#sessionDetail .card:not(.on-album):not(.is-cut)').first().locator('.score-in').fill('77');
+    await page.locator('#sessionDetail .card:not(.on-album):not(.is-cut)').first().locator('.score-in').press('Enter');
+    await page.locator('#sessionDetail .card:not(.on-album):not(.is-cut)').first().locator('[data-status="on"]').click();
+    if (await page.locator('#replaceDialog[open]').count()) await page.click('#replaceBoth');   // the song already has a take on the album
     await page.screenshot({path:path.join(OUT, 'session.png')});
     assert.equal(await page.locator('[data-act="win"], [data-win]').count(), 0, 'no pick-winner');
     pass('Sessions use the same card: score, add, cut (dimmed, sunk), no winner or link-out');
@@ -145,28 +152,26 @@ const pass = m => console.log('PASS ' + m);
     for (const opt of ['score', 'newest', 'status', 'length', 'writer']) { await page.selectOption('#sessionSort', opt); await page.click('#sessionSortDir'); }
     await page.selectOption('#sessionSort', 'newest');
     const sc2 = page.locator('#sessionDetail .card').first(), cutStem = await sc2.getAttribute('data-stem');
-    await sc2.locator('[data-act="cut"]').click();
-    assert.equal(await page.locator('#sessionDetail .card').last().getAttribute('data-stem'), cutStem);
+    await sc2.locator('[data-status="cut"]').click();
+    assert((await page.locator('#sessionDetail .card.is-cut').evaluateAll(els => els.map(e => e.dataset.stem))).includes(cutStem));
+    assert.equal(await page.locator('#sessionDetail .card').nth(-2).getAttribute('class').then(c => /is-cut/.test(c)), true, 'cut takes sit at the bottom');
     await page.reload(); await page.click('#tabSessions');
     assert.equal(await page.inputValue('#sessionSort'), 'newest', 'session sort persists');
     pass('Session sort by title, rating, date, status, length and writer, both directions');
 
-    // Lyrics / Audio Board links open in a new tab and land on the right take.
-    await page.click('#tabConsider'); await page.click('[data-f="all"]');
+    // The one Lyrics control opens the text and a link to the exact lyric version (or a Lyric Board search).
+    await page.click('#tabConsider'); await page.click('[data-bucket-tab="alive"]');
     const matched = vocals.find(v => pick.includes(v.slug) && v.versions[0].lyricStem);
     const mc = page.locator(`.card[data-stem="${matched.slug}"]`);
-    assert.equal(await mc.locator('a', {hasText:'Lyrics ↗'}).getAttribute('target'), '_blank');
-    const [lyricTab] = await Promise.all([context.waitForEvent('page'), mc.locator('a', {hasText:'Lyrics ↗'}).click()]);
-    await lyricTab.waitForLoadState(); assert.match(await lyricTab.textContent('#detail'), new RegExp(matched.versions[0].lyricStem ? '' : 'x'));
-    assert.equal(await lyricTab.locator('#detail h2').count(), 1, 'Lyric Board opens the matched version'); await lyricTab.close();
+    await mc.locator('[data-act="lyrics"]').click();
+    assert.match(await mc.locator('.lyrics-body a').getAttribute('href'), /album-board\/\?song=.*&version=.*returnTo=/);
     const unmatched = vocals.find(v => pick.includes(v.slug) && !v.versions[0].lyricStem);
     const uc = page.locator(`.card[data-stem="${unmatched.slug}"]`);
-    const [findTab] = await Promise.all([context.waitForEvent('page'), uc.locator('a', {hasText:'Find lyrics ↗'}).click()]);
-    await findTab.waitForLoadState(); assert(unmatched.baseTitle.includes(await findTab.inputValue('#q'))); await findTab.close();
-    const [abTab] = await Promise.all([context.waitForEvent('page'), mc.locator('a', {hasText:'Audio Board ↗'}).click()]);
-    await abTab.waitForLoadState(); assert.equal(await abTab.locator('#detail h2').textContent(), matched.title); await abTab.close();
-    await page.click('[data-f="contenders"]');
-    pass('Each take links to its lyrics (or a Lyric Board search) and to Audio Board in a new tab');
+    await uc.locator('[data-act="lyrics"]').click();
+    assert.match(await uc.locator('.lyrics-body a').textContent(), /Find lyrics/);
+    assert.match(await uc.locator('.lyrics-body a').getAttribute('href'), /album-board\/\?q=/);
+    assert.match(await mc.locator('a', {hasText:'Details'}).getAttribute('href'), /classic\.html\?take=/);
+    pass('Each take links to its lyrics (or a Lyric Board search) and its Audio Board details');
 
     // An open dropdown is not rebuilt by background updates.
     await page.click('#tabConsider');
@@ -174,13 +179,13 @@ const pass = m => console.log('PASS ' + m);
     await page.focus('#sort');
     await page.evaluate(() => window.dispatchEvent(new StorageEvent('storage', {key:'x'})));
     await page.locator('#considerList .score-in').first().fill('55'); await page.locator('#considerList .score-in').first().press('Enter');
-    await page.click('[data-f="short"]'); await page.click('[data-f="contenders"]');
+    await page.click('[data-bucket-tab="short"]'); await page.click('[data-bucket-tab="alive"]');
     assert.equal(await page.evaluate(() => window.__rebuilds), 0, 'sort/album dropdown options untouched by re-renders');
     pass('Dropdown options are never replaced unless they change');
 
     // Album page.
     await page.click('#tabAlbums');
-    assert.equal(await page.locator('#albumTracks .track').count(), 2);
+    assert.equal(await page.locator('#albumTracks .track').count(), await page.evaluate(() => JSON.parse(localStorage.getItem('grind.planner.v1')).albums.debut.order.length));   // cutting an on-album take in a session takes it off
     await page.screenshot({path:path.join(OUT, 'album.png')});
     await page.click('#tabConsider');
     await page.screenshot({path:path.join(OUT, 'considered.png')});
