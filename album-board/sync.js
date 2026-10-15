@@ -8,7 +8,7 @@
   "use strict";
   const copy = value => JSON.parse(JSON.stringify(value));
   const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
-  const fields = ["score", "status", "note"];
+  const fields = ["score", "status", "note", "alias", "aliasFrom", "removed"];
   const keyOf = (kind, id, field = "") => Array.from(new TextEncoder().encode(JSON.stringify([kind, id, field])), n => n.toString(16).padStart(2, "0")).join("");
   const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   function content(state) {

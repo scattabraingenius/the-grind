@@ -26,7 +26,9 @@ const SONGS = (window.ALBUM_SONGS || []);
 const BY = Object.fromEntries(SONGS.map(s => [s.slug, s]));
 const STATUSES = [["short","Shortlist"],["maybe","Maybe"],["cut","Cut"]];
 const SESSIONS = window.ALBUM_SESSIONS || [...new Set(SONGS.flatMap(s => s.versions.map(v => v.session)))].map(label => ({label}));
-const FILTERS = [["all","Any rating"],["unrated","Unrated"],["short","Shortlist"],["maybe","Maybe"],["cut","Cut"],["album",AUDIO_BOARD ? "On tracklist" : "On album"],...(AUDIO_BOARD ? [["matched","Matched lyrics"],["unmatched","Needs a lyric match"]] : [["ep","EP"],["mine","My versions"]])];
+const FILTERS = [["all","Any rating"],["unrated","Unrated"],["short","Shortlist"],["maybe","Maybe"],["cut","Cut"],["album",AUDIO_BOARD ? "On tracklist" : "On album"],...(AUDIO_BOARD ? [["matched","Matched lyrics"],["unmatched","Needs a lyric match"]] : [["ep","EP"],["mine","My versions"]]),["removed","Removed"]];
+const GROUPS = [["none","No grouping"],...(AUDIO_BOARD ? [["song","Group by song"]] : []),["status","Group by status"],["album",AUDIO_BOARD ? "Group by tracklist" : "Group by album"],["writer","Group by writer"]];
+const SORT_LABELS = { title:["A → Z","Z → A"], score:["High → low","Low → high"], session:AUDIO_BOARD ? ["Newest first","Oldest first"] : ["Catalog order","Reversed"] };
 
 // v2: ratings are keyed by version stem (one score, status and note per version). Version 1 data was keyed
 // by song slug, so it moves onto whichever version of that song was showing.
@@ -77,8 +79,8 @@ function save() {
 }
 let viewPrefs = {};
 try { viewPrefs = JSON.parse(localStorage.getItem(KEY + ".view")) || {}; } catch (err) {}
-let ui = { view:"songs", scope:viewPrefs.scope || (AUDIO_BOARD ? "session:Vocals" : "all"), filter:FILTERS.some(([key]) => key === viewPrefs.filter) ? viewPrefs.filter : "all", q:"", sort:["session","score","title"].includes(viewPrefs.sort) ? viewPrefs.sort : "session", open:null, song:"", writer:"", voice:"", lyricSource:new URLSearchParams(location.search).get("lyrics") || "" };
-function saveView() { try { localStorage.setItem(KEY + ".view", JSON.stringify({scope:ui.scope,filter:ui.filter,sort:ui.sort})); } catch (err) {} }
+let ui = { view:"songs", scope:viewPrefs.scope || (AUDIO_BOARD ? "session:Vocals" : "all"), filter:FILTERS.some(([key]) => key === viewPrefs.filter) ? viewPrefs.filter : "all", q:"", sort:["session","score","title"].includes(viewPrefs.sort) ? viewPrefs.sort : "session", flip:viewPrefs.flip === true, group:GROUPS.some(([key]) => key === viewPrefs.group) ? viewPrefs.group : "none", open:null, renaming:null, stale:false, lyricsOpen:new Set(), song:"", writer:"", voice:"", lyricSource:new URLSearchParams(location.search).get("lyrics") || "" };
+function saveView() { try { localStorage.setItem(KEY + ".view", JSON.stringify({scope:ui.scope,filter:ui.filter === "removed" ? "all" : ui.filter,sort:ui.sort,flip:ui.flip,group:ui.group})); } catch (err) {} }
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -91,11 +93,21 @@ function scopedVersions(s) {
   if (ui.scope.startsWith("collection:")) { const members = new Set(state.collections[ui.scope.slice(11)]?.members || []); return versions.filter(v => members.has(v.stem)); }
   return versions;
 }
-function version(s) {
-  const matching = scopedVersions(s), picked = matching.find(v => v.stem === state.pick[s.slug]);
-  return picked || matching[matching.length - 1] || s.versions[s.versions.length - 1];
+// A removed take or version leaves the main list; the Removed filter shows (and restores) only those.
+function visibleVersions(s) {
+  const all = scopedVersions(s);
+  return ui.filter === "removed" ? all.filter(v => rating(v.stem).removed) : all.filter(v => !rating(v.stem).removed);
 }
-function best(s, versions = scopedVersions(s)) { const n = versions.map(v => rating(v.stem).score).filter(x => x != null); return n.length ? Math.max(...n) : null; }
+function version(s) {
+  const matching = visibleVersions(s), picked = matching.find(v => v.stem === state.pick[s.slug]);
+  return picked || matching[matching.length - 1] || scopedVersions(s).slice(-1)[0] || s.versions[s.versions.length - 1];
+}
+// A rename is a local nickname. It is remembered with the Suno name it replaced, and stops applying the
+// moment the imported Suno name differs, so the original name is never lost and a Suno rename wins.
+function origTitle(s, v) { return AUDIO_BOARD ? (v.suno?.title ?? v.title ?? s.title) : s.title; }
+function nickname(s, v) { const r = rating(v.stem); return r.alias && r.aliasFrom === origTitle(s, v) ? r.alias : ""; }
+function titleOf(s, v) { return nickname(s, v) || origTitle(s, v); }
+function best(s, versions = visibleVersions(s)) { const n = versions.map(v => rating(v.stem).score).filter(x => x != null); return n.length ? Math.max(...n) : null; }
 function voiceLabel(v) { if (v.voiceName) return (v.type === "Vocal" && v.personalVoice ? "Your voice · " : v.type === "Vocal" ? "Voice persona · " : "Persona setting · ")+v.voiceName; return v.voiceChecked ? "No voice persona listed" : "Voice not confirmed"; }
 function verLabel(v) { if (AUDIO_BOARD) return [v.type,v.writer !== "Unknown" ? v.writer : "",v.packetVersion ? "lyrics v"+v.packetVersion : "",v.take ? "take "+v.take : "",v.duration ? Math.floor(Math.round(v.duration)/60)+":"+String(Math.round(v.duration)%60).padStart(2,"0") : "",v.voiceName ? voiceLabel(v) : ""].filter(Boolean).join(" · "); return v.custom ? (v.label || "My copy") : `v${String(v.version).padStart(2,"0")} ${v.writer} · ${v.session}`; }
 function inAlbum(slug) { return state.tracklist.includes(slug); }
@@ -103,7 +115,7 @@ function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add
 function scoreClass(n) { return n == null ? "" : n >= 80 ? "hi" : n >= 50 ? "mid" : ""; }
 
 function matches(s) {
-  const versions = scopedVersions(s); if (!versions.length) return false;
+  const versions = visibleVersions(s); if (!versions.length) return false;
   if (AUDIO_BOARD && ((ui.song && s.baseTitle !== ui.song) || (ui.writer && versions[0].writer !== ui.writer) || (ui.lyricSource && versions[0].lyricStem !== ui.lyricSource))) return false;
   if (AUDIO_BOARD && ui.voice && (ui.voice === "none" ? (!versions[0].voiceChecked || !!versions[0].voiceName) : ui.voice === "unknown" ? versions[0].voiceChecked : versions[0].voiceName !== ui.voice)) return false;
   if (AUDIO_BOARD && ui.filter === "matched" && !versions[0].source) return false;
@@ -117,21 +129,32 @@ function matches(s) {
   if (ui.q) {
     const q = ui.q.toLowerCase();
     if (!s.title.toLowerCase().includes(q) && !versions.some(v =>
-      [v.title,v.lyrics,v.oldTitle,v.source,v.voiceName,...fieldsOf(v).map(f => f[2])].some(text => String(text || "").toLowerCase().includes(q)))) return false;
+      [v.title,v.lyrics,v.oldTitle,v.source,v.voiceName,nickname(s,v),rating(v.stem).note,...fieldsOf(v).map(f => f[2])].some(text => String(text || "").toLowerCase().includes(q)))) return false;
   }
   return true;
 }
+// Each sort has a natural direction; ui.flip reverses it.
 function sorted(arr) {
-  const a = arr.slice();
+  const a = arr.slice(), name = s => titleOf(s, version(s));
   if (AUDIO_BOARD && ui.sort === "session") a.sort((x,y) => y.versions[0].createdAt.localeCompare(x.versions[0].createdAt));
-  else if (ui.sort === "title") a.sort((x,y) => x.title.localeCompare(y.title));
-  else if (ui.sort === "score") a.sort((x,y) => (best(y) ?? -1) - (best(x) ?? -1) || x.title.localeCompare(y.title));
-  return a;
+  else if (ui.sort === "title") a.sort((x,y) => name(x).localeCompare(name(y)));
+  else if (ui.sort === "score") a.sort((x,y) => (best(y) ?? -1) - (best(x) ?? -1) || name(x).localeCompare(name(y)));
+  return ui.flip ? a.reverse() : a;
+}
+function groupOf(s) {
+  const v = version(s), r = rating(v.stem);
+  if (ui.group === "song") return s.baseTitle || s.title;
+  if (ui.group === "status") return STATUSES.find(x => x[0] === r.status)?.[1] || "No status";
+  if (ui.group === "album") return inAlbum(s.slug) ? (AUDIO_BOARD ? "On tracklist" : "On album") : (AUDIO_BOARD ? "Not on tracklist" : "Not on album");
+  if (ui.group === "writer") return v.writer && v.writer !== "Unknown" ? v.writer : "Unknown writer";
+  return "";
 }
 
 function renderSummary() {
-  const rated = SONGS.filter(s => best(s, versionsOf(s)) != null).length;
-  $("summary").textContent = `${SONGS.length} ${AUDIO_BOARD ? "audio takes" : "songs"} · ${rated} scored · ${state.tracklist.length} on the ${AUDIO_BOARD ? "tracklist" : "album"}`;
+  const live = SONGS.filter(s => versionsOf(s).some(v => !rating(v.stem).removed));
+  const rated = live.filter(s => best(s, versionsOf(s).filter(v => !rating(v.stem).removed)) != null).length;
+  const removed = SONGS.length - live.length;
+  $("summary").textContent = `${live.length} ${AUDIO_BOARD ? "audio takes" : "songs"} · ${rated} scored · ${state.tracklist.length} on the ${AUDIO_BOARD ? "tracklist" : "album"}${removed ? ` · ${removed} removed` : ""}`;
   $("albumCount").textContent = state.tracklist.length ? `(${state.tracklist.length})` : "";
   $("built").textContent = window.ALBUM_BUILT ? `${AUDIO_BOARD ? "Suno snapshot" : "Lyrics loaded"} ${window.ALBUM_BUILT}` : "No songs.js found";
 }
@@ -141,25 +164,66 @@ function renderChips() {
   $("sessionChips").innerHTML = scopes.map(([key,name]) => `<button class="chip" data-scope="${esc(key)}" aria-pressed="${ui.scope===key}">${esc(name)}</button>`).join("");
   $("manageSession").classList.toggle("hidden", !ui.scope.startsWith("collection:") || !state.collections[ui.scope.slice(11)]);
 }
-function renderList() {
+function renderToolbar() {
+  $("sort").value = ui.sort;
+  $("sortDir").textContent = SORT_LABELS[ui.sort][ui.flip ? 1 : 0] + " ⇅";
+  $("sortDir").setAttribute("aria-pressed", ui.flip);
+  $("groupBy").value = ui.group;
+}
+// The open card hosts #detail, so a take is read, scored and edited where it sits in the list.
+function placeDetail() {
+  const d = $("detail"), host = $("list").querySelector(".row.active .row-detail");
+  if (host) { if (d.parentNode !== host) host.appendChild(d); d.hidden = false; }
+  else { if (d.parentNode !== $("detailHome")) $("detailHome").appendChild(d); d.hidden = true; }
+}
+function sessionOptions(stem) {
+  return `<option value="">+ Session</option>${Object.entries(state.collections).map(([id,c]) => `<option value="${esc(id)}" ${(c.members || []).includes(stem) ? 'disabled' : ''}>${esc(c.name)}${(c.members || []).includes(stem) ? ' ✓' : ''}</option>`).join("")}<option value="new">+ New session…</option>`;
+}
+function rowHtml(s) {
+  const v = version(s), r = rating(v.stem), bs = best(s), versions = visibleVersions(s), n = versions.length;
+  const open = ui.open === s.slug, removedView = ui.filter === "removed", album = inAlbum(s.slug);
+  const title = titleOf(s, v), orig = origTitle(s, v), nick = nickname(s, v), retired = r.alias && !nick;
+  const listed = ui.sort === "score" ? versions.slice().sort((a,b) => (rating(b.stem).score ?? -1) - (rating(a.stem).score ?? -1)) : versions;
+  const lyrics = (v.suno?.lyrics ?? v.lyrics) || "";
+  const meta = (n>1 ? `${n} versions in this session` : verLabel(v)) + (nick ? ` · Suno name: ${orig}` : "");
+  const titleHtml = ui.renaming === v.stem
+    ? `<input class="rename-input" data-rename="${esc(v.stem)}" value="${esc(title)}" maxlength="200" autocomplete="off" aria-label="New name for ${esc(orig)}"><small>Enter saves · Esc cancels · ${nick ? "Clear the box to go back to " : "Suno name stays "}${esc(orig)}</small>`
+    : `<b>${esc(title)}</b><small>${esc(meta)}</small>${retired ? `<small class="note-line">Suno renamed this take, so your old rename “${esc(r.alias)}” was retired.</small>` : ""}${r.note ? `<small class="note-line">${esc(r.note.slice(0,90))}</small>` : ""}`;
+  return `<div class="row${open?" active":""}${r.removed ? " removed" : ""}" data-slug="${esc(s.slug)}" role="group" tabindex="0" aria-label="Open ${esc(title)}">
+    <div class="card-head">
+      <button class="btn small chev" data-toggle aria-expanded="${open}" aria-label="${open ? "Collapse" : "Expand"} ${esc(title)}">${open ? "▾" : "▸"}</button>
+      <div class="t">${titleHtml}</div>
+      ${s.ep ? `<span class="badge ep">EP</span>` : ""}
+      ${n>1 && bs != null ? `<span class="badge best-badge" title="Best score in this session">best ${bs}</span>` : ""}
+    </div>
+    <div class="version-scores">${AUDIO_BOARD ? "" : listed.map(x => versionScoreHtml(s,x,v)).join("")}</div>
+    <div class="card-ctl">
+      <input class="card-score ${scoreClass(r.score)}" ${open ? 'id="scoreNum"' : ""} type="number" min="0" max="100" inputmode="numeric" data-score="${esc(v.stem)}" value="${r.score ?? ""}" placeholder="–" aria-label="Score for ${esc(title)}, 0 to 100. Enter moves to the next score.">
+      ${STATUSES.map(([k,l]) => `<button class="btn small s-${k}" data-card-status="${k}" aria-pressed="${r.status===k}">${l}</button>`).join("")}
+      <button class="btn small${album ? " on" : ""}" data-card-album aria-pressed="${album}" title="${album ? "Take it off" : "Put it on"} the ${AUDIO_BOARD ? "tracklist" : "album"}">${album ? "★ " : "☆ "}${AUDIO_BOARD ? "Tracklist" : "Album"}</button>
+      <button class="btn small" data-card-rename title="Rename. The Suno name is kept.">✎ Rename</button>
+      ${AUDIO_BOARD ? "" : `<button class="btn small" data-card-copyedit>Copy &amp; edit</button>`}
+      <select class="card-session" data-card-session aria-label="Add to a custom session">${sessionOptions(v.stem)}</select>
+      ${removedView || r.removed ? `<button class="btn small" data-card-restore>↩ Restore</button>` : `<button class="btn small danger" data-card-remove title="Hide this from the list">✕ Remove</button>`}
+    </div>
+    <details class="card-lyrics" data-lyr="${esc(s.slug)}" ${ui.lyricsOpen.has(s.slug) ? "open" : ""}><summary>Lyrics${lyrics ? "" : " (none in Suno metadata)"}</summary>${lyrics ? `<pre class="lyrics">${lyricHtml(lyrics)}</pre>` : ""}</details>
+    ${open ? `<div class="row-detail"></div>` : ""}
+  </div>`;
+}
+function renderList(focusSel) {
+  $("detailHome").appendChild($("detail"));
+  renderToolbar();
   const rows = sorted(SONGS.filter(matches));
-  const count = SONGS.filter(s => scopedVersions(s).length).length;
+  const count = SONGS.filter(s => visibleVersions(s).length).length;
   const name = ui.scope.startsWith("session:") ? ui.scope.slice(8) : ui.scope.startsWith("collection:") ? (state.collections[ui.scope.slice(11)]?.name || "Custom session") : "All sessions";
   $("scopeNote").textContent = AUDIO_BOARD ? `${name} · ${rows.length} of ${count} takes. Each recording has its own score and notes.` : `${name} · ${rows.length} of ${count} songs · ${SONGS.reduce((n,s) => n + scopedVersions(s).length,0)} versions. Scores and sorting use this session only.`;
-  if (!rows.length) { $("list").innerHTML = `<div class="empty-note">Nothing matches.</div>`; return; }
-  $("list").innerHTML = rows.map(s => {
-    const v = version(s), r = rating(v.stem), bs = best(s), versions = scopedVersions(s), n = versions.length;
-    const st = STATUSES.find(x => x[0] === r.status);
-    const listed = ui.sort === "score" ? versions.slice().sort((a,b) => (rating(b.stem).score ?? -1) - (rating(a.stem).score ?? -1)) : versions;
-    return `<div class="row${ui.open===s.slug?" active":""}" data-slug="${esc(s.slug)}" role="group" tabindex="0" aria-label="Open ${esc(s.title)}">
-      <div class="score ${scoreClass(bs)}${n>1?' best-score':''}" title="Best score in this session">${bs ?? "–"}</div>
-      <div class="t"><b>${esc(s.title)}</b><small>${n>1 ? `${n} versions in this session` : esc(verLabel(v))}</small></div>
-      ${s.ep ? `<span class="badge ep">EP</span>` : ""}
-      ${st && n===1 ? `<span class="badge ${st[0]}">${st[1]}</span>` : ""}
-      ${inAlbum(s.slug) ? `<span class="in-album" title="On the album">●</span>` : ""}
-      <div class="version-scores">${AUDIO_BOARD ? "" : listed.map(x => versionScoreHtml(s,x,v)).join("")}</div>
-    </div>`;
-  }).join("");
+  if (!rows.length) { $("list").innerHTML = `<div class="empty-note">${ui.filter === "removed" ? "Nothing is removed." : "Nothing matches."}</div>`; placeDetail(); return; }
+  const groups = new Map();
+  for (const s of rows) { const g = groupOf(s); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(s); }
+  $("list").innerHTML = [...groups].map(([g, members]) => (ui.group === "none" ? "" : `<h3 class="group-head">${esc(g)} <span>${members.length}</span></h3>`) + members.map(rowHtml).join("")).join("");
+  ui.stale = false;
+  placeDetail();
+  if (focusSel) { const el = $("list").querySelector(focusSel); if (el) el.focus({preventScroll:true}); }
 }
 function versionScoreHtml(s, x, current) {
   const r = rating(x.stem), status = STATUSES.find(([key]) => key === r.status);
@@ -205,9 +269,9 @@ function renderDetail() {
   const d = $("detail"), s = BY[ui.open];
   const previousPlayer = d.querySelector("audio"), previousStem = d.dataset.stem;
   const previousPanels = new Map(Array.from(d.querySelectorAll("details[data-panel]"), panel => [panel.dataset.panel, panel.open]));
-  if (!s || !scopedVersions(s).length) { d.className = "detail empty"; d.textContent = AUDIO_BOARD ? "Pick a take in this session to open it in Suno and score it." : "Pick a song in this session to read it, score it, and copy its Suno fields."; return; }
+  if (!s || !visibleVersions(s).length) { d.className = "detail empty"; d.textContent = AUDIO_BOARD ? "Pick a take in this session to open it in Suno and score it." : "Pick a song in this session to read it, score it, and copy its Suno fields."; placeDetail(); return; }
   const v = version(s), r = rating(v.stem), su = v.suno || {}, fields = fieldsOf(v);
-  const vs = scopedVersions(s), src = v.custom ? versionsOf(s).find(x => x.stem === v.copiedFrom) : null;
+  const vs = visibleVersions(s), src = v.custom ? versionsOf(s).find(x => x.stem === v.copiedFrom) : null;
   d.className = "detail";
   const body = `<div class="${v.custom ? "editor" : "fields"}">
     ${v.custom ? `<label>Version name<input id="edLabel" value="${esc(v.label || "")}" autocomplete="off"></label>` : ""}
@@ -218,18 +282,13 @@ function renderDetail() {
   const changedVersion = d.dataset.stem !== v.stem;
   d.dataset.stem = v.stem;
   d.innerHTML = `
-    <button class="btn small detail-back" id="detailBack">← Back to ${AUDIO_BOARD ? "takes" : "songs"}</button>
+    <button class="btn small detail-back" id="detailBack">▴ Collapse</button>
     <div class="eyebrow">${esc(v.session)}${s.ep ? " · EP" : ""}</div>
-    <h2>${esc(su.title || v.title || s.title)}</h2>
+    <h2>${esc(nickname(s, v) || su.title || v.title || s.title)}</h2>
     <div class="meta">${v.custom ? `Your version${src ? ", copied from " + esc(verLabel(src)) : ""}. Edits save as you type.` : esc(v.header || "")}</div>
     ${AUDIO_BOARD ? audioHtml(v) : `<div class="versions">${vs.map(x => chipHtml(s, x, v)).join("")}</div>`}
     ${!AUDIO_BOARD && v.naming ? `<div class="meta">Suno naming: ${esc(v.naming)}.[clip number] · instrumental: ${esc(v.naming.replace(/\.([CMS])/,'.i$1'))}.[clip number]</div>` : ''}
     ${!AUDIO_BOARD && window.LYRIC_AUDIO_COUNTS?.[v.stem] ? `<p class="meta"><a href="../audio-board/?lyrics=${encodeURIComponent(v.stem)}">Compare ${window.LYRIC_AUDIO_COUNTS[v.stem]} Suno takes on Audio Board →</a></p>` : ""}
-    <div class="eyebrow">${AUDIO_BOARD ? "Score for this take" : "Score for "+esc(verLabel(v))} (0 to 100)</div>
-    <div class="scorebox">
-      <input type="range" aria-label="Version score" min="0" max="100" step="1" id="scoreRange" value="${r.score ?? 50}">
-      <input type="number" aria-label="Version score from 0 to 100" min="0" max="100" id="scoreNum" value="${r.score ?? ""}" placeholder="–">
-    </div>
     <div class="scope-tools"><select id="addSession" aria-label="Add this ${AUDIO_BOARD ? "take" : "version"} to a custom session"><option value="">Add ${AUDIO_BOARD ? "take" : "version"} to a custom session…</option>${Object.entries(state.collections).map(([id,c]) => `<option value="${esc(id)}" ${(c.members || []).includes(v.stem) ? 'disabled' : ''}>${esc(c.name)}${(c.members || []).includes(v.stem) ? ' (included)' : ''}</option>`).join("")}<option value="new">+ New custom session…</option></select>${ui.scope.startsWith('collection:') ? '<button class="btn small" id="removeSessionVersion">Remove from session</button>' : ''}</div>
     <div class="status">
       ${STATUSES.map(([k,l]) => `<button class="btn s-${k}" data-status="${k}" aria-pressed="${r.status===k}">${l}</button>`).join("")}
@@ -250,7 +309,7 @@ function renderDetail() {
   }
   const player = d.querySelector("audio");
   if (player) player.onerror = () => { const notice = $("audioNotice"); if (notice) notice.textContent = "Playback is unavailable here. Open this take in Suno to listen."; };
-  if (changedVersion) d.scrollTop = 0;
+  placeDetail();
 }
 function refreshCopyButtons(v) {
   const d = $("detail"), fields = fieldsOf(v);
@@ -263,14 +322,14 @@ function refreshCopyButtons(v) {
   }
 }
 function renderAlbum() {
-  const t = state.tracklist.filter(slug => BY[slug]);
+  const t = state.tracklist.filter(slug => BY[slug] && versionsOf(BY[slug]).some(v => !rating(v.stem).removed));
   if (!t.length) { $("tracks").innerHTML = AUDIO_BOARD ? `<div class="empty-note">No takes on the tracklist yet. Open a take and tap “+ Add to tracklist”.</div>` : `<div class="empty-note">No songs on the album yet. Open a song and tap “+ Add to album”.</div>`; return; }
   $("tracks").innerHTML = t.map((slug, i) => {
     const s = BY[slug], v = version(s), r = rating(v.stem);
     return `<div class="track" data-slug="${esc(slug)}">
       <div class="n">${i+1}</div>
       <div class="score ${scoreClass(r.score)}">${r.score ?? "–"}</div>
-      <div class="t"><b>${esc(s.title)}</b><small>${esc(verLabel(v))}${r.note ? " · " + esc(r.note.slice(0,80)) : ""}</small></div>
+      <div class="t"><b>${esc(titleOf(s, v))}</b><small>${esc(verLabel(v))}${r.note ? " · " + esc(r.note.slice(0,80)) : ""}</small></div>
       <div class="ctl">
         <button class="btn small" data-move="-1" aria-label="Move up" ${i===0?"disabled":""}>↑</button>
         <button class="btn small" data-move="1" aria-label="Move down" ${i===t.length-1?"disabled":""}>↓</button>
@@ -293,28 +352,111 @@ function rerenderKeepDetail() { renderSummary(); renderList(); }
 $("tabSongs").onclick = () => { ui.view = "songs"; render(); };
 $("tabAlbum").onclick = () => { ui.view = "album"; render(); };
 $("q").oninput = e => { ui.q = e.target.value.trim(); renderList(); };
-$("sort").value = ui.sort;
-$("sort").onchange = e => { ui.sort = e.target.value; saveView(); renderList(); };
+$("sort").onchange = e => { ui.sort = e.target.value; ui.flip = false; saveView(); renderList(); };
+$("sortDir").onclick = () => { ui.flip = !ui.flip; saveView(); renderList(); };
+$("groupBy").innerHTML = GROUPS.map(([k,l]) => `<option value="${k}">${esc(l)}</option>`).join("");
+$("groupBy").onchange = e => { ui.group = e.target.value; saveView(); renderList(); };
 $("chips").onclick = e => { const b = e.target.closest("[data-f]"); if (!b) return; ui.filter = b.dataset.f; saveView(); renderChips(); renderList(); if (BY[ui.open] && scopedVersions(BY[ui.open]).length) renderDetail(); };
 function chooseScope(key) { ui.scope = key; saveView(); renderChips(); renderList(); renderDetail(); }
 $("sessionChips").onclick = e => { const button = e.target.closest("[data-scope]"); if (button) chooseScope(button.dataset.scope); };
+function afterCardChange(s, focusSel) { renderSummary(); renderList(focusSel); if (ui.open === s.slug) renderDetail(); }
+function copyEdit(s, cur) {
+  const su = cur.suno || {}, lyr = su.lyrics ?? cur.lyrics, list = state.custom[s.slug] || (state.custom[s.slug] = []);
+  const nv = { stem: `mine-${s.slug}-${Date.now().toString(36)}-${crypto.randomUUID().slice(0,8)}`, custom:true, version:0, label:`My copy ${list.length + 1}`, writer:"Me", session:cur.session,
+    copiedFrom:cur.stem, title:su.title || s.title, lyrics:lyr, header:"", suno:{ title:su.title || s.title, lyrics:lyr, style:su.style || "", exclude:su.exclude || "", ...(su.instrumental ? {instrumental:su.instrumental} : {}) }, created:Date.now() };
+  list.push(nv); state.pick[s.slug] = nv.stem; ui.open = s.slug;
+  if (ui.scope.startsWith("collection:")) state.collections[ui.scope.slice(11)].members.push(nv.stem);
+  save(); renderSummary(); renderList(); renderDetail(); toast("Copied. Edit it below.");
+  $("edLyrics") && $("edLyrics").focus();
+}
+function commitRename(input, cancel) {
+  const stem = input.dataset.rename; if (ui.renaming !== stem) return;
+  ui.renaming = null;
+  const row = input.closest(".row"), s = BY[row.dataset.slug], v = versionsOf(s).find(x => x.stem === stem);
+  if (!cancel && v) {
+    const val = input.value.trim(), orig = origTitle(s, v);
+    if (!val || val === orig) { if (rating(stem).alias) setRating(stem, { alias:null, aliasFrom:null }); }
+    else if (val !== nickname(s, v)) setRating(stem, { alias:val, aliasFrom:orig });
+  }
+  afterCardChange(s, `.row[data-slug="${CSS.escape(s.slug)}"] [data-card-rename]`);
+}
 $("list").onclick = e => {
-  const row = e.target.closest(".row"); if (!row) return;
-  const chip = e.target.closest("[data-open-ver]");
-  if (chip && scopedVersions(BY[row.dataset.slug]).some(v => v.stem === chip.dataset.openVer)) { state.pick[row.dataset.slug] = chip.dataset.openVer; save(); }
-  ui.open = row.dataset.slug; renderList(); renderDetail();
-  if (window.innerWidth <= 820) $("detail").scrollIntoView({ behavior:"smooth", block:"start" });
+  const row = e.target.closest(".row"); if (!row || e.target.closest(".row-detail")) return;
+  const s = BY[row.dataset.slug]; if (!s) return;
+  const t = e.target, cur = version(s), keep = sel => `.row[data-slug="${CSS.escape(s.slug)}"] ${sel}`;
+  const status = t.closest("[data-card-status]");
+  if (status) { const k = status.dataset.cardStatus; setRating(cur.stem, { status: rating(cur.stem).status === k ? null : k }); afterCardChange(s, keep(`[data-card-status="${k}"]`)); return; }
+  if (t.closest("[data-card-album]")) {
+    if (inAlbum(s.slug)) state.tracklist = state.tracklist.filter(x => x !== s.slug); else state.tracklist.push(s.slug);
+    save(); afterCardChange(s, keep("[data-card-album]")); renderAlbum(); toast(inAlbum(s.slug) ? "Added to the "+(AUDIO_BOARD ? "tracklist" : "album") : "Removed from the "+(AUDIO_BOARD ? "tracklist" : "album")); return;
+  }
+  if (t.closest("[data-card-rename]")) { ui.renaming = cur.stem; renderList(keep(".rename-input")); const box = $("list").querySelector(".rename-input"); if (box) box.select(); return; }
+  if (t.closest("[data-card-copyedit]")) { copyEdit(s, cur); return; }
+  if (t.closest("[data-card-remove]")) {
+    setRating(cur.stem, { removed:true }); if (ui.open === s.slug) ui.open = null;
+    afterCardChange(s); renderAlbum(); toast(`Removed “${titleOf(s, cur)}”. Open the Removed filter to bring it back.`); return;
+  }
+  if (t.closest("[data-card-restore]")) { setRating(cur.stem, { removed:null }); afterCardChange(s); renderAlbum(); toast("Restored"); return; }
+  const chip = t.closest("[data-open-ver]");
+  if (chip && scopedVersions(s).some(v => v.stem === chip.dataset.openVer)) { state.pick[s.slug] = chip.dataset.openVer; save(); }
+  else if (t.closest("[data-toggle]")) {
+    ui.open = ui.open === s.slug ? null : s.slug; renderList(keep("[data-toggle]")); renderDetail(); return;
+  } else if (t.closest("input,select,textarea,summary,a,label,details,button")) return;
+  ui.open = s.slug; renderList(chip ? keep(`[data-open-ver="${CSS.escape(chip.dataset.openVer)}"]`) : ""); renderDetail();
 };
 $("list").addEventListener("keydown",e => {
-  if (e.target.closest("button")) return;
+  if (e.target.closest(".row-detail")) return;
+  if (e.target.matches(".card-score") && e.key === "Enter") {
+    // Enter commits this score and drops into the next card's score box (Shift+Enter goes back).
+    e.preventDefault();
+    const boxes = [...$("list").querySelectorAll(".card-score")], next = boxes[boxes.indexOf(e.target) + (e.shiftKey ? -1 : 1)];
+    if (next) { next.focus(); next.select(); next.scrollIntoView({ block:"nearest" }); } else e.target.blur();
+    return;
+  }
+  if (e.target.matches(".rename-input")) {
+    if (e.key === "Enter") { e.preventDefault(); commitRename(e.target, false); }
+    else if (e.key === "Escape") { e.preventDefault(); commitRename(e.target, true); }
+    return;
+  }
+  if (e.target.closest("button,input,select,textarea,summary,a")) return;
   if (e.key === "Enter" || e.key === " ") { const row = e.target.closest(".row"); if (row) { e.preventDefault(); row.click(); } }
 });
+$("list").addEventListener("input", e => {
+  const box = e.target; if (!box.matches(".card-score")) return;
+  const row = box.closest(".row"), s = BY[row.dataset.slug], v = s && versionsOf(s).find(x => x.stem === box.dataset.score); if (!v) return;
+  let n = box.value === "" ? null : parseInt(box.value, 10);
+  if (n !== null && isNaN(n)) return;
+  if (n !== null && (n < 0 || n > 100)) { n = Math.max(0, Math.min(100, n)); box.value = n; }
+  setRating(v.stem, { score:n });
+  // Leave the list alone while typing so Enter can step down it; sorting and grouping catch up on release.
+  box.className = "card-score " + scoreClass(n);
+  const strip = row.querySelector(`[data-open-ver="${CSS.escape(v.stem)}"] strong`); if (strip) strip.textContent = n ?? "–";
+  const bs = best(s), badge = row.querySelector(".best-badge"); if (badge && bs != null) badge.textContent = "best " + bs;
+  ui.stale = true; renderSummary(); updateChip(s, v);
+});
+$("list").addEventListener("change", e => {
+  const pick = e.target.closest("[data-card-session]"); if (!pick) return;
+  const row = pick.closest(".row"), s = BY[row.dataset.slug], stem = version(s).stem, id = pick.value;
+  if (id === "new") { pick.value = ""; openSessionDialog(null, [stem]); return; }
+  const session = state.collections[id]; if (!session) return;
+  if (!session.members.includes(stem)) session.members.push(stem);
+  save(); afterCardChange(s); toast("Added to " + session.name);
+});
+$("list").addEventListener("focusout", e => {
+  if (e.target.matches?.(".rename-input")) commitRename(e.target, false);
+  setTimeout(flushPending, 0);
+});
+// Lyrics dropdowns remember their state through redraws; toggle events do not bubble, so listen while capturing.
+$("list").addEventListener("toggle", e => {
+  const d = e.target; if (!d.matches?.("details.card-lyrics")) return;
+  if (d.open) ui.lyricsOpen.add(d.dataset.lyr); else ui.lyricsOpen.delete(d.dataset.lyr);
+}, true);
 $("detail").addEventListener("click", async e => {
   const s = BY[ui.open]; if (!s) return;
   if (e.target.closest("#detailBack")) {
+    ui.open = null; renderList(); renderDetail();
     const row = $("list").querySelector(`[data-slug="${CSS.escape(s.slug)}"]`);
-    (row || $("list")).scrollIntoView({behavior:"smooth",block:"center"});
-    if (row) row.focus({preventScroll:true});
+    if (row) { row.focus({preventScroll:true}); row.scrollIntoView({block:"nearest"}); }
     return;
   }
   const cur = version(s);
@@ -335,15 +477,7 @@ $("detail").addEventListener("click", async e => {
     if (inAlbum(s.slug)) state.tracklist = state.tracklist.filter(x => x !== s.slug); else state.tracklist.push(s.slug);
     save(); renderDetail(); rerenderKeepDetail(); toast(inAlbum(s.slug) ? "Added to the "+(AUDIO_BOARD ? "tracklist" : "album") : "Removed from the "+(AUDIO_BOARD ? "tracklist" : "album")); return;
   }
-  if (e.target.closest("#copyEdit")) {
-    const su = cur.suno || {}, lyr = su.lyrics ?? cur.lyrics, list = state.custom[s.slug] || (state.custom[s.slug] = []);
-    const nv = { stem: `mine-${s.slug}-${Date.now().toString(36)}-${crypto.randomUUID().slice(0,8)}`, custom:true, version:0, label:`My copy ${list.length + 1}`, writer:"Me", session:cur.session,
-      copiedFrom:cur.stem, title:su.title || s.title, lyrics:lyr, header:"", suno:{ title:su.title || s.title, lyrics:lyr, style:su.style || "", exclude:su.exclude || "", ...(su.instrumental ? {instrumental:su.instrumental} : {}) }, created:Date.now() };
-    list.push(nv); state.pick[s.slug] = nv.stem;
-    if (ui.scope.startsWith("collection:")) state.collections[ui.scope.slice(11)].members.push(nv.stem);
-    save(); renderDetail(); renderList(); toast("Copied. Edit it below.");
-    $("edLyrics") && $("edLyrics").focus(); return;
-  }
+  if (e.target.closest("#copyEdit")) { copyEdit(s, cur); return; }
   if (e.target.closest("#delMine")) {
     if (!confirm(`Delete "${cur.label || "this version"}"? Its score and notes go with it.`)) return;
     state.custom[s.slug] = (state.custom[s.slug] || []).filter(x => x.stem !== cur.stem);
@@ -373,14 +507,6 @@ $("detail").addEventListener("change", e => {
 $("detail").addEventListener("input", e => {
   const s = BY[ui.open]; if (!s) return;
   const v = version(s), id = e.target.id;
-  if (id === "scoreRange" || id === "scoreNum") {
-    let n = parseInt(e.target.value, 10);
-    if (id === "scoreNum" && e.target.value === "") { setRating(v.stem, { score: null }); rerenderKeepDetail(); updateChip(s, v); return; }
-    if (isNaN(n)) return; n = Math.max(0, Math.min(100, n));
-    setRating(v.stem, { score: n });
-    if (id === "scoreRange") $("scoreNum").value = n; else $("scoreRange").value = n;
-    rerenderKeepDetail(); updateChip(s, v);
-  }
   if (id === "note") { setRating(v.stem, { note: e.target.value }); return; }
   if (v.custom && ["edLabel","edTitle","edStyle","edExclude","edLyrics","edInstrumental"].includes(id)) {
     const val = e.target.value; v.suno = v.suno || {};
@@ -409,7 +535,7 @@ $("tracks").onclick = e => {
   render();
 };
 $("copyTracklist").onclick = async () => {
-  const text = state.tracklist.filter(s => BY[s]).map((s, i) => `${i+1}. ${BY[s].title}`).join("\n");
+  const text = state.tracklist.filter(s => BY[s]).map((s, i) => `${i+1}. ${titleOf(BY[s], version(BY[s]))}`).join("\n");
   toast(await copyText(text) ? "Tracklist copied" : "Copy failed. Select and copy the text manually.");
 };
 $("clearAlbum").onclick = () => { if (state.tracklist.length && confirm("Clear the whole tracklist? Scores and notes stay.")) { state.tracklist = []; save(); render(); } };
@@ -428,14 +554,20 @@ $("importFile").onchange = async e => {
   } catch (err) { toast("Import failed: " + err.message); }
   e.target.value = "";
 };
-function editingDetail() { return $("detail").contains(document.activeElement) && document.activeElement.matches("input,textarea,select,summary"); }
+// Anything typed into or toggled inside the list (score boxes, notes, disclosures, selects) must not be rebuilt under the user.
+function editingDetail() { const a = document.activeElement; return !!a && ($("detail").contains(a) || $("list").contains(a)) && a.matches("input,textarea,select,summary"); }
+function flushPending() {
+  if (editingDetail()) return;
+  if (pendingRemoteDetail) { pendingRemoteDetail = false; renderList(); renderDetail(); }
+  else if (ui.stale) renderList();
+}
 function replaceSyncedState(next) {
   state = next; previousState = JSON.parse(JSON.stringify(state)); persist();
   if (ui.scope.startsWith("collection:") && !state.collections[ui.scope.slice(11)]) { ui.scope = "all"; saveView(); }
-  renderChips(); renderList(); renderSummary(); renderAlbum();
-  if (editingDetail()) pendingRemoteDetail = true; else { renderDetail(); pendingRemoteDetail = false; }
+  renderChips(); renderSummary(); renderAlbum();
+  if (editingDetail()) pendingRemoteDetail = true; else { renderList(); renderDetail(); pendingRemoteDetail = false; }
 }
-$("detail").addEventListener("focusout", () => setTimeout(() => { if (pendingRemoteDetail && !editingDetail()) { pendingRemoteDetail = false; renderDetail(); } }, 0));
+$("detail").addEventListener("focusout", () => setTimeout(flushPending, 0));
 function selectSyncAccount(uid) {
   if (!state._sync.owner) {
     try {

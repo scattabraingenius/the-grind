@@ -20,7 +20,7 @@ const wav=Buffer.alloc(44+16000*2*10);wav.write('RIFF');wav.writeUInt32LE(wav.le
    return new URL(url).origin===new URL(BASE).origin?route.continue():route.abort();
   });
   const page=await context.newPage();await page.goto(BASE+'/audio-board/',{waitUntil:'networkidle'});
-  await page.locator(`.row[data-slug="${song.slug}"]`).click();
+  await page.locator(`.row[data-slug="${song.slug}"]`).locator('.card-head .t').click();
   await page.locator('audio').evaluate(async audio=>{window.__player=audio;await audio.play();});
   await page.waitForTimeout(200);
   await page.locator('#scoreNum').fill('83');await page.locator('[data-status="maybe"]').click();

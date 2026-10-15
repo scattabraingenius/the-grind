@@ -44,15 +44,15 @@
         <option value="score">Sort: best score</option>
         <option value="title">Sort: title</option>
       </select>
+      <button class="btn" id="sortDir" aria-pressed="false" aria-label="Reverse the sort order"></button>
+      <select id="groupBy" aria-label="Group cards"></select>
     </div>
     <div class="scope-tools"><span class="eyebrow">Working session</span><button class="btn small" id="newSession">+ New session</button><button class="btn small hidden" id="manageSession">Manage session</button></div>
     <div class="chips" id="sessionChips" aria-label="Working sessions"></div>
     <div class="chips" id="chips" aria-label="Filter within this session"></div>
     <div class="scope-note" id="scopeNote" role="status"></div>
-    <div class="grid">
-      <div class="list" id="list"></div>
-      <div class="detail empty" id="detail">Pick a song to read it, score it, and copy its Suno fields.</div>
-    </div>
+    <div class="list" id="list"></div>
+    <div id="detailHome" hidden><div class="detail empty" id="detail" hidden>Pick a song to read it, score it, and copy its Suno fields.</div></div>
   </section>
 
   <section id="viewAlbum" class="hidden">

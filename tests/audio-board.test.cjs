@@ -56,7 +56,7 @@ const wait=async fn=>{for(let i=0;i<120;i++){if(await fn())return;await new Prom
   assert.equal(await phone.page.locator('h1').textContent(),'Audio Board');
   assert.equal(await phone.page.locator('#list .row').count(),190);
   await phone.page.locator('#songFilter').selectOption('Dearly Beloved');
-  await phone.page.locator(`.row[data-slug="${first.slug}"]`).click();
+  await phone.page.locator(`.row[data-slug="${first.slug}"]`).locator('.card-head .t').click();
   assert.equal(await phone.page.locator('#copyEdit').count(),0);
   assert.equal(await phone.page.locator('#openSuno').getAttribute('href'),'https://suno.com/song/'+first.slug);
   assert.equal(await phone.page.locator('#detail audio').count(),0);
@@ -68,10 +68,10 @@ const wait=async fn=>{for(let i=0;i<120;i++){if(await fn())return;await new Prom
   assert.equal(await phone.page.evaluate(()=>window.__copied),first.title);
   await phone.page.locator('#scoreNum').fill('91');await phone.page.locator('#note').fill('Best vocal take');
   await phone.page.locator('[data-status="short"]').click();await phone.page.locator('#albumToggle').click();
-  await pc.page.locator(`.row[data-slug="${first.slug}"]`).click();
+  await pc.page.locator(`.row[data-slug="${first.slug}"]`).locator('.card-head .t').click();
   await wait(()=>pc.page.locator('#scoreNum').inputValue().then(v=>v==='91'));
   assert.equal(await pc.page.locator('#note').inputValue(),'Best vocal take');
-  await pc.page.locator(`.row[data-slug="${second.slug}"]`).click();
+  await pc.page.locator(`.row[data-slug="${second.slug}"]`).locator('.card-head .t').click();
   assert.equal(await pc.page.locator('#scoreNum').inputValue(),'');
   await pc.page.locator('#scoreNum').fill('0');await pc.page.locator('#note').fill('Separate take');await pc.page.locator('#albumToggle').click();
   await wait(()=>phone.page.locator('#summary').textContent().then(t=>t.includes('2 on the tracklist')));
@@ -82,7 +82,7 @@ const wait=async fn=>{for(let i=0;i<120;i++){if(await fn())return;await new Prom
   assert.equal(await phone.page.locator('h1').textContent(),'Lyric Board');
   assert.equal(await phone.page.locator('#detail').getAttribute('data-stem'),first.versions[0].lyricStem);
   await wait(()=>phone.page.locator('#syncStatus').textContent().then(t=>t.startsWith('Synced')));
-  await phone.page.locator('.row[data-slug="check-out"]').click();
+  await phone.page.locator('.row[data-slug="check-out"]').locator('.card-head .t').click();
   assert.equal(await phone.page.locator('#scoreNum').inputValue(),'86');
   assert.equal(await phone.page.locator('#note').inputValue(),'Existing lyric score');
   assert.equal(await phone.page.locator('#albumToggle').textContent(),'Remove from album');
@@ -110,7 +110,7 @@ const wait=async fn=>{for(let i=0;i<120;i++){if(await fn())return;await new Prom
   await wait(()=>pc.page.getByRole('button',{name:'Vocal finalists',exact:true}).count().then(c=>c===1));
   await pc.page.getByRole('button',{name:'Vocal finalists',exact:true}).click();assert.equal(await pc.page.locator('#list .row').count(),1);
   console.log('PASS Song, writer, vocals/instrumentals/stems, exact-lyric filters and custom listening sessions work');
-  await phone.page.locator(`.row[data-slug="${first.slug}"]`).click();
+  await phone.page.locator(`.row[data-slug="${first.slug}"]`).locator('.card-head .t').click();
   await phone.page.screenshot({path:path.join(ARTIFACTS,'audio-desktop.png')});
   for(const width of [390,820,1440]){
    await phone.page.setViewportSize({width,height:900});
@@ -128,7 +128,7 @@ const wait=async fn=>{for(let i=0;i<120;i++){if(await fn())return;await new Prom
   await phone.page.waitForFunction(()=>!!navigator.serviceWorker.controller);
   await phone.context.setOffline(true);await phone.page.reload({waitUntil:'domcontentloaded'});
   assert.match(await phone.page.locator('#summary').textContent(),/295 audio takes/);
-  await phone.page.locator(`.row[data-slug="${first.slug}"]`).click();assert.equal(await phone.page.locator('#scoreNum').inputValue(),'91');
+  await phone.page.locator(`.row[data-slug="${first.slug}"]`).locator('.card-head .t').click();assert.equal(await phone.page.locator('#scoreNum').inputValue(),'91');
   await phone.context.setOffline(false);
   console.log('PASS Audio Board installs separately, fits phone/tablet/desktop and keeps offline ratings');
   assert.deepEqual(errors,[]);

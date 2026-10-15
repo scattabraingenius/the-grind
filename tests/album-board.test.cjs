@@ -69,7 +69,7 @@ checked(`${allVersions.length} versions in ${current.ALBUM_SESSIONS.length} sess
     seed.pick['missing-person']=original.ALBUM_SONGS.find(s=>s.slug==='missing-person').versions[0].stem;
     await page.evaluate(seed=>localStorage.setItem('grind.album.v1',JSON.stringify(seed)),seed);
     await page.reload({waitUntil:'networkidle'});
-    await page.locator('.row[data-slug="check-out"]').click();
+    await page.locator('.row[data-slug="check-out"]').locator('.card-head .t').click();
     assert.equal(await page.locator('#scoreNum').inputValue(),'87');
     assert.equal(await page.locator('#note').inputValue(),'Existing note');
     assert.equal(await page.locator('#detail [data-ver="mine-existing"]').count(),1);
@@ -93,7 +93,7 @@ checked(`${allVersions.length} versions in ${current.ALBUM_SESSIONS.length} sess
     await page.locator('[data-copy="style"]').click();
     assert.equal(await page.evaluate(()=>window.__copied),'New edited style\nSecond line');
     await page.reload({waitUntil:'networkidle'});
-    await page.locator('.row[data-slug="check-out"]').click();
+    await page.locator('.row[data-slug="check-out"]').locator('.card-head .t').click();
     assert.equal(await page.locator('#edStyle').inputValue(),'New edited style\nSecond line');
     checked('Edited fields copy immediately and persist after reload');
     await page.evaluate(()=>{Storage.prototype.setItem=()=>{throw new DOMException('test full','QuotaExceededError');};});
@@ -103,7 +103,7 @@ checked(`${allVersions.length} versions in ${current.ALBUM_SESSIONS.length} sess
     checked('Storage failures show an explicit export-before-closing warning');
     await page.getByRole('button',{name:'Oct 10 Cue Battle 01',exact:true}).click();
     assert.equal(await page.locator('#list .row').count(),7);
-    await page.locator('.row[data-slug="missing-person"]').click();
+    await page.locator('.row[data-slug="missing-person"]').locator('.card-head .t').click();
     assert.match(await page.locator('#detail > .eyebrow').first().textContent(),/Oct 10 Cue/);
     assert.equal(await page.locator('[data-field="instrumental"]').count(),1);
     checked('Today’s Cue session selects seven songs and includes instrumental prompts');
@@ -111,7 +111,7 @@ checked(`${allVersions.length} versions in ${current.ALBUM_SESSIONS.length} sess
     assert.equal(await page.locator('#list .row').count(),7);
     await page.getByRole('button',{name:'Oct 4 Cold Pass',exact:true}).click();
     assert.equal(await page.locator('#list .row').count(),12);
-    await page.locator('.row[data-slug="two-people-to-mourn"]').click();
+    await page.locator('.row[data-slug="two-people-to-mourn"]').locator('.card-head .t').click();
     assert.match(await page.locator('#detail > .eyebrow').first().textContent(),/Oct 4/);
     assert.equal(await page.locator('[data-copy="style"]').isDisabled(),true);
     checked('Earlier sessions remain filterable even when a song has newer versions; missing prompts cannot copy blank text');

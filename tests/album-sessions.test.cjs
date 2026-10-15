@@ -23,11 +23,11 @@ const checks=[];function checked(label){checks.push(label);console.log('PASS '+l
   checked('All four version scores appear in one song card, and a score chip opens its exact version');
   await page.locator('#sort').selectOption('score');
   assert.deepEqual(await row().locator('.version-score strong').allTextContents(),['99','90','20','5']);
-  assert.equal(await row().locator(':scope > .score').textContent(),'99');
+  assert.equal(await row().locator('.best-badge').textContent(),'best 99');
   checked('Rating sort orders song cards by their best score and version chips by score without duplicate cards');
   await page.getByRole('button',{name:'Oct 10 Cue Battle 01',exact:true}).click();
   assert.equal(await page.locator('#list .row').count(),7);assert.equal(await row().locator('.version-score').count(),1);
-  await row().click();assert.equal(await page.locator('#detail [data-ver]').count(),1);
+  await row().locator('.card-head .t').click();assert.equal(await page.locator('#detail [data-ver]').count(),1);
   await page.locator('#scoreNum').fill('93');await page.locator('#note').fill('Stay in this workspace');
   await page.locator('#detail [data-status="maybe"]').click();
   assert.equal(await page.locator('#sessionChips [aria-pressed=true]').getAttribute('data-scope'),'session:Oct 10 Cue Battle 01');
@@ -35,14 +35,14 @@ const checks=[];function checked(label){checks.push(label);console.log('PASS '+l
   await page.locator('#scoreNum').fill('99');await page.locator('#scoreNum').blur();
   assert.equal(await page.locator('#list .row').first().getAttribute('data-slug'),'the-scattabrain-genius');
   await page.getByRole('button',{name:'Oct 10 Misc Battle 01',exact:true}).click();
-  assert.equal(await row().locator(':scope > .score').textContent(),'5');
+  assert.equal(await row().locator('.card-score').inputValue(),'5');
   assert.equal(await page.locator('#list .row').first().getAttribute('data-slug'),'good-enough');
   await page.getByRole('button',{name:'Oct 10 Cue Battle 01',exact:true}).click();
   await page.reload({waitUntil:'networkidle'});
   assert.equal(await page.locator('#sessionChips [aria-pressed=true]').getAttribute('data-scope'),'session:Oct 10 Cue Battle 01');
   assert.equal(await page.locator('#sort').inputValue(),'score');
   checked('Source session stays selected through scores, notes, status changes and reload; sorting ignores scores from other sessions');
-  await row().click();await page.locator('#copyEdit').click();await page.locator('#edStyle').fill('Workspace edit');
+  await row().locator('.card-head .t').click();await page.locator('#copyEdit').click();await page.locator('#edStyle').fill('Workspace edit');
   assert.equal(await page.locator('#detail [data-ver]').count(),2);assert.equal(await page.locator('#list .row').count(),7);
   assert.equal(await page.locator('#sessionChips [aria-pressed=true]').getAttribute('data-scope'),'session:Oct 10 Cue Battle 01');
   checked('Copy and edit stays in the source workspace without exposing other-session versions');
@@ -63,7 +63,7 @@ const checks=[];function checked(label){checks.push(label);console.log('PASS '+l
   await page.locator('#sessionSearch').fill('Good Enough');await page.locator(`#sessionVersionOptions [data-member="${goodCue.stem}"]`).check();
   await page.getByRole('button',{name:'Save session',exact:true}).click();
   assert.equal(await page.locator('#list .row').count(),2);assert.equal(await page.locator('#sessionChips [aria-pressed=true]').textContent(),'Album round two');
-  await row().click();await page.locator('#removeSessionVersion').click();
+  await row().locator('.card-head .t').click();await page.locator('#removeSessionVersion').click();
   assert.equal(await row().locator('.version-score').count(),2);
   checked('Custom sessions can be renamed and changed; removing a version keeps its ratings');
   await page.locator('#manageSession').click();page.once('dialog',dialog=>dialog.accept());await page.locator('#deleteSession').click();
@@ -73,7 +73,7 @@ const checks=[];function checked(label){checks.push(label);console.log('PASS '+l
   checked('Deleting a custom session keeps songs, scores, notes and editable copies');
   await page.locator('#newSession').click();await page.locator('#sessionName').fill('Empty album');await page.getByRole('button',{name:'Save session',exact:true}).click();
   const emptyScope=await page.locator('#sessionChips [aria-pressed=true]').getAttribute('data-scope');assert.equal(await page.locator('#list .row').count(),0);
-  await page.getByRole('button',{name:'All',exact:true}).click();await page.locator('.row[data-slug="check-out"]').click();
+  await page.getByRole('button',{name:'All',exact:true}).click();await page.locator('.row[data-slug="check-out"]').locator('.card-head .t').click();
   await page.locator('#addSession').selectOption(emptyScope.slice(11));
   await page.getByRole('button',{name:'Empty album',exact:true}).click();assert.equal(await page.locator('#list .row').count(),1);
   assert.equal(await page.locator('#detail [data-ver]').count(),1);

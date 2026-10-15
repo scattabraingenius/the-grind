@@ -127,3 +127,33 @@
 .audio-filters select { min-width:0; max-width:100%; }
 
 .version-scores:empty { display:none; }
+[hidden] { display:none !important; }
+
+/* Cards: everything about a take is on the card; the open card hosts the full detail in place. */
+.list { gap:8px; }
+.group-head { display:flex; align-items:baseline; gap:8px; margin:14px 2px 2px; font:700 11px var(--mono); letter-spacing:.14em; text-transform:uppercase; color:var(--signal-dim); }
+.group-head span { color:var(--muted-2); font-weight:400; }
+.row { align-items:stretch; flex-direction:column; flex-wrap:nowrap; gap:8px; cursor:default; }
+.row.removed { opacity:.6; }
+.card-head { display:flex; align-items:center; gap:10px; cursor:pointer; min-height:44px; }
+.card-head .t small { display:block; white-space:normal; overflow-wrap:anywhere; }
+.card-head .t .note-line { font-family:var(--sans); color:var(--muted); }
+.chev { flex-shrink:0; width:32px; height:32px; padding:0; }
+.best-badge { color:var(--star); border-color:var(--star); }
+.card-ctl { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.card-score { width:68px; background:var(--input-bg); border:2px solid var(--line); border-radius:8px; padding:5px 6px; font:800 18px var(--mono); text-align:center; color:var(--muted); }
+.card-score.mid { color:var(--ink); border-color:var(--track); } .card-score.hi { color:var(--star); border-color:var(--star); }
+.card-score:focus { border-color:var(--signal); color:var(--ink); }
+.card-ctl .btn.on { border-color:var(--star); color:var(--star); }
+.btn.danger:hover { border-color:var(--alarm); color:var(--alarm); }
+.card-ctl .btn[aria-pressed="true"].s-short, .card-ctl .btn[aria-pressed="true"].s-maybe { color:#0C0812; }
+.card-ctl [data-card-remove], .card-ctl [data-card-restore] { margin-left:auto; }
+.card-session { padding:5px 6px; font-size:12px; max-width:150px; }
+.rename-input { width:100%; background:var(--input-bg); border:1px solid var(--signal); border-radius:8px; padding:7px 9px; font-weight:700; }
+details.card-lyrics summary { cursor:pointer; color:var(--muted); font-size:13px; }
+details.card-lyrics pre.lyrics { margin-top:8px; max-height:420px; overflow:auto; }
+.row-detail { border-top:1px solid var(--line); padding-top:6px; }
+.row-detail .detail { position:static; max-height:none; border:0; box-shadow:none; background:transparent; padding:8px 0 0; }
+.row .detail-back { display:inline-block; }
+.tools #sortDir { white-space:nowrap; }
+.tools #groupBy { max-width:100%; }

@@ -44,16 +44,16 @@
         <option value="score">Sort: score</option>
         <option value="title">Sort: title</option>
       </select>
+      <button class="btn" id="sortDir" aria-pressed="false" aria-label="Reverse the sort order"></button>
+      <select id="groupBy" aria-label="Group cards"></select>
     </div>
     <div class="audio-filters"><select id="songFilter" aria-label="Filter by song"></select><select id="writerFilter" aria-label="Filter by lyric writer"><option value="">All writers</option><option>Cue</option><option>Misc</option><option>Scatta</option><option>Unknown</option></select><select id="voiceFilter" aria-label="Filter by voice persona"></select></div><p class="meta hidden" id="linkedLyrics">Takes for the selected lyric packet. <button class="btn small" id="clearLinkedLyrics">Show all takes</button></p>
     <div class="scope-tools"><span class="eyebrow">Listening session</span><button class="btn small" id="newSession">+ New session</button><button class="btn small hidden" id="manageSession">Manage session</button></div>
     <div class="chips" id="sessionChips" aria-label="Listening sessions"></div>
     <div class="chips" id="chips" aria-label="Filter within this session"></div>
     <div class="scope-note" id="scopeNote" role="status"></div>
-    <div class="grid">
-      <div class="list" id="list"></div>
-      <div class="detail empty" id="detail">Pick a take, open it in Suno, and score the recording.</div>
-    </div>
+    <div class="list" id="list"></div>
+    <div id="detailHome" hidden><div class="detail empty" id="detail" hidden>Pick a take, open it in Suno, and score the recording.</div></div>
   </section>
 
   <section id="viewAlbum" class="hidden">
