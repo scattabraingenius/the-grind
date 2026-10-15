@@ -96,7 +96,21 @@ self.addEventListener("fetch", event => {
     return;
   }
 
-  if(["style", "script", "image", "font", "manifest"].includes(request.destination)){
+  // Scripts, styles and manifests: try the network first so a new deploy shows up on the next load, not the one after.
+  if(["style", "script", "manifest"].includes(request.destination)){
+    event.respondWith(
+      fetch(request).then(response => {
+        if(response && response.ok){
+          const copy = response.clone();
+          caches.open(CACHE_KEY).then(cache => cache.put(request, copy));
+        }
+        return response;
+      }).catch(() => caches.match(request))
+    );
+    return;
+  }
+
+  if(["image", "font"].includes(request.destination)){
     event.respondWith(
       caches.match(request).then(cached => {
         const refreshed = fetch(request).then(response => {
