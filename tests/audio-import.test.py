@@ -19,6 +19,18 @@ class AudioImportTest(unittest.TestCase):
             version=songs[0]["versions"][0]
             self.assertIsNone(version["audioUrl"]);self.assertEqual(version["voiceName"],"Write what I can");self.assertTrue(version["personalVoice"])
             self.assertNotIn("voiceVersion",version)
+    def test_utf8_library_and_match_text_are_preserved_on_windows(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);library=root/"library.json";lyrics=root/"songs.js";matches=root/"matches.json"
+            lyrics.write_text('window.ALBUM_SONGS = [];\n',encoding="utf-8")
+            cid="1062c997-8fff-4e93-bcac-dabb89ccee21"
+            title="Café — “Breathing”";prompt="Don’t lose these words 🎵"
+            library.write_text(json.dumps([dict(id=cid,title=title,metadata=dict(prompt=prompt))],ensure_ascii=False),encoding="utf-8-sig")
+            matches.write_text(json.dumps(dict(rows=[dict(clip_id=cid,match="Vérifié")]),ensure_ascii=False),encoding="utf-8")
+            songs,_,_=builder.build(library,matches,lyrics)
+            self.assertEqual(songs[0]["title"],title)
+            self.assertEqual(songs[0]["versions"][0]["lyrics"],prompt)
+            self.assertEqual(songs[0]["versions"][0]["match"],"Vérifié")
     def test_repeated_titles_remain_separate_tracks_and_duplicate_ids_are_rejected(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);library=root/"library.json";lyrics=root/"songs.js"

@@ -10,6 +10,19 @@ const BASE = process.env.APP_BASE_URL;
 const ROOT = path.resolve(__dirname, '..');
 const OUT = process.env.ARTIFACT_DIR || path.resolve(ROOT, '../album-status-verification');
 const ctx = {window:{}}; vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'audio-board/tracks.js'), 'utf8'), ctx);
+// Keep the named migration/replace scenario synthetic: live catalogue refreshes may
+// legitimately remove these takes after Jason moves them to Suno Trash.
+const example = ctx.window.ALBUM_SONGS.find(s => s.baseTitle === 'Two People to Mourn' && s.session === 'Vocals');
+assert(example, 'Need a source take for the synthetic migration scenario');
+for (const [index, suffix] of ['C1.1', 'M1.2', 'M1.1'].entries()) {
+  const title = 'Two People to Mourn.' + suffix;
+  if (ctx.window.ALBUM_SONGS.some(s => s.title === title)) continue;
+  const take = structuredClone(example);
+  const id = '10000000-0000-4000-8000-' + String(index + 1).padStart(12, '0');
+  take.slug = take.latest = take.versions[0].stem = id;
+  take.title = take.versions[0].title = take.versions[0].suno.title = title;
+  ctx.window.ALBUM_SONGS.push(take);
+}
 const vocals = ctx.window.ALBUM_SONGS.filter(s => s.session === 'Vocals');
 const bySong = new Map(); for (const v of vocals) { if (!bySong.has(v.baseTitle)) bySong.set(v.baseTitle, []); bySong.get(v.baseTitle).push(v); }
 const find = t => vocals.find(v => v.title === t).slug;
@@ -35,6 +48,8 @@ const pass = m => console.log('PASS ' + m);
     const context = await browser.newContext({viewport:{width:1440, height:1000}});
     const blocked = [];
     await context.route('**/*', r => { if (new URL(r.request().url()).origin === new URL(BASE).origin) return r.continue(); blocked.push(r.request().url()); return r.abort(); });
+    await context.route('**/audio-board/tracks.js', r => r.fulfill({contentType:'text/javascript', body:
+      'window.BOARD_KIND="audio";window.ALBUM_SONGS='+JSON.stringify(ctx.window.ALBUM_SONGS)+';window.ALBUM_SESSIONS='+JSON.stringify(ctx.window.ALBUM_SESSIONS)+';'}));
     await context.addInitScript(([plan, audio]) => { if (!localStorage.getItem('seeded')) { localStorage.setItem('grind.planner.v1', plan); localStorage.setItem('grind.audio.v1', audio); localStorage.setItem('seeded', '1'); } }, [JSON.stringify(planSeed), JSON.stringify(audioSeed)]);
     const page = await context.newPage();
     page.on('pageerror', e => errors.push(e.message));

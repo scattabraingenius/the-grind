@@ -122,7 +122,8 @@ function scoreClass(n) { return n == null ? "" : n >= 80 ? "hi" : n >= 50 ? "mid
 
 function matches(s) {
   const versions = scopedVersions(s); if (!versions.length) return false;
-  if (AUDIO_BOARD && ((ui.song && s.baseTitle !== ui.song) || (ui.writer && versions[0].writer !== ui.writer) || (ui.lyricSource && versions[0].lyricStem !== ui.lyricSource))) return false;
+  if (ui.song && (AUDIO_BOARD ? s.baseTitle : s.slug) !== ui.song) return false;
+  if (AUDIO_BOARD && ((ui.writer && versions[0].writer !== ui.writer) || (ui.lyricSource && versions[0].lyricStem !== ui.lyricSource))) return false;
   if (AUDIO_BOARD && ui.voice && (ui.voice === "none" ? (!versions[0].voiceChecked || !!versions[0].voiceName) : ui.voice === "unknown" ? versions[0].voiceChecked : versions[0].voiceName !== ui.voice)) return false;
   if (AUDIO_BOARD && ui.filter === "matched" && !versions[0].source) return false;
   if (AUDIO_BOARD && ui.filter === "unmatched" && versions[0].source) return false;
@@ -585,12 +586,19 @@ function audioHtml(v) {
     ${v.source ? `<details class="style" data-panel="sbglp-source"><summary>SBGLP source</summary><p style="overflow-wrap:anywhere">${esc(v.source)}</p></details>` : ''}`;
 }
 function initializeBoard() {
+  const picker = $('songFilter');
+  if (picker) {
+    const options = AUDIO_BOARD
+      ? [...new Set(SONGS.map(s=>s.baseTitle))].map(title=>({value:title,title}))
+      : SONGS.map(s=>({value:s.slug,title:s.title}));
+    options.sort((a,b)=>a.title.localeCompare(b.title, undefined, {numeric:true}) || a.value.localeCompare(b.value));
+    picker.innerHTML = '<option value="">All songs</option>'+options.map(s=>`<option value="${esc(s.value)}">${esc(s.title)}</option>`).join('');
+    picker.onchange = e => { ui.song=e.target.value; renderList(); };
+  }
   if (AUDIO_BOARD) {
-    const picker = $('songFilter'), writer = $('writerFilter'), voice = $('voiceFilter');
-    picker.innerHTML = '<option value="">All songs</option>'+[...new Set(SONGS.map(s=>s.baseTitle))].sort((a,b)=>a.localeCompare(b)).map(title=>`<option value="${esc(title)}">${esc(title)}</option>`).join('');
+    const writer = $('writerFilter'), voice = $('voiceFilter');
     voice.innerHTML = '<option value="">All voice settings</option>'+[...new Set(SONGS.map(s=>s.versions[0].voiceName).filter(Boolean))].sort().map(name=>`<option value="${esc(name)}">${esc(name)}</option>`).join('')+'<option value="none">No voice persona listed</option><option value="unknown">Voice not confirmed</option>';
     voice.onchange = e => { ui.voice=e.target.value; renderList(); };
-    picker.onchange = e => { ui.song=e.target.value; renderList(); };
     writer.onchange = e => { ui.writer=e.target.value; renderList(); };
     if (ui.lyricSource) { ui.scope='all'; $('linkedLyrics').classList.remove('hidden'); }
     const take = new URLSearchParams(location.search).get('take');

@@ -32,6 +32,8 @@ Each version of a song has its own score, Shortlist/Maybe/Cut and notes. The son
 
 ## Work in a session
 
+Use the **All songs** dropdown beside search to show one song and its versions. Songs are listed alphabetically; the selection combines with search, session, and rating filters. Choose **All songs** to restore the full list within the current session.
+
 Click a session in **Working session** to see only its songs and versions. The session stays selected while rating, writing notes, changing status, editing copies and receiving cloud updates. Session scope is separate from the rating/status filters. Search, the visible version chips, the best-score badge and rating sort all use the selected session. The working session, filter and sort are remembered in this browser after reload. Choose **All** to compare across sessions.
 
 Every song remains one card. Its version chips show each version's label, score and status; tap one to open that exact version. For multiple versions, the large badge is labelled **BEST**. **Sort: best score** ranks cards by their highest score within the working session and orders the chips by score. Unrated versions show a dash; a score of zero is retained. Other sessions' scores do not influence the selected session's ranking.

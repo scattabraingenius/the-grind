@@ -14,11 +14,11 @@ def playable(url):
     return url
 
 def build(library, matches, lyric_catalogue):
-    clips = json.loads(Path(library).read_text())
+    clips = json.loads(Path(library).read_text(encoding='utf-8-sig'))
     if not isinstance(clips,list) or not clips: raise ValueError('Empty or invalid Suno library; current catalogue is kept.')
-    match_data = json.loads(Path(matches).read_text()) if matches else {}
+    match_data = json.loads(Path(matches).read_text(encoding='utf-8-sig')) if matches else {}
     match_rows = {r['clip_id']:r for r in match_data.get('rows',[])}
-    text = Path(lyric_catalogue).read_text()
+    text = Path(lyric_catalogue).read_text(encoding='utf-8-sig')
     packet_data = json.loads(re.search(r'^window.ALBUM_SONGS = (.*);$',text,re.M).group(1))
     by_source = {'02 Album Project/Writing Sessions/'+v['source']:(s['slug'],v['stem']) for s in packet_data for v in s['versions']}
     def normalize(text): return ' '.join(unicodedata.normalize('NFKC',text or '').split())
@@ -27,12 +27,12 @@ def build(library, matches, lyric_catalogue):
         for version in song['versions']:
             by_text[(version['writer'],str(version['version']),normalize(version['suno'].get('lyrics') or version['lyrics']))].append((song['slug'],version['stem']))
     profiles_file=HERE/'voice-personas.json'
-    profiles=json.loads(profiles_file.read_text()).get('personas',{}) if profiles_file.is_file() else {}
+    profiles=json.loads(profiles_file.read_text(encoding='utf-8-sig')).get('personas',{}) if profiles_file.is_file() else {}
     old_titles = {}
     snapshot = HERE.parent/'album-board/suno-titles.csv'
     if snapshot.exists():
         import csv
-        with snapshot.open() as f: old_titles = {r['clip_id']:r['old_title'] for r in csv.DictReader(f)}
+        with snapshot.open(encoding='utf-8-sig', newline='') as f: old_titles = {r['clip_id']:r['old_title'] for r in csv.DictReader(f)}
     songs, ids = [], set()
     for clip in clips:
         cid = clip.get('id')

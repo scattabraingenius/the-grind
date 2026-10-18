@@ -128,7 +128,17 @@ const pass = m => console.log('PASS ' + m);
     // Sessions: same controls, cut sinks and dims.
     await page.click('[data-bucket-tab="alive"]');
     await page.click('#autoGroup');
-    await page.locator('#sessionList .session-row', {hasText:'Dead Souls'}).click();
+    // Pick an untouched multi-take song from the current catalogue. Specific
+    // recordings such as Dead Souls may legitimately have moved to Suno Trash.
+    const affected = new Set([stem0, s1, s2, s3, s4, s5]);
+    const groups = new Map();
+    for (const take of vocals.filter(v => pick.includes(v.slug))) {
+      if (!groups.has(take.baseTitle)) groups.set(take.baseTitle, []);
+      groups.get(take.baseTitle).push(take.slug);
+    }
+    const compareSong = [...groups].find(([, ids]) => ids.length >= 4 && ids.every(id => !affected.has(id)))?.[0];
+    assert(compareSong, 'Need an untouched group of at least four takes for session controls');
+    await page.locator('#sessionList .session-row', {hasText:compareSong}).click();
     const sc = page.locator('#sessionDetail .card');
     assert(await sc.count() >= 2);
     const firstStem = await sc.first().getAttribute('data-stem');
@@ -145,7 +155,7 @@ const pass = m => console.log('PASS ' + m);
     pass('Sessions use the same card: score, add, cut (dimmed, sunk), no winner or link-out');
 
     // Session sort: every option, both directions, cut stays at the bottom.
-    await page.locator('#sessionList .session-row', {hasText:'Dead Souls'}).click();
+    await page.locator('#sessionList .session-row', {hasText:compareSong}).click();
     const names = async () => page.locator('#sessionDetail .card:not(.is-cut):not(.is-del) .t b').allTextContents();
     await page.selectOption('#sessionSort', 'title');
     const asc = await names(); assert.deepEqual(asc, [...asc].sort((x, y) => x.localeCompare(y, undefined, {numeric:true})));
