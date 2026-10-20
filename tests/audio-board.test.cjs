@@ -9,7 +9,7 @@ const ROOT=path.resolve(__dirname,'..');
 const ARTIFACTS=process.env.ARTIFACT_DIR || path.resolve(ROOT,'../audio-board-verification');
 const current={window:{}};vm.runInNewContext(fs.readFileSync(path.join(ROOT,'audio-board/tracks.js'),'utf8'),current);
 const songs=current.window.ALBUM_SONGS;
-assert.equal(songs.length,258);assert.equal(new Set(songs.map(s=>s.slug)).size,258);
+assert.equal(songs.length,223);assert.equal(new Set(songs.map(s=>s.slug)).size,223);
 assert(songs.every(s=>s.slug===s.versions[0].stem && s.versions.length===1));
 assert(songs.every(s=>!s.versions[0].audioUrl?.includes('forbidden')));
 const first=songs.find(s=>s.title==='Dearly Beloved.C2.1'),second=songs.find(s=>s.title==='Dearly Beloved.C2.2');
@@ -127,7 +127,7 @@ const wait=async fn=>{for(let i=0;i<120;i++){if(await fn())return;await new Prom
   assert.equal((await cdp.send('Page.getInstallabilityErrors')).installabilityErrors.filter(e=>e.errorId!=='in-incognito').length,0);
   await phone.page.waitForFunction(()=>!!navigator.serviceWorker.controller);
   await phone.context.setOffline(true);await phone.page.reload({waitUntil:'domcontentloaded'});
-  assert.match(await phone.page.locator('#summary').textContent(),/258 audio takes/);
+  assert.match(await phone.page.locator('#summary').textContent(),/223 audio takes/);
   await phone.page.locator(`.row[data-slug="${first.slug}"]`).click();assert.equal(await phone.page.locator('#scoreNum').inputValue(),'91');
   await phone.context.setOffline(false);
   console.log('PASS Audio Board installs separately, fits phone/tablet/desktop and keeps offline ratings');

@@ -9,7 +9,18 @@ const BASE=process.env.APP_BASE_URL;
     const page=await context.newPage(),errors=[];
     page.on('pageerror',error=>errors.push(error.message));
     await page.goto(BASE+'/audio-board/classic.html',{waitUntil:'networkidle'});
-    await page.locator('#songFilter').selectOption('Dearly Beloved');
+    // The live catalogue may have only one surviving take of a formerly used
+    // example. Select a current pair with source disclosures for this UI test.
+    const song = await page.evaluate(() => {
+      const groups = new Map();
+      for (const s of SONGS.filter(s => s.session === 'Vocals')) {
+        if (!groups.has(s.baseTitle)) groups.set(s.baseTitle, []);
+        groups.get(s.baseTitle).push(s);
+      }
+      return [...groups].find(([, rows]) => rows.length >= 2 && rows.every(s => s.versions[0].source))?.[0];
+    });
+    assert(song, 'Need two current vocal takes with source disclosures');
+    await page.locator('#songFilter').selectOption(song);
     const rows=page.locator('#list .row');
     await rows.first().click();
     const panel=page.locator('[data-panel="audio-fields"]');

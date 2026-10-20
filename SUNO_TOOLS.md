@@ -127,3 +127,16 @@ Lyric sources rebuilt to 81 songs / 110 versions / 9 source sessions. All 99 pri
 The private raw exports, reconciled `library-full.json`, `library-build-input.json`, reconstructed `matches.json`, original catalogue backups and source hash manifest are under `private-suno/20261018T174301Z/`. They remain ignored by Git. These are dated snapshots, not inputs to reuse as a future current-library export. The raw feed includes complete metadata; `library-build-input.json` is the reviewed builder input.
 
 Local verification: `album-board-import`, `audio-import` (including Windows UTF-8/BOM regression), `planner-status`, `planner-candidates`, `album-sessions` (including the song dropdown), `audio-panels`, `album-status`, `album-planner`, and `unified-pwa`. Browser tests used isolated synthetic records with external/Firebase requests blocked. The local test server denied `/private-suno/`, hidden paths, and test artifacts. Status-test examples were made synthetic and the session test now chooses a current multi-take song, because old named takes had legitimately moved to Trash. Real Firebase/device sync, real-data migration and actual Suno playback were not tested.
+
+
+## October 19 Reset / Lyric Mine follow-up
+
+The 136 recordings generated on October 19 Eastern time came from 68 source blueprints: 39 in `2026-10-08-Reset` (78 recordings) and 29 in `2026-10-09-Lyric-Mine` (58 recordings). The receipts' source SHA-256 hashes were reverified for all 68. Four prompts omit the written draft's title line; their source links are proven by generation receipts rather than a claim of identical full text.
+
+A fresh exact-ID check found 135 of those recordings active: 77 Reset and 58 Lyric Mine. One Reset recording was already in Trash. Across the prepared 359-record catalogue, 296 were active and 63 were confirmed in Trash. The refreshed catalogue excludes those 63 without removing any scores, notes, or private planner records. All 135 active new recordings retain their exact source-version links, writer/version information and take 1/2 labels.
+
+The default workspace feed returned zero during this follow-up even while the exact-ID reads succeeded. Use known generation-receipt IDs and catalogue IDs with `clip status` batches when the current workspace feed is empty. Do not infer library deletion from an empty feed or silently lose active recordings.
+
+The complete approved Writing Sessions rebuild retained every prior lyric ID and discovered 22 additional written versions in four Oct 18/19 Cue sessions; the resulting Lyric Board has 81 songs, 132 versions and 13 sessions. Existing scores, notes, tracklists, storage keys and Firebase logic were not changed.
+
+The verification snapshot and before-state backups are in `private-suno/20261020T004203Z-verify-todays-recordings/` (UTC filename; October 19 Eastern). Newer remote main catalogue/test work was integrated into the local update branch. Publication still requires Jason's explicit approval in this chat. Browser tests remain isolated and do not prove real account sync or actual playback.
