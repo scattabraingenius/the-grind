@@ -47,7 +47,7 @@ def build(library, matches, lyric_catalogue):
         session = {'Vocal':'Vocals','Instrumental':'Instrumentals','Stem':'Stems'}.get(kind,'Other')
         source = row.get('source','')
         writer = row.get('writer') or ({'C':'Cue','M':'Misc','S':'Scatta'}.get(suffix[2]) if suffix else 'Unknown')
-        base = title[:suffix.start()] if suffix else re.sub(r'\s*\([^)]*\)\s*$','',title)
+        base = row.get('base_title') or (title[:suffix.start()] if suffix else re.sub(r'\s*\([^)]*\)\s*$','',title))
         packet_version = row.get('version','').removeprefix('v') or (suffix[3] if suffix else '')
         target = by_source.get(source)
         if not target and source and row.get('sbglp_lyrics'):
@@ -71,7 +71,7 @@ def build(library, matches, lyric_catalogue):
         v = dict(stem=cid,version=0,writer=writer,session=session,title=title,lyrics=meta.get('prompt') or '',
                  suno=dict(title=title,lyrics=meta.get('prompt') or '',style=meta.get('tags') or '',exclude=meta.get('negative_tags') or ''),
                  type=kind,source=source,match=row.get('match') or 'Lyric packet not confirmed',packetVersion=packet_version,
-                 take=int(suffix[4]) if suffix else None,duration=duration if isinstance(duration,(int,float)) else None,
+                 take=int(suffix[4]) if suffix else row.get('take'),duration=duration if isinstance(duration,(int,float)) else None,
                  createdAt=clip.get('created_at') or '',oldTitle=old_titles.get(cid,''),audioUrl=audio_url,voiceName=voice_name,voiceChecked=voice_checked,personalVoice=persona_id=='a51442f3-be46-4d4d-adaf-28d74f71b0ec',sources=sources,
                  lyricSlug=target[0] if target else None,lyricStem=target[1] if target else None,header='',model=clip.get('model_name') or '')
         songs.append(dict(slug=cid,title=title,baseTitle=base,session=session,ep=False,latest=cid,versions=[v]))
