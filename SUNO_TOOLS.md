@@ -73,7 +73,7 @@ Read `CODEX_HANDOFF.md`, `CLAUDE_HANDOFF.md`, and the current builders before ru
 - Keep `grind.album.v1`, `grind.audio.v1`, `grind.planner.v1`, view/account keys, Firebase merge logic, and rules intact. A catalogue refresh does not authorize editing the user's cloud records or clearing browser data.
 - After changes under either board, run `python -B scripts\refresh-board-cache.py`; include the new cache name in the local commit. Add new client scripts to `APP_SHELL` in `service-worker.js`. A documentation file or test is not a client script.
 - Run relevant import tests and planner tests, then browser regressions with isolated data and screenshots confined to this repo (`ARTIFACT_DIR`). State exactly what ran. Synthetic tests do not establish real Firebase sync, phone-to-PC behavior, Suno playback, or real-data migration.
-- Never push to `main` without Jason explicitly approving the specific push in this chat: it deploys GitHub Pages.
+- Jason authorizes routine pushes to `main` for completed, verified work he requests in this project, unless he says to hold deployment. A push deploys GitHub Pages; check the deployment result.
 
 ## Renaming songs: only when Jason authorizes the scope
 
@@ -139,4 +139,4 @@ The default workspace feed returned zero during this follow-up even while the ex
 
 The complete approved Writing Sessions rebuild retained every prior lyric ID and discovered 22 additional written versions in four Oct 18/19 Cue sessions; the resulting Lyric Board has 81 songs, 132 versions and 13 sessions. Existing scores, notes, tracklists, storage keys and Firebase logic were not changed.
 
-The verification snapshot and before-state backups are in `private-suno/20261020T004203Z-verify-todays-recordings/` (UTC filename; October 19 Eastern). Newer remote main catalogue/test work was integrated into the local update branch. Publication still requires Jason's explicit approval in this chat. Browser tests remain isolated and do not prove real account sync or actual playback.
+The verification snapshot and before-state backups are in `private-suno/20261020T004203Z-verify-todays-recordings/` (UTC filename; October 19 Eastern). Newer remote main catalogue/test work was integrated into the local update branch. Jason subsequently authorized routine deployment of completed, verified requested work unless he says to hold it. Browser tests remain isolated and do not prove real account sync or actual playback.
