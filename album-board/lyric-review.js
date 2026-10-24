@@ -93,7 +93,7 @@
     if(v.created)return new Date(v.created).toISOString();
     const folder=String(v.folder||'').match(/^(\d{4}-\d{2}(?:-\d{2})?)(?=\D|$)/);
     if(folder)return folder[1];
-    return String(v.studioSource||v.source||'').match(/(?:^|[^\d])(\d{4}-\d{2}-\d{2})(?=[^\d]|$)/)?.[1]||null;
+    return String(v.studioSource||v.source||'').split(/[\\/]/).at(-1).match(/(?:^|[^\d])(\d{4}-\d{2}-\d{2})(?=[^\d]|$)/)?.[1]||null;
   }
   function sortValue(s) {
     const versions=scopedVersions(s),v=version(s);
