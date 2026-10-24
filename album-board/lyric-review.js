@@ -11,6 +11,16 @@
   prior=clone(audio);
   let prefs={}; try { prefs=JSON.parse(localStorage.getItem(KEY+'.review-view'))||{}; } catch(e) {}
   prefs.takes ||= {}; prefs.readiness ||= ''; prefs.tag ||= ''; prefs.color ||= 'green'; prefs.labels ||= {};
+  let allScopes=Array.isArray(prefs.scopes)?prefs.allScopes===true:ui.scope==='all';
+  const selectedScopes=new Set(Array.isArray(prefs.scopes)?prefs.scopes:ui.scope==='all'?[]:[ui.scope]);
+  const linkedVersion=new URLSearchParams(location.search).get('version');
+  const linked=linkedVersion&&SONGS.flatMap(s=>s.versions).find(v=>v.stem===linkedVersion);
+  if(linked&&!allScopes&&![...selectedScopes].some(key=>key.startsWith('session:')?linked.session===key.slice(8):(state.collections[key.slice(11)]?.members||[]).includes(linked.stem)))selectedScopes.add('session:'+linked.session);
+  function scopeState() {
+    ui.scope=allScopes?'all':selectedScopes.size===1?[...selectedScopes][0]:'multi';
+    prefs.scopes=[...selectedScopes];prefs.allScopes=allScopes;savePrefs();saveView();
+  }
+  scopeState();
   let selection=null, undoStack=[];
   const baseDetail=renderDetail, baseList=renderList;
   const baseEditing=editingDetail;
@@ -64,8 +74,39 @@
   function redraw() { renderList(); renderSummary(); renderDetail(); }
   best=function(s,versions=scopedVersions(s)) { const scores=versions.flatMap(v=>takes(v).length?takes(v).map(t=>audio.ratings[t.id]?.score):[rating(v.stem).songScore]).filter(Number.isFinite); return scores.length ? Math.max(...scores) : null; };
   const originalMatches=matches;
-  const baseScopedVersions=scopedVersions;
-  scopedVersions=function(s) { return baseScopedVersions(s).filter(v=>(!prefs.readiness || (rating(v.stem).readiness||'unassessed')===prefs.readiness) && (!prefs.tag || (rating(v.stem).tags||[]).includes(prefs.tag))); };
+  scopedVersions=function(s) { return versionsOf(s).filter(v=>(allScopes||[...selectedScopes].some(key=>key.startsWith('session:')?v.session===key.slice(8):key.startsWith('collection:')&&(state.collections[key.slice(11)]?.members||[]).includes(v.stem)))&&(!prefs.readiness || (rating(v.stem).readiness||'unassessed')===prefs.readiness) && (!prefs.tag || (rating(v.stem).tags||[]).includes(prefs.tag))); };
+  const baseChips=renderChips;
+  renderChips=function() {
+    for(const key of selectedScopes)if(key.startsWith('collection:')&&!state.collections[key.slice(11)])selectedScopes.delete(key);
+    scopeState();baseChips();
+    for(const b of $('sessionChips').querySelectorAll('[data-scope]'))b.setAttribute('aria-pressed',b.dataset.scope==='all'?allScopes:!allScopes&&selectedScopes.has(b.dataset.scope));
+  };
+  chooseScope=function(key) {
+    if(key==='all'){selectedScopes.clear();allScopes=true;}
+    else {allScopes=false;selectedScopes.has(key)?selectedScopes.delete(key):selectedScopes.add(key);}
+    scopeState();renderChips();redraw();
+  };
+  const sortModes={title:['Title','asc'],score:['Rating','desc'],newest:['Date','desc'],status:['Status','asc'],length:['Lyric length','desc'],writer:['Writer','asc']};
+  ui.sort=sortModes[viewPrefs.sort]?viewPrefs.sort:'newest';
+  sortDir=function(){return ui.dir||sortModes[ui.sort]?.[1]||'asc';};
+  function versionDate(v) {
+    if(v.created)return new Date(v.created).toISOString();
+    const folder=String(v.folder||'').match(/^(\d{4}-\d{2}(?:-\d{2})?)(?=\D|$)/);
+    if(folder)return folder[1];
+    return String(v.studioSource||v.source||'').match(/(?:^|[^\d])(\d{4}-\d{2}-\d{2})(?=[^\d]|$)/)?.[1]||null;
+  }
+  function sortValue(s) {
+    const versions=scopedVersions(s),v=version(s);
+    if(ui.sort==='score')return best(s,versions);
+    if(ui.sort==='newest')return versions.map(versionDate).filter(Boolean).sort().at(-1)||null;
+    if(ui.sort==='status')return Math.min(...versions.map(v=>({preferred:0,short:1,maybe:2,revision:4,cut:5}[rating(v.stem).status]??3)));
+    if(ui.sort==='length')return Math.max(...versions.map(v=>liveText(v).length));
+    if(ui.sort==='writer')return v.writer&&v.writer!=='Unknown'?v.writer:null;
+    return s.title;
+  }
+  sorted=function(rows) {return rows.slice().sort((a,b)=>{const x=sortValue(a),y=sortValue(b),tie=a.title.localeCompare(b.title,undefined,{numeric:true});if(x==null||y==null)return (x==null)-(y==null)||tie;const cmp=typeof x==='string'?x.localeCompare(y,undefined,{numeric:true}):x-y;return(sortDir()==='desc'?-cmp:cmp)||tie;});};
+  renderSortDir=function(){const b=$('sortDir'),down=sortDir()==='desc';b.textContent=down?'↓ Desc':'↑ Asc';b.setAttribute('aria-label','Sort direction: '+(down?'descending':'ascending')+'. Click to flip.');b.title=ui.sort==='newest'?(down?'Newest first':'Oldest first'):(down?'Descending':'Ascending');};
+  $('sort').value=ui.sort;renderSortDir();saveView();
   matches=function(s) {
     const filter=ui.filter;
     if(filter==='unrated') ui.filter='all';
@@ -89,7 +130,8 @@
       if(versions) {const d=document.createElement('details');d.className='row-version-history';d.open=ui.open===s.slug;const count=scopedVersions(s).length;d.innerHTML=`<summary>${count} ${count===1?'version':'versions'} · ${esc(verLabel(v))}</summary>`;versions.replaceWith(d);d.append(versions);}
       row.insertAdjacentHTML('beforeend',`<div class="review-quick" data-review-version="${esc(v.stem)}"><div class="review-quick-status">${[['short','Shortlist'],['maybe','Maybe'],['revision','Needs revision'],['preferred','Preferred']].map(([key,label])=>`<button class="btn small" data-quick-status="${key}" aria-pressed="${r.status===key}">${label}</button>`).join('')}</div><label>Listening <select data-quick-readiness aria-label="Listening readiness for ${esc(s.title)}">${R.options(r.readiness)}</select></label>${r.note?`<small class="review-note-preview">${esc(r.note.slice(0,140))}</small>`:''}</div>`);
     }
-    $('scopeNote').textContent+=' · Scores refer to linked audio takes.';
+    const names=[...selectedScopes].map(key=>key.startsWith('session:')?key.slice(8):state.collections[key.slice(11)]?.name||'Custom session');
+    $('scopeNote').textContent=(allScopes?'All sessions':names.length?names.join(' + '):'No sessions selected')+` · ${$('list').querySelectorAll('.row').length} songs · ${SONGS.reduce((n,s)=>n+scopedVersions(s).length,0)} versions`;
     remember();
   };
   const baseAlbum=renderAlbum;
@@ -209,6 +251,7 @@
   // Long source histories stay available without filling the initial screen.
   $('sessionChips').outerHTML='<details class="style session-history"><summary>Writing sessions and batches</summary>'+$('sessionChips').outerHTML+'</details>';
   $('sessionChips').onclick=e=>{const b=e.target.closest('[data-scope]');if(b)chooseScope(b.dataset.scope);};
+  $('sessionChips').insertAdjacentHTML('beforebegin','<p class="meta">Choose any sessions or batches together. Click a selected one to remove it. All clears the selection.</p>');
   if(typeof firebase!=='undefined'&&firebase.apps?.length) {
     audioSync=AlbumSync.create({firebase,board:'audio',account:()=>{},read:()=>audio,replace:next=>{audio=next;prior=clone(audio);saveAudio(false);renderList();renderSummary();if(!editingDetail())renderDetail();else pendingRemoteDetail=true;},selectAccount:uid=>{
       if(!audio._sync.owner) {try {if(!localStorage.getItem(AUDIO_KEY+'.before-cloud-sync')) localStorage.setItem(AUDIO_KEY+'.before-cloud-sync',JSON.stringify(audio));}catch(e){throw Error('Export review backup before enabling song-rating sync');}}
@@ -219,5 +262,5 @@
     if(e.key===AUDIO_KEY) {mergeAudioLocal();const local=readAudio();if(local?._sync?.owner===audio._sync.owner&&!AlbumSync.sameRecords(local._sync.records,audio._sync.records))saveAudio();renderList();renderSummary();if(!editingDetail())renderDetail();else pendingRemoteDetail=true;}
     if(e.key===KEY&&e.newValue) {try {const next=AlbumSync.prepare(JSON.parse(e.newValue));if(next._sync.owner===state._sync.owner)replaceSyncedState(AlbumSync.project(state,AlbumSync.merge(state._sync.records,next._sync.records),state._sync.owner));}catch(err){toast('Other-tab changes could not be read. Export a backup.');}}
   });
-  redraw();
+  renderChips();redraw();
 })();
