@@ -7,7 +7,7 @@ const root = path.resolve(__dirname, '..');
 const elements = new Map(), listeners = {};
 function element(id) {
   if (!elements.has(id)) elements.set(id, {innerHTML:'', textContent:'', dataset:{}, value:'', hidden:false,
-    classList:{add(){}, remove(){}, toggle(){}}, setAttribute(){}, addEventListener(){}, scrollIntoView(){}, focus(){}, querySelectorAll:()=>[], querySelector:()=>null});
+    classList:{add(){}, remove(){}, toggle(){}}, append(){}, after(){}, setAttribute(){}, addEventListener(){}, scrollIntoView(){}, focus(){}, querySelectorAll:()=>[], querySelector:()=>null});
   return elements.get(id);
 }
 const stems = ['active', 'short', 'audio-cut', 'local-cut', 'delete', 'both', 'done', 'short-delete'];
@@ -25,9 +25,9 @@ const history = {state:null, entries:[], replaceState(state){this.state=state;},
 const context = vm.createContext({console, URL, URLSearchParams, crypto:require('node:crypto').webcrypto,
   navigator:{}, location, history, innerWidth:1200, CSS:{escape:s=>s}, matchMedia:()=>({matches:true}),
   localStorage:{getItem:key=>storage.get(key) || null, setItem:(key,value)=>storage.set(key,value)},
-  document:{activeElement:null, body:{classList:{toggle(){}}}, getElementById:element, querySelector:element, querySelectorAll:()=>[], addEventListener(){}},
+  document:{activeElement:null, body:{classList:{toggle(){}}}, createElement:tag=>element('new-'+tag), getElementById:element, querySelector:element, querySelectorAll:()=>[], addEventListener(){}},
   window:{ALBUM_SONGS:stems.map(s=>({slug:s,title:s,versions:[{title:s,baseTitle:s,writer:'Cue',duration:120}]})), addEventListener:(name, callback)=>{listeners[name]=callback;}},
-  PlannerSync:require('../audio-board/album/planner-sync.js'), PlannerStatus:require('../audio-board/album/planner-status.js'), AlbumSync:require('../album-board/sync.js'),
+  ReviewTools:require('../album-board/review-tools.js'), PlannerSync:require('../audio-board/album/planner-sync.js'), PlannerStatus:require('../audio-board/album/planner-status.js'), AlbumSync:require('../album-board/sync.js'),
   setTimeout:()=>0, clearTimeout(){}, confirm:()=>true});
 vm.runInContext(fs.readFileSync(path.join(root,'audio-board/album/planner.js'),'utf8'),context);
 const run = code => vm.runInContext(code,context);

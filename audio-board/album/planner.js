@@ -58,6 +58,10 @@ function persistAudio() {
 }
 const rating = stem => audio.ratings[stem] || {};
 function setRating(stem, patch) {
+  const local=readAudio(AUDIO_KEY);
+  if(local?._sync && local._sync.owner===audio._sync.owner) {
+    audio=AlbumSync.project(audio,AlbumSync.merge(audio._sync.records,AlbumSync.prepare(local)._sync.records),audio._sync.owner);audioPrev=clone(audio);
+  }
   audio.ratings[stem] = {...rating(stem), ...patch, at:Date.now()};
   audio = AlbumSync.capture(audioPrev, audio, deviceId); audioPrev = clone(audio);
   persistAudio(); if (audioCloud) audioCloud.changed();
@@ -83,7 +87,7 @@ const BUCKETS = ["unreviewed","maybe","short","on","cut","alive"];
 const ui = {sortFilter:["todo","later","done"].includes(viewPrefs.sortFilter) ? viewPrefs.sortFilter : "todo", view:VIEWS.includes(viewPrefs.view) ? viewPrefs.view : "consider", q:"", sort:viewPrefs.sort || "title", dir:viewPrefs.dir || "",
   groupBy:GROUP_BYS.some(([k]) => k === viewPrefs.groupBy) ? viewPrefs.groupBy : viewPrefs.group === false ? "none" : "song",
   type:["Vocal", "Instrumental", "Stem", "all"].includes(viewPrefs.type) ? viewPrefs.type : "Vocal", only:null, song:"", lyricsOpen:new Set(), bucket:BUCKETS.includes(viewPrefs.bucket) ? viewPrefs.bucket : "unreviewed", unscored:viewPrefs.unscored === true,
-  session:viewPrefs.session || "", album:viewPrefs.album || "debut", ssort:viewPrefs.ssort || "score", sdir:viewPrefs.sdir || ""};
+  session:viewPrefs.session || "", album:viewPrefs.album || "debut", readiness:viewPrefs.readiness || "", ssort:viewPrefs.ssort || "score", sdir:viewPrefs.sdir || ""};
 let restoringNavigation = false;
 const navigation = () => ({view:ui.view, session:ui.session, album:ui.album});
 function saveView() {
@@ -296,6 +300,7 @@ function card(stem, opts = {}) {
       <button class="icon-btn" data-act="rename" title="Rename in planner" aria-label="Rename ${esc(name)}">edit</button>
     </div>
     <div class="badges">${badges}</div>
+    <label class="meta">Listening readiness <select class="take-readiness" aria-label="Listening readiness for ${esc(name)}">${ReviewTools.options(r.readiness)}</select></label>
     ${opts.sortMode ? `<div class="card-actions buckets" role="group" aria-label="Where does ${esc(name)} go?">
       ${Object.entries(state.albums).sort(([, x], [, y]) => x.created - y.created).map(([id, o]) => `<button class="btn small bucket${o.order.includes(stem) ? " primary" : ""}" data-bucket="${esc(id)}" aria-pressed="${o.order.includes(stem)}">${esc(shortName(o))}</button>`).join("")}
       <button class="btn small" data-bucket="__new" title="Start a new album with this take">+ Album</button>
@@ -417,6 +422,7 @@ function songOptions() {
   for (const id of ["songFilter", "sortSong"]) { setOptions($(id), html); $(id).value = ui.song; }
 }
 function matchesQuery(stem) {
+  if (ui.readiness && (rating(stem).readiness || 'unassessed') !== ui.readiness) return false;
   if (ui.song && take(stem).baseTitle !== ui.song) return false;
   if (!ui.q) return true;
   const t = take(stem), q = ui.q.toLowerCase();
@@ -794,6 +800,24 @@ function commitScore(input) {
   document.querySelectorAll(`[data-stem="${CSS.escape(stem)}"] .score-in`).forEach(x => { x.value = n ?? ""; x.className = "score-in " + scoreClass(n); });
 }
 document.addEventListener("change", e => { if (e.target.matches(".score-in")) commitScore(e.target); });
+document.addEventListener("change", e => {
+  if (!e.target.matches('.take-readiness')) return;
+  const stem=e.target.closest('[data-stem]').dataset.stem;
+  setRating(stem,{readiness:e.target.value}); requestRender();
+});
+for (const id of ['sortType','typeFilter']) {
+  const label=document.createElement('label');label.className='meta';label.textContent='Listening ';
+  const select=document.createElement('select');select.setAttribute('aria-label','Filter listening readiness');
+  select.innerHTML='<option value="">All readiness</option>'+ReviewTools.options(ui.readiness);select.value=ui.readiness;
+  select.className='readiness-filter';select.onchange=()=>{ui.readiness=select.value;document.querySelectorAll('.readiness-filter').forEach(s=>s.value=ui.readiness);saveView();requestRender();};
+  label.append(select);$(id).after(label);
+}
+window.addEventListener('storage', e=>{
+  if(e.key!==AUDIO_KEY||!e.newValue)return;
+  try {const incoming=AlbumSync.prepare(JSON.parse(e.newValue));if(incoming._sync.owner!==audio._sync.owner)return;
+    audio=AlbumSync.project(audio,AlbumSync.merge(audio._sync.records,incoming._sync.records),audio._sync.owner);audioPrev=clone(audio);requestRender();
+  }catch(err){$('saveStatus').textContent='Other-tab scores could not be read. Export a backup.';}
+});
 document.addEventListener("keydown", e => {
   if (!e.target.matches?.(".score-in") || e.key !== "Enter") return;
   e.preventDefault(); commitScore(e.target);
@@ -1030,5 +1054,4 @@ if (!Object.keys(state.albums).length || Object.values(state.albums).some(a => !
 ensureMigrated();   // signed-out devices convert now; signed-in devices wait for their account (see showStatus)
 render();
 initSync();
-// Signed out, pick up scores another tab (Audio Board) saved on this device.
-window.addEventListener("storage", e => { if (e.key === AUDIO_KEY && !audio._sync.owner) { const s = readAudio(AUDIO_KEY); if (s) { audio = AlbumSync.prepare(blankAudio(s)); audioPrev = clone(audio); requestRender(); } } });
+// Same-account cross-tab Audio Board changes are merged by the storage listener above.

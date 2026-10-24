@@ -8,7 +8,8 @@
   "use strict";
   const copy = value => JSON.parse(JSON.stringify(value));
   const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
-  const fields = ["score", "status", "note"];
+  const fields = ["score", "status", "note", "readiness", "tags", "colorLabels"];
+  const ratingField = field => fields.includes(field) || /^mark:[a-z0-9-]+$/i.test(field);
   const keyOf = (kind, id, field = "") => Array.from(new TextEncoder().encode(JSON.stringify([kind, id, field])), n => n.toString(16).padStart(2, "0")).join("");
   // Firebase may reorder object properties. Compare record contents consistently.
   const canonical = value => JSON.stringify(value, (_, v) => v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(key => [key, v[key]])) : v);
@@ -16,7 +17,7 @@
   function content(state) {
     const records = {};
     for (const [id, rating] of Object.entries(state.ratings || {})) {
-      for (const field of fields) if (own(rating, field)) {
+      for (const field of Object.keys(rating)) if (ratingField(field)) {
         records[keyOf("rating", id, field)] = {kind:"rating", id, field, data:JSON.stringify(rating[field])};
       }
     }
@@ -38,7 +39,7 @@
       key === keyOf(record.kind, record.id, record.field || "") &&
       Array.isArray(record.rev) && Number.isFinite(record.rev[0]) && typeof record.rev[1] === "string" &&
       (record.deleted === true || (
-        (record.kind !== "rating" || fields.includes(record.field)) &&
+        (record.kind !== "rating" || ratingField(record.field)) &&
         (record.kind !== "custom" || (typeof record.slug === "string" && value?.stem === record.id && value.custom === true)) &&
         (record.kind !== "track" || Number.isFinite(value)) &&
         (record.kind !== "collection" || (typeof value?.name === "string" && Number.isFinite(value.created))) &&
