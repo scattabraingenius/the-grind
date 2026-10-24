@@ -1,6 +1,8 @@
 # Lyric review
 
-Lyric Board uses the same 0–100 song rating as Audio Board. The score belongs to a specific Suno take: choose the take in the review panel. No recording match means no song-rating control. Old lyric-board scores are preserved and labelled Previous lyric-board score; they are never copied over an audio score.
+Lyric Board uses the same 0–100 song rating as Audio Board for linked Suno takes: choose the take in the review panel. Every opened version has a rating box. Without an exact recording match, its song rating stays with the lyric version in the `songScore` field; it is never automatically copied over an audio score when a recording is linked later. Old lyric-board scores are preserved and labelled Previous lyric-board score.
+
+Close song and Back to songs both close the detail panel. On phones the list and detail occupy separate views; on desktop closing restores the full-width list. Closing a deep link removes its song/version parameters, so reload stays closed. Ordinary reloads start with the song list while retaining version choices, filters, ratings and notes. Escape also closes an open song when focus is outside an editing control. Rating commits update the list without replacing the focused panel, allowing a single tap on Close to save and leave.
 
 Listening readiness is independent of the score: Not assessed, Ready, Heavy, Set aside. A lyric version and a recording can have different readiness choices. Filtering by version readiness only shows versions with that choice. Audio Board has its own take-readiness filter.
 

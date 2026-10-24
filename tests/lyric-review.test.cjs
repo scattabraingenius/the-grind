@@ -14,10 +14,10 @@ function pureTests(){
  assert.equal(R.html('<script>\nhello',{}).includes('<script>'),false);
  assert.equal(R.html('hello world',{'mark:x':mark}).replace(/<[^>]+>/g,''),'hello world');
  const base=Sync.prepare(empty()),a=structuredClone(base),b=structuredClone(base);
- a.ratings.v={readiness:'heavy','mark:a':mark,note:'PC'};b.ratings.v={'mark:b':{...mark,color:'blue'},score:90};
+ a.ratings.v={readiness:'heavy',songScore:72,'mark:a':mark,note:'PC'};b.ratings.v={'mark:b':{...mark,color:'blue'},score:90};
  const ar=Sync.capture(base,a,'pc',100),br=Sync.capture(base,b,'phone',100);
  const merged=Sync.project(base,Sync.merge(ar._sync.records,br._sync.records),'u');
- assert(merged.ratings.v['mark:a']);assert(merged.ratings.v['mark:b']);assert.equal(merged.ratings.v.readiness,'heavy');assert.equal(merged.ratings.v.score,90);
+ assert(merged.ratings.v['mark:a']);assert(merged.ratings.v['mark:b']);assert.equal(merged.ratings.v.readiness,'heavy');assert.equal(merged.ratings.v.score,90);assert.equal(merged.ratings.v.songScore,72);
  const deleted=structuredClone(merged);deleted.ratings.v['mark:a']=null;
  const next=Sync.capture(merged,deleted,'pc',200), projected=Sync.project(next,Sync.merge(ar._sync.records,next._sync.records),'u');
  assert.equal(projected.ratings.v['mark:a'],null);assert(projected.ratings.v['mark:b']);Sync.recordsOf(next._sync);
@@ -76,11 +76,11 @@ function pureTests(){
   // A custom edit gets no automatic inherited markup and no inherited recording after text changes.
   await page.locator('#copyEdit').click();assert.equal(await page.locator('.passage-note').count(),0);
   await page.locator('#edLyrics').fill('A different lyric\nSecond line');await page.locator('#edLyrics').press('Tab');
-  await page.goto(BASE+'/album-board/',{waitUntil:'networkidle'});assert.equal(await page.locator('#songScoreNum').count(),0);
+  await page.goto(BASE+'/album-board/',{waitUntil:'networkidle'});assert(await page.locator('#detail').isHidden());await page.locator(`.row[data-slug="${song.slug}"] .t`).click();assert.equal(await page.locator('#reviewTake').count(),0);assert.equal(await page.locator('#songScoreNum').inputValue(),'');
   check('Revised custom lyrics never inherit an old recording or highlights');
-  // Unrecorded source versions have no score control.
+  // Every unrecorded version can be rated without creating or changing a take rating.
   const noAudio=songs.flatMap(s=>s.versions.map(v=>({s,v}))).find(({v})=>!links[v.stem]);
-  await page.goto(BASE+`/album-board/?song=${noAudio.s.slug}&version=${encodeURIComponent(noAudio.v.stem)}`,{waitUntil:'networkidle'});assert.equal(await page.locator('#songScoreNum').count(),0);
+  await page.goto(BASE+`/album-board/?song=${noAudio.s.slug}&version=${encodeURIComponent(noAudio.v.stem)}`,{waitUntil:'networkidle'});assert.equal(await page.locator('#songScoreNum').inputValue(),'');await page.locator('#songScoreNum').fill('88');await page.locator('#detailBack').click();assert(await page.locator('#detail').isHidden());await page.reload({waitUntil:'networkidle'});assert(await page.locator('#detail').isHidden());await page.locator(`.row[data-slug="${noAudio.s.slug}"] .t`).click();assert.equal(await page.locator('#songScoreNum').inputValue(),'88');
   // The same take score/readiness is visible and editable in Audio Board.
   await page.goto(BASE+'/audio-board/album/?take='+take.id,{waitUntil:'networkidle'});
   const card=page.locator(`.card[data-stem="${take.id}"]`).first();assert.equal(await card.locator('.score-in').inputValue(),'92');assert.equal(await card.locator('.take-readiness').inputValue(),'aside');
@@ -97,6 +97,6 @@ function pureTests(){
   await page.evaluate(()=>navigator.serviceWorker.ready);await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
   await context.setOffline(true);await page.reload({waitUntil:'domcontentloaded'});await page.waitForSelector('#reviewLyrics');assert.equal(await page.locator('#songScoreNum').inputValue(),'96');assert.equal(await page.locator('.passage-note').count(),2);await context.setOffline(false);
   check('Offline reload retains the catalogue, song rating and coloured passage notes');
-  assert.deepEqual(errors,[]);check('Unrecorded versions stay unrated; ratings/readiness round-trip through Audio Board; no JS errors');
+  assert.deepEqual(errors,[]);check('Unrecorded versions retain their ratings; linked ratings/readiness round-trip through Audio Board; no JS errors');
  } finally {await browser.close();}
 })().catch(err=>{console.error(err);process.exit(1);});

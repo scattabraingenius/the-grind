@@ -16,6 +16,13 @@
 .linked-song-rating { border:1px solid var(--line); border-radius:var(--radius); background:var(--surface-2); padding:12px; margin-bottom:10px; }
 .linked-song-rating>select { width:100%; max-width:100%; margin:8px 0; }
 .linked-song-rating .readiness-label { margin-top:12px; }
+.linked-song-rating #songScoreNum {min-width:80px;min-height:44px;font-size:20px;}
+.review-detail-nav {position:sticky;top:-16px;z-index:4;display:flex;justify-content:space-between;gap:8px;background:var(--card);padding:10px 0;margin:-6px 0 12px;border-bottom:1px solid var(--line);}
+.review-detail-nav #detailBack {display:inline-block;}
+.grid.review-closed {grid-template-columns:minmax(0,1fr);}
+.grid.review-closed>#list {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));align-items:start;gap:10px;}
+#detail[hidden] {display:none;}
+@media(max-width:820px) {.grid.review-open>#list {display:none;} .grid.review-open>#detail {min-width:0;} .review-detail-nav {top:0;} }
 .markup-panel { border-top:1px solid var(--line); margin:16px 0; padding-top:12px; }
 .markup-panel h3 { margin:0; font-size:16px; }
 .markup-toolbar { position:sticky; top:0; z-index:2; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px; }

@@ -8,7 +8,7 @@
   "use strict";
   const copy = value => JSON.parse(JSON.stringify(value));
   const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
-  const fields = ["score", "status", "note", "readiness", "tags", "colorLabels"];
+  const fields = ["score", "songScore", "status", "note", "readiness", "tags", "colorLabels"];
   const ratingField = field => fields.includes(field) || /^mark:[a-z0-9-]+$/i.test(field);
   const keyOf = (kind, id, field = "") => Array.from(new TextEncoder().encode(JSON.stringify([kind, id, field])), n => n.toString(16).padStart(2, "0")).join("");
   // Firebase may reorder object properties. Compare record contents consistently.
