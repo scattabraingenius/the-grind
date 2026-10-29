@@ -4780,7 +4780,8 @@ function renderAppNav(){
   const items=[fp("home","Home","home",""), fp("calendar","Calendar","calendar","#calendar"), fp("agenda","Agenda","agenda","#agenda"),
                {id:"time", label:"Time", icon:"time", href:"#time", current:sbView==="time", dot},
                {id:"album", label:"Lyrics", icon:"agenda", href:"./album-board/"},
-               {id:"audio", label:"Audio", icon:"time", href:"./audio-board/"}];
+               {id:"audio", label:"Audio", icon:"time", href:"./audio-board/"},
+               {id:"dash", label:"Dash", icon:"home", href:"./dashboard/"}];
   const group={label:"Life", items:[fp("ehah","EHAH","ehah","#ehah"), fp("clothing","Clothing","clothing","#clothing"),
                fp("funds","Chores","chores","#funds"), fp("bank","Bank","bank","#bank")]};
   const sig=JSON.stringify([items,group]);

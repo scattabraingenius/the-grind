@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0C0812">
+<title>Dashboard</title>
+<link rel="icon" type="image/png" sizes="32x32" href="../favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="../apple-touch-icon.png">
+<meta name="application-name" content="The Grind Dashboard">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">The Grind</div>
+      <h1>Dashboard</h1>
+    </div>
+    <a class="back" href="../">← The Grind</a>
+  </header>
+
+  <main class="grid">
+    <section class="tile clock" aria-label="Clock">
+      <div class="clock-time" id="clockTime">--:--</div>
+      <div class="clock-date" id="clockDate"></div>
+    </section>
+
+    <section class="tile cal" aria-label="Calendar">
+      <div class="tile-head"><span id="calMonth"></span></div>
+      <div class="cal-grid" id="calGrid"></div>
+    </section>
+
+    <section class="tile weather" aria-label="Weather" id="weather">
+      <div class="tile-head"><span id="wxPlace">Weather</span>
+        <button type="button" class="chip" id="wxUnits" title="Switch units">°F</button></div>
+      <div id="wxBody"></div>
+    </section>
+
+    <section class="tile usage" aria-label="Claude usage" data-provider="claude"></section>
+    <section class="tile usage" aria-label="Codex usage" data-provider="codex"></section>
+
+    <section class="tile burn wide" aria-label="Burn-down">
+      <div class="tile-head"><span>Burn-down</span><span class="muted small" id="feedAge" role="status"></span></div>
+      <div class="burn-row" id="burnRow"></div>
+    </section>
+  </main>
+
+  <p class="foot muted small">Usage comes from CodexBar on the Mac, refreshed about every 5 minutes while it is awake. Weather: Open-Meteo.</p>
+</div>
+<script src="dashboard.js"></script>
+</body>
+</html>

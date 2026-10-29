@@ -32,20 +32,21 @@ async function assertNoHorizontalOverflow(page, label) {
     page.on("pageerror", error => pageErrors.push(error.message));
 
     /* The shared app bar (2026-09-11): the same component on both pages. */
-    const checkSharedBar = async (label) => {
+    const checkSharedBar = async (label, extraNav = []) => {
       assert(await page.locator('.appbar').evaluate(el => getComputedStyle(el).position) === "sticky", `${label}: app bar is not sticky`);
       assert(/^\d\d:\d\d/.test(await page.locator("#clock").innerText()), `${label}: live clock is missing`);
       assert((await page.locator("#datestrDay").innerText()).length > 0 && /\d{4}$/.test(await page.locator("#datestr").innerText()), `${label}: two-line date is missing`);
       assert(await page.locator(".ab-sb2g img").evaluate(image => image.complete && image.naturalWidth > 0), `${label}: SB2G icon did not load`);
-      assert(await page.locator("#appNav > .navbtn").count() === 7, `${label}: expected Home, Calendar, Agenda, Time, Lyrics, Audio and Life Admin`);
+      const navNames = ["Home", "Calendar", "Agenda", "Time", "Lyrics", "Audio", ...extraNav, "Life Admin"];
+      assert(await page.locator("#appNav > .navbtn").count() === navNames.length, `${label}: expected ${navNames.join(", ")}`);
       assert(await page.locator("#lifeAdminPanel .la-link").count() === 4, `${label}: Life Admin should hold EHAH, Clothing, Chores and Bank`);
-      assert(await page.locator(".nav-ico").evaluateAll(images => images.length === 11 && images.every(image => image.complete && image.naturalWidth > 0)), `${label}: nav icons did not load`);
+      assert(await page.locator(".nav-ico").evaluateAll((images, n) => images.length === n && images.every(image => image.complete && image.naturalWidth > 0), navNames.length + 4), `${label}: nav icons did not load`);
       assert(!/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(await page.locator("#appNav").innerText()), `${label}: emoji remain in the nav`);
     };
 
     await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
     assert(await page.title() === "ScattaBrain to Genius", "Unexpected ScattaBrain page title");
-    await checkSharedBar("ScattaBrain");
+    await checkSharedBar("ScattaBrain", ["Dash"]);
     assert(await page.locator('#sb2gLink[aria-current="page"]').count() === 1, "SB2G current-page state is missing");
     assert(await page.getByText("Personal command center").count() === 0, "Old SB2G subtitle is still rendered");
     assert(await page.locator("#timeView").isHidden() && await page.locator("#nextup").isHidden() && await page.locator("#datesSection").isHidden(), "Grind, Up Next or Important Dates still show on the dashboard");

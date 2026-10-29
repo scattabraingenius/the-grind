@@ -1,4 +1,4 @@
-const CACHE_NAME = "scattabrain-unified-shell-v5-e0c69568ba2c";
+const CACHE_NAME = "scattabrain-unified-shell-v5-439f92d718e6";
 // Cache Storage is per-origin, not per service-worker scope: /the-grind/ and /s2g/ share one
 // origin (scattabraingenius.github.io), so an unqualified CACHE_NAME could let one site's
 // activate cleanup delete the other site's live cache once their content hashes diverge.
@@ -34,6 +34,10 @@ const APP_SHELL = [
   "./audio-board/album/planner-sync.js",
   "./audio-board/album/planner-status.js",
   "./audio-board/album/planner.css",
+  "./dashboard/",
+  "./dashboard/index.html",
+  "./dashboard/dashboard.js",
+  "./dashboard/dashboard.css",
   "./album-board/icons/lyric-notebook-32.png",
   "./album-board/icons/lyric-notebook-180.png",
   "./album-board/icons/lyric-notebook-192.png",
@@ -93,7 +97,7 @@ self.addEventListener("fetch", event => {
         return response;
       }).catch(() =>
         caches.match(request).then(response => response ||
-          (url.pathname.includes("/audio-board/") ? caches.match("./audio-board/index.html") : url.pathname.includes("/album-board/") ? caches.match("./album-board/index.html") : url.pathname.includes("/mm-home/") ? caches.match("./mm-home/index.html") : caches.match("./index.html")))
+          (url.pathname.includes("/audio-board/") ? caches.match("./audio-board/index.html") : url.pathname.includes("/album-board/") ? caches.match("./album-board/index.html") : url.pathname.includes("/mm-home/") ? caches.match("./mm-home/index.html") : url.pathname.includes("/dashboard/") ? caches.match("./dashboard/index.html") : caches.match("./index.html")))
       )
     );
     return;
