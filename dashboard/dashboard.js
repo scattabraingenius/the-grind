@@ -5,7 +5,7 @@
    usage.json). FEED_GIST is that gist's id; ?feed=<url> overrides it for testing. The gist only
    holds percentages, reset times and plan names, because anyone with this page's source can read it. */
 const FEED_USER = "scattabraingenius";
-const FEED_GIST = "";
+const FEED_GIST = "994158e57243b2b3faa16adc029f0e0d";
 const FEED_FILE = "usage.json";
 const FEED_POLL_MS = 2 * 60 * 1000;
 const FEED_STALE_MS = 30 * 60 * 1000;   // the Mac pushes at least every 15 minutes while awake
@@ -203,7 +203,7 @@ function burnChart(p, w, pts, now){
       <line class="pace-line" x1="${x(start)}" y1="${y(100)}" x2="${x(end)}" y2="${y(0)}"/>
       <path class="used-area" d="${area}"/><path class="used-line" d="${d}"/>
       <circle class="now-dot" cx="${x(last.t)}" cy="${y(last.left)}" r="4"/>
-      ${pts.length < 3 ? `<text class="hint" x="${x(last.t) + 8}" y="${y(last.left) - 8}">history builds as the feed runs</text>` : ""}
+      ${pts.length < 3 ? `<text class="hint" x="${x(last.t) > W / 2 ? x(last.t) - 8 : x(last.t) + 8}" y="${y(last.left) + (last.left > 80 ? 16 : -8)}" text-anchor="${x(last.t) > W / 2 ? "end" : "start"}">history builds as the feed runs</text>` : ""}
       <line class="xhair" y1="${PT}" y2="${H - PB}" visibility="hidden"/>
     </svg>
     <div class="tip" hidden></div>
