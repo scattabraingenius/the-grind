@@ -8,7 +8,8 @@ import unicodedata
 from pathlib import Path
 
 PACKET = re.compile(r'^(?P<slug>[a-z0-9-]+)_v(?P<ver>\d+)_(?P<writer>[A-Za-z]+)_lyrics(?P<variant>.*)\.md$', re.I)
-ALIASES = {'me-though-thought-the-wake-of-hells-birth': 'the-wake-of-hells-birth'}
+ALIASES = {'me-though-thought-the-wake-of-hells-birth': 'the-wake-of-hells-birth',
+           'horns': 'ep1-horns', 'exorcism': 'ep2b-exorcism'}
 
 def slugify(text):
     text = unicodedata.normalize('NFKD', text).lower().replace('’', '').replace("'", '')
@@ -30,7 +31,11 @@ def build_studio(root, previous):
     def read(p):
         data = p.read_bytes(); inputs[str(p.relative_to(root))] = hashlib.sha256(data).hexdigest()
         return data.decode('utf-8-sig').replace('\r\n','\n')
-    def add_candidate(path, **extra): candidates.append((path,extra))
+    def add_candidate(path, **extra):
+        # Internal validation drafts and saved working candidates are not deliveries.
+        if any(part.casefold() in {'_checks', 'working-history', '.git'} for part in path.relative_to(root).parts):
+            return
+        candidates.append((path,extra))
     for path in sorted((root/'07 Batches/Writing').rglob('*_lyrics*.md')):
         if PACKET.fullmatch(path.name): add_candidate(path, kind='packet')
     # Explicitly named song drafts filed as reference, never raw source messages or mining briefs.
@@ -56,7 +61,7 @@ def build_studio(root, previous):
         if info['kind']=='export': match=re.fullmatch(r'(?P<slug>[a-z0-9-]+)_v(?P<ver>\d+)_(?P<writer>[A-Za-z]+)_suno-lyrics.txt',path.name,re.I)
         folder=path.relative_to(root/'07 Batches/Writing').parts[0] if path.is_relative_to(root/'07 Batches/Writing') else ('Library' if info['kind']=='library' else path.parent.name)
         if match:
-            slug=match['slug']; ver=int(match['ver']); writer={'cg':'Misc','misc':'Misc','cue':'Cue','que':'Cue','scatta':'Scatta'}.get(match['writer'].lower(),match['writer'])
+            slug=ALIASES.get(match['slug'],match['slug']); ver=int(match['ver']); writer={'cg':'Misc','misc':'Misc','cue':'Cue','que':'Cue','scatta':'Scatta'}.get(match['writer'].lower(),match['writer'])
             file_stem=path.name[:path.name.lower().index('_lyrics')] if info['kind']!='export' else path.name[:-len('_suno-lyrics.txt')]
             stem=file_stem if folder in ('2026-10-08-Reset','2026-10-09-Lyric-Mine') else folder+'/'+file_stem
             variant=match.groupdict().get('variant','')
