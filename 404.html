@@ -1,0 +1,7 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Moved</title><meta name="robots" content="noindex"><style>body{font:16px system-ui,sans-serif;padding:32px 16px;max-width:560px;margin:auto}</style></head><body><p id="m">This address moved. <a id="a" href="/s2g/">Continue</a></p><script>
+var MAP={"album-board":"lyrics","audio-board":"audio","dashboard":"dash","mm-home":"mm"};
+var base="/s2g/",p=location.pathname.split("/").slice(2).filter(Boolean);
+if(base==="/s2g/"){p=p.map(function(s){return MAP[s]||s});}
+var to=base+p.join("/")+(p.length&&!/\./.test(p[p.length-1])?"/":"")+location.search+location.hash;
+document.getElementById("a").href=to;location.replace(to);
+</script></body></html>
